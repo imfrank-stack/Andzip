@@ -6,12 +6,7 @@ namespace Andzip.Core.Archive;
 /// <param name="Id">稳定标识（取主扩展名），用于设置存储与 ProgID 命名，不随显示文案变化。</param>
 /// <param name="Label">界面上的显示名（ZIP / 7Z / TAR…）。格式名是专有名词，不进语言包。</param>
 /// <param name="Extensions">小写、不含点的扩展名集合；只要有一个能被引擎读到，本项就可用。</param>
-/// <param name="DefaultSelected">首次运行（还没有任何设置）时是否预勾选。</param>
-public sealed record FileAssociation(
-    string Id,
-    string Label,
-    IReadOnlyList<string> Extensions,
-    bool DefaultSelected = true)
+public sealed record FileAssociation(string Id, string Label, IReadOnlyList<string> Extensions)
 {
     /// <summary>引擎可读集合里出现任一扩展名即为“支持”。集合为空时一律不支持（引擎缺失的兜底）。</summary>
     public bool IsSupportedBy(IReadOnlyCollection<string> readableExtensions)
@@ -49,11 +44,11 @@ public static class FileAssociationCatalog
             new("cab", "CAB", ["cab"]),
             new("arj", "ARJ", ["arj"]),
             new("lzh", "LHA", ["lzh", "lha"]),
-            new("001", "001", ["001"], DefaultSelected: false),
+            new("001", "001", ["001"]),
             new("zst", "ZSTD", ["zst", "tzst"]),
-            new("chm", "CHM", ["chm", "chi", "chq", "chw"], DefaultSelected: false),
-            new("nsis", "NSIS", ["nsis"], DefaultSelected: false),
-            new("exe", "EXE", ["exe"], DefaultSelected: false),
+            new("chm", "CHM", ["chm", "chi", "chq", "chw"]),
+            new("nsis", "NSIS", ["nsis"]),
+            new("exe", "EXE", ["exe"]),
         ]),
 
         new("TEXT_GROUP_UNIX",
@@ -68,27 +63,27 @@ public static class FileAssociationCatalog
             new("txz", "TXZ", ["txz"]),
             new("lzma", "LZMA", ["lzma"]),
             new("z", "Z", ["z", "taz"]),
-            new("deb", "DEB", ["deb", "udeb"], DefaultSelected: false),
-            new("rpm", "RPM", ["rpm"], DefaultSelected: false),
+            new("deb", "DEB", ["deb", "udeb"]),
+            new("rpm", "RPM", ["rpm"]),
         ]),
 
         new("TEXT_GROUP_OTHER",
         [
-            new("jar", "JAR", ["jar"], DefaultSelected: false),
-            new("apk", "APK", ["apk"], DefaultSelected: false),
-            new("ipa", "IPA", ["ipa"], DefaultSelected: false),
-            new("xpi", "XPI", ["xpi"], DefaultSelected: false),
-            new("appx", "APPX", ["appx"], DefaultSelected: false),
-            new("wim", "WIM", ["wim", "swm", "esd"], DefaultSelected: false),
-            new("cpio", "CPIO", ["cpio"], DefaultSelected: false),
-            new("ar", "AR", ["ar", "lib"], DefaultSelected: false),
+            new("jar", "JAR", ["jar"]),
+            new("apk", "APK", ["apk"]),
+            new("ipa", "IPA", ["ipa"]),
+            new("xpi", "XPI", ["xpi"]),
+            new("appx", "APPX", ["appx"]),
+            new("wim", "WIM", ["wim", "swm", "esd"]),
+            new("cpio", "CPIO", ["cpio"]),
+            new("ar", "AR", ["ar", "lib"]),
         ]),
 
         new("TEXT_GROUP_CD_DVD",
         [
             new("iso", "ISO", ["iso"]),
-            new("img", "IMG", ["img"], DefaultSelected: false),
-            new("udf", "UDF", ["udf"], DefaultSelected: false),
+            new("img", "IMG", ["img"]),
+            new("udf", "UDF", ["udf"]),
         ]),
     ];
 
@@ -112,10 +107,6 @@ public static class FileAssociationCatalog
     /// <summary>按 Id 查候选项（找不到返回 null）。</summary>
     public static FileAssociation? Find(string id)
         => All.SelectMany(g => g.Items).FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
-
-    /// <summary>首次运行时应当预勾选的 Id 集合。</summary>
-    public static IReadOnlyList<string> DefaultIds =>
-        [.. All.SelectMany(g => g.Items).Where(item => item.DefaultSelected).Select(item => item.Id)];
 
     private static string NormaliseExtension(string extension)
         => extension.TrimStart('.').ToLowerInvariant();

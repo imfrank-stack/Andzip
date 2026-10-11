@@ -86,17 +86,4 @@ public class FileAssociationCatalogTests
         Assert.Null(FileAssociationCatalog.Find("nope"));
     }
 
-    [Fact]
-    public void DefaultIds_AreSubsetOfCatalogAndExcludeExoticFormats()
-    {
-        var all = FileAssociationCatalog.All.SelectMany(g => g.Items).Select(i => i.Id).ToHashSet();
-        var defaults = FileAssociationCatalog.DefaultIds;
-
-        Assert.NotEmpty(defaults);
-        Assert.All(defaults, id => Assert.Contains(id, all));
-        // 默认不勾的：exe / 磁盘镜像 / 办公容器这类抢眼的关联。
-        Assert.DoesNotContain("exe", defaults);
-        Assert.DoesNotContain("img", defaults);
-        Assert.DoesNotContain("jar", defaults);
-    }
 }

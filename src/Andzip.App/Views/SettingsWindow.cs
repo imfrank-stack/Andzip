@@ -218,6 +218,9 @@ public sealed class SettingsWindow : Window
         private readonly Button _applyButton;
         private HashSet<string> _saved;
 
+        /// <summary>接管前的默认程序（扩展名 → ProgID，空串表示当时没有）。撤销时按它还原。</summary>
+        private readonly Dictionary<string, string> _originals;
+
         public FileAssociationTab(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
         {
             _owner = owner;
@@ -225,7 +228,12 @@ public sealed class SettingsWindow : Window
             _settings = settings;
             _settingsPath = settingsPath;
             _groups = FileAssociationCatalog.Supported(ArchiveFormatOption.OpenableExtensions);
-            _saved = ReadSavedSelection(settings, _groups);
+            _saved = ReadLiveSelection(settings, _groups);
+            _originals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var original in AssociationOriginals.Decode(settings.GetString(AssociationOriginals.SettingKey)))
+            {
+                _originals[original.Extension] = original.ProgId;
+            }
 
             var titleRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             var title = SectionTitle(lang.Get("TEXT_SETTINGS_FILE_ASSOCIATION"));
@@ -334,13 +342,13 @@ public sealed class SettingsWindow : Window
 
         public Control Root { get; }
 
-        /// <summary>「重置」= 恢复出厂勾选（不是放弃未保存改动），与参考软件一致。</summary>
+        /// <summary>「重置」= 重新读一遍系统实际状态，放弃窗口里没应用的改动。</summary>
         public void Reset()
         {
-            var defaults = FileAssociationCatalog.DefaultIds;
+            _saved = ReadLiveSelection(_settings, _groups);
             foreach (var (id, box) in _boxes)
             {
-                box.IsChecked = defaults.Contains(id);
+                box.IsChecked = _saved.Contains(id);
             }
 
             UpdateApplyState();
@@ -388,22 +396,45 @@ public sealed class SettingsWindow : Window
                 return;
             }
 
+            var blocked = new List<string>();
             try
             {
                 var service = new FileAssociationService();
+
                 foreach (var id in desired.Except(_saved))
                 {
-                    service.Register(FileAssociationCatalog.Find(id)!, executable);
+                    var change = service.Register(FileAssociationCatalog.Find(id)!, executable);
+                    blocked.AddRange(change.BlockedExtensions);
+                    foreach (var original in change.CapturedDefaults)
+                    {
+                        // 已经记过的不覆盖：重复登记时服务对“本来就是我们”的扩展名返回空串，
+                        // 拿它盖掉第一次记下的真实原值就把撤销路径写坏了。
+                        if (!_originals.ContainsKey(original.Extension))
+                        {
+                            _originals[original.Extension] = original.ProgId;
+                        }
+                    }
                 }
 
+                var restore = _originals.Select(pair => new AssociationOriginal(pair.Key, pair.Value)).ToList();
                 foreach (var id in _saved.Except(desired))
                 {
-                    service.Unregister(FileAssociationCatalog.Find(id)!);
+                    var association = FileAssociationCatalog.Find(id)!;
+                    service.Unregister(association, restore);
+                    foreach (var extension in association.Extensions)
+                    {
+                        _originals.Remove(extension);
+                    }
                 }
 
                 service.NotifyChanged();
 
                 _settings.SetStringList(AssociationSettingKey, desired);
+                // 存的是「还在我们手上的那些」：restore 是取消勾选之前的快照，拿它写回去会把
+                // 刚刚还原掉、并且已经从记录里删掉的扩展名又存回来。
+                _settings.SetString(
+                    AssociationOriginals.SettingKey,
+                    AssociationOriginals.Encode(_originals.Select(pair => new AssociationOriginal(pair.Key, pair.Value))));
                 _settings.Save(_settingsPath);
                 _saved = desired;
                 UpdateApplyState();
@@ -411,25 +442,53 @@ public sealed class SettingsWindow : Window
             catch (Exception ex)
             {
                 Message(_owner, _lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + ex.Message);
+                return;
             }
+
+            if (blocked.Count > 0)
+            {
+                // 被 UserChoice 挡住时不写提示就等于什么也没说：用户只会觉得“勾了没反应”。
+                Message(_owner,
+                    _lang.Get("TEXT_TITLE_SETTINGS"),
+                    _lang.Format("TEXT_SETTINGS_ASSOC_BLOCKED", ("list", string.Join(", ", blocked.Select(x => "." + x)))));
+                return;
+            }
+
+            Message(_owner, _lang.Get("TEXT_TITLE_SETTINGS"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLIED"));
         }
 
         private void Message(Window owner, string title, string text)
             => _ = new MessageWindow(_lang, title, text).ShowDialog(owner);
 
         /// <summary>
-        /// 已保存的勾选。没有这个键时取默认集合，而不是「全不勾」——
-        /// 第一次打开设置就看到一屏空框，会让人以为功能坏了。
+        /// 当前系统的真实勾选状态。
+        /// <para>
+        /// Windows 上直接问注册表，<strong>不</strong>拿设置文件当答案：设置文件记的是“上次写成功的
+        /// 那批”，而注册表会被别的软件改、被清理软件清、被用户手动撤销 —— 照它回显就会显示一堆
+        /// 勾着但实际没生效的项，用户点了「应用」也看不出自己已经点过了。
+        /// </para>
         /// </summary>
-        private static HashSet<string> ReadSavedSelection(AppSettings settings, IReadOnlyList<AssociationGroup> groups)
+        private static HashSet<string> ReadLiveSelection(AppSettings settings, IReadOnlyList<AssociationGroup> groups)
         {
             var offered = groups.SelectMany(g => g.Items).Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
-            var stored = settings.Has(AssociationSettingKey)
-                ? settings.GetStringList(AssociationSettingKey)
-                : FileAssociationCatalog.DefaultIds;
 
-            // 目录里已经不再提供的 Id（引擎读不了了）顺手丢掉。
-            return stored.Where(offered.Contains).ToHashSet(StringComparer.Ordinal);
+            if (!OperatingSystem.IsWindows())
+            {
+                return settings.GetStringList(AssociationSettingKey).Where(offered.Contains).ToHashSet(StringComparer.Ordinal);
+            }
+
+            // 写成循环而不是 LINQ：平台兼容性分析器不会把 IsWindows() 的判断带进 lambda 里。
+            var service = new FileAssociationService();
+            var registered = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var id in offered)
+            {
+                if (service.IsRegistered(FileAssociationCatalog.Find(id)!))
+                {
+                    registered.Add(id);
+                }
+            }
+
+            return registered;
         }
 
         private static Control GroupHeader(string text) => new Border

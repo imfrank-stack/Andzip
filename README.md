@@ -14,7 +14,7 @@ Bandizip 风格的压缩工具：C#（Avalonia）界面 + C/C++ 压缩内核。�
 | 项 | 状态 |
 |---|---|
 | Windows x64 全量构建（引擎 + 界面 + 测试） | ✅ 已通过，0 警告（`PROPVARIANT` 修复后重建） |
-| 单元测试 | ✅ **810 项断言全部通过**（原生 532 ×2 种链接方式 + Core 209 + 外壳 69），Core 连续 5 次运行稳定 |
+| 单元测试 | ✅ **818 项断言全部通过**（原生 532 ×2 种链接方式 + Core 217 + 外壳 69），Core 连续 5 次运行稳定 |
 | 间歇性 0xC0000005（测试主机崩溃） | ✅ **已定位并修复**，见第七节第 10 条；修复后 69,000 次写入往返 0 崩溃 |
 | 单文件绿色版打包（trim + 压缩 + 内嵌 native） | ✅ **19.47 MB**，已验证运行时能加载引擎（标题栏报告内核版本与格式数） |
 | 界面实际运行 | ✅ 绿色版直接启动并正常关闭；首页 / 打开压缩包 / 树导航 / 图标视图已逐屏截图核对；azcore 命令行往返 + SHA-256 逐文件复核 3/3 一致 |
@@ -64,7 +64,7 @@ Andzip/
 │   ├── tools/azcore/           命令行工具（冒烟测试 + 用法示例）
 │   ├── tools/azgui/            最小 Win32 验证界面（手动核对压缩解压）
 │   └── tests/native/           532 条断言的原生测试
-├── tests/Andzip.Core.Tests/    xUnit，209 个用例
+├── tests/Andzip.Core.Tests/    xUnit，217 个用例
 ├── build/                      CMake 输出目录（native / native-static / linux-*，全部可再生）
 └── dist/                       build.ps1 的产物目录
 ```
@@ -177,7 +177,7 @@ dotnet build Andzip.slnx -c Release
 ### 3. 跑测试
 
 ```powershell
-dotnet test Andzip.slnx -c Release                                    # 209 个用例（xUnit）
+dotnet test Andzip.slnx -c Release                                    # 217 个用例（xUnit）
 dotnet run --project src/Andzip.Native.Tests -c Release      # 69 条断言（控制台自检）
 ```
 
@@ -278,13 +278,13 @@ powershell -ExecutionPolicy Bypass -File ci.ps1 -SkipEngine -NoPackage   # 只�
 
 | 作业 | 跑什么 | 是否卡门禁 |
 |---|---|---|
-| `windows` | `ci.ps1 -Static`：532 原生断言 ×2 种链接 + 41 导出核对 + 209 xUnit + 69 自检 + 打包，上传绿色版与内核二进制 | ✅ 失败即红 |
+| `windows` | `ci.ps1 -Static`：532 原生断言 ×2 种链接 + 41 导出核对 + 217 xUnit + 69 自检 + 打包，上传绿色版与内核二进制 | ✅ 失败即红 |
 | `linux` | `build-unix.sh -T`：**在真 Linux 上执行** `andzip_core_tests`，再核对导出符号 | 原生层 ✅；托管层仅报告 |
 | `macos` | `build-unix.sh -T`，内核从未在 macOS 上编译过 | 仅探测（`continue-on-error`） |
 
 两个刻意的取舍，别顺手改掉：
 
-- **托管测试在 Linux 上是 `continue-on-error`**。这 209 个用例从没在非 Windows 上跑过，里面
+- **托管测试在 Linux 上是 `continue-on-error`**。这 217 个用例从没在非 Windows 上跑过，里面
   有按 Windows 语义写的路径清洗断言（`<>:"|?*` 在 Linux 上是合法文件名字符）。先让它把真实
   结果报出来，读过之后再决定要不要升格成门禁 —— 直接开成硬门禁只会得到一片红，然后被人关掉。
 - **Windows 作业用 `shell: powershell`（Windows PowerShell 5.1）而不是 `pwsh`**。仓库里的
@@ -380,12 +380,23 @@ git push -u origin main
 - **文件关联页已实装**：35 项候选分成 压缩包文件 / UNIX / 其它 / CD/DVD 四组，候选集由
   `FileAssociationCatalog.Supported(引擎可读扩展名)` 过滤得出 —— 引擎读不了的格式不会出现在列表里，
   也就勾不出一个「关联了却打不开」的项。
-- **只登记到「打开方式」，不抢默认程序**：写 `HKCU\Software\Classes` 下每格式一棵
-  `Andzip.<id>` ProgID 子树，并把 ProgID 挂进该扩展名的 `OpenWithProgids`；**不改**扩展名键的默认值。
-  取消勾选时整棵删掉并移除挂的值，不碰别人登记的 ProgID。改完调用 `SHChangeNotify` 让资源管理器立刻刷新。
-- 「立即应用」只在勾选与已保存状态不一致时可用；「确定」会顺手应用未保存的改动再关窗，
-  右上角 X 才是放弃改动；「重置」恢复**出厂默认勾选**（不是放弃改动）。「Windows - 设置默认程序」
-  打开 `ms-settings:defaultapps`。
+- **勾选 = 双击就用 Andzip**：写 `HKCU\Software\Classes` 下每格式一棵 `Andzip.<id>` ProgID 子树，
+  把 ProgID 挂进该扩展名的 `OpenWithProgids`（右键「打开方式」里能看到），**并把扩展名键的默认值
+  指过来**（双击才真的走我们）。两处缺一不可 —— 只挂 `OpenWithProgids` 的话，双击照旧用原来的
+  默认程序，这正是第一版“点了没生效”的原因。
+- **撤销是可逆的，不是猜的**：覆盖默认值之前先把原值记进 `settings.ini`（`AssociationOriginals`，
+  `扩展名=ProgID` 列表），取消勾选时按记录还原；当时根本没有默认值的就删掉那个值。只还原
+  「现在还指着我们」的扩展名 —— 期间被别的软件改过就不动它。
+- **Windows 的默认应用保护改不动，也不硬改**：`FileExts\<ext>\UserChoice` 里的哈希是用每用户随机
+  密钥算的，伪造它属于绕过系统安全机制，而且随版本更新随时失效。遇到这种扩展名会**如实报出来**，
+  提示去「设置 → 应用 → 默认应用」手选，而不是静默失败。实测这台机器上 .zip / .7z / .rar / .tar /
+  .gz 都没有 UserChoice，所以写 `HKCU\Software\Classes` 就直接生效。
+- **列表显示的是系统真实状态**：打开设置时逐项问注册表（`IsRegistered`），不拿 `settings.ini`
+  当答案。设置文件记的是「上次写成功的那批」，而注册表会被别的软件改、被清理软件清、被用户手动
+  撤销 —— 照它回显就会显示一堆勾着但实际没生效的项，用户再点「应用」也看不出自己已经点过了。
+  「重置」= 重新读一遍系统状态。
+- 「立即应用」只在勾选与系统实际状态不一致时可用；「确定」会顺手应用未保存的改动再关窗，
+  右上角 X 才是放弃改动。「Windows - 设置默认程序」打开 `ms-settings:defaultapps`。
 - 目录刻意不含 APFS / NTFS / ELF / PE(dll,sys) / VHD 这类「能嗅探出来但不是压缩包」的格式，
   也不含 Compound（它的扩展名是 doc / xls / ppt）。**它们仍然能打开** —— 打开对话框与命令行走的是
   内容嗅探，与关联表无关。
@@ -448,8 +459,9 @@ git push -u origin main
 19. **设置窗口只有「文件关联」是实装的**：其余 8 个导航页显示占位文案，按参考软件的页面顺序逐个补。
     参考软件关联页上的「基本选项」按钮没有跟着做 —— 它的行为无法从截图确定，放一个不知道会不会有用
     的按钮不如先不放。
-20. **不做「设为默认程序」**：只登记到右键「打开方式」。Windows 10/11 对默认应用有哈希保护，
-    静默改写既不礼貌也容易被系统回滚。删除关联项也不会清理用户手动改过的默认值。
+20. **被 `UserChoice` 保护的扩展名设不了默认**：Windows 10 1709 之后默认应用有哈希保护，
+    伪造那个哈希属于绕过系统安全机制，不做。这类扩展名会如实报出来让你去系统设置里手选。
+    「打开方式」列表是共享的，取消勾选只删我们自己挂的 `Andzip.*` 值，不碰别的软件留的。
 
 ### 平台
 
@@ -722,7 +734,7 @@ zip / 7z 不较真，tar 较真。
 |---|---|---|
 | `native/tests/native/test_main.cpp`（动态库） | 532 条断言 | ✅ 0 失败 |
 | 同一套件，静态库 `/WHOLEARCHIVE` 链接 | 532 条断言 | ✅ 0 失败 |
-| `tests/Andzip.Core.Tests`（xUnit） | 209 个用例 | ✅ 0 失败，**连续 5 次运行稳定** |
+| `tests/Andzip.Core.Tests`（xUnit） | 217 个用例 | ✅ 0 失败，**连续 5 次运行稳定** |
 | `src/Andzip.Native.Tests`（控制台自检） | 69 条断言 | ✅ 0 失败 |
 | `native/scripts/check-exports.ps1` | 41 个导出 | ✅ win-x64 `.dll`、linux-x86_64 `.so`、linux-aarch64 `.so` 三侧一致 |
 | 定向压力：CLR 宿主里跑压缩往返 | 5 组配置 × 6 次 × 1500 | ✅ 0 崩溃（修复前约每 1500 次崩 1 次） |
@@ -738,7 +750,7 @@ zip / 7z 不较真，tar 较真。
 退出当失败，否则「测试全绿」这句话会漏掉 69 条 ABI/句柄生命周期检查。
 
 构建 0 警告；`build.ps1` 全流水线（版本号 → 测试门禁 → 发布 → 字节扫描确认内核已内嵌 → 体积）
-退出码 0，产物 `dist/Andzip-v0.9.1-win-x64.exe` **19.49 MB**（预算 25 MB）。
+退出码 0，产物 `dist/Andzip-v0.9.2-win-x64.exe` **19.50 MB**（预算 25 MB）。
 
 Core 测试的覆盖面：ABI 协商、格式/编解码器表、内存与目录往返、三种口令方案、进度与取消、
 路径穿越、非法文件名清洗、智能解压、分卷命名与拼接、GZ/TGZ 约束、语言包解析与键覆盖、
@@ -785,8 +797,8 @@ Core 测试的覆盖面：ABI 协商、格式/编解码器表、内存与目录�
 
 ### 手动
 
-- **单文件绿色版**：直接启动 `dist/Andzip-v0.9.1-win-x64.exe`（`FileVersion 0.9.1.0`、
-  `ProductVersion 0.9.1+10`），主窗口存活，标题栏
+- **单文件绿色版**：直接启动 `dist/Andzip-v0.9.2-win-x64.exe`（`FileVersion 0.9.2.0`、
+  `ProductVersion 0.9.2+11`），主窗口存活，标题栏
   `Andzip (Professional) · 7-Zip 26.04 (x64) · Release · 60 formats / 7 writable`，随后正常关闭。
 - **内核命令行往返**（`build/native/bin/azcore.exe`，同一个 DLL）：把含中文与空格的目录
   压成 ZIP + AES-256 口令包 → 列表显示 5 个条目（3 文件 + 2 目录，名字里的中文没有变成乱码）→
@@ -813,10 +825,12 @@ Core 测试的覆盖面：ABI 协商、格式/编解码器表、内存与目录�
 4. 新建 → ZIP + 分卷 3MB → 压一个 10 MB 的文件 → 确认 `name.z01`、`name.zip` 生成，
    且能整体解压回去。
 5. 打开 `.tar.gz` / `.tgz` → 确认列表显示的是内层 tar 的内容而不是一个成员文件。
-6. F5 打开设置 → 文件关联页 → 勾一个平时没关联的格式（比如 LZMA）→ 立即应用 →
-   资源管理器里右键该文件 → 「打开方式」里应出现 Andzip；再取消勾选 → 立即应用 → 应当消失。
-7. 设置里点「重置」→ 勾选应回到出厂集合（ZIP / 7Z / RAR / TAR / GZ… 勾上，EXE / IMG / JAR 不勾）；
-   点「确定」关窗后重开 F5，勾选状态应当保持（存在 `%APPDATA%\Andzip\settings.ini`）。
+6. F5 → 文件关联页：勾选状态应当与系统实际一致（第一次打开基本全是空的，除非以前关联过）。
+   勾 ZIP → 立即应用 → **双击一个 .zip 应当直接用 Andzip 打开**，右键「打开方式」里也应当有 Andzip。
+7. 再取消 ZIP → 立即应用 → 双击应当回到原来的默认程序（不是 Andzip，也不是没反应）。
+   若弹提示说某扩展名被 Windows 默认应用保护挡住，那是预期行为，去「设置 → 应用 → 默认应用」手选。
+8. 应用后关掉设置再重开 F5：勾着的项目应当仍然勾着（说明注册表里真在）；点「重置」应当把未应用的
+   改动读回系统状态，而不是恢复成一片预勾选。
 6. 打开一个 `archive.7z.001` 分卷包 → 确认能作为单个归档列出。
 
 ---
