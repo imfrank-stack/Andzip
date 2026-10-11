@@ -1,6 +1,7 @@
 using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -27,6 +28,8 @@ internal static class HomeView
             Background = new SolidColorBrush(Color.Parse("#D6D6D6")),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
+            ResizeDirection = GridResizeDirection.Columns,
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
         };
         var right = new Border { Background = Brushes.White };
 

@@ -49,6 +49,18 @@
   不过滤就显示成「文件(&F)」。语言包保留原写法，将来接真正的访问键时不用回头改文案。
 
 ### 修复
+- **详情列表长文字压到隔壁列、列宽不可调**：两个独立的原因。
+  ① 名称列原本是「图标 + 文字」的 `StackPanel`，而 StackPanel 测量子项时给的是**无限宽度**，
+  `TextTrimming` 因此永远不触发，长文件名直接盖住压缩后大小 / 原始大小两列 —— 换成
+  `Auto,*` 的两列 Grid 后文字才被约束住。
+  ② 行 `Grid` 上的 `ClipToBounds` 把超宽内容就地裁掉了，ListBox 于是认为「没有横向溢出」，
+  既不出横向滚动条也滚不动，右边几列等于永远够不到。去掉行裁剪并显式
+  `ScrollViewer.SetHorizontalScrollBarVisibility(list, Auto)` 后滚动条回来了。
+  表头原先包在一个 `HorizontalScrollBarVisibility=Hidden` 的 ScrollViewer 里，它和列分隔条的
+  拖拽会抢按下事件；改成「表头平移到 `-Offset.X` + 外层 Border 裁剪」，嵌套 ScrollViewer 一并去掉。
+  列分隔条用 `GridSplitter`（`ResizeDirection=Columns`、`ResizeBehavior=PreviousAndNext`，
+  每列带 `MinWidth=48`），松手时才把宽度落到实例字段并重画列表 —— 每帧重建会让拖动本身卡顿。
+  顺带给首页与压缩包视图的树栏分隔条补上同样的 `ResizeDirection`，之前依赖 Auto 推断。
 - **底部栏按钮的图标不显示**：`Avalonia.Controls.Shapes.Path` 在代码里构造时没有隐式的
   `StrokeThickness`，只给 `Stroke` 不给粗细就什么都不画。截图核对时才发现 —— 按钮的
   高亮底色在，图标是空的。
@@ -56,6 +68,11 @@
 ### 验证
 - `dotnet build Andzip.slnx` 0 警告 0 错误；`dotnet test` **187 / 187**（新增 9 条：
   目录树 8 条 + 内容回读 1 条）；`Andzip.Native.Tests` 69 条断言 0 失败（含 4000 次写入压力）。
+- 列宽修复后的复验：默认窗口尺寸（1040×773）下横向滚动条出现；点滚动条轨道翻到右侧后，
+  表头与内容逐列对齐（CRC / 属性 / 附加信息 三列文字一一对上），长文件名显示为省略号且
+  不再与相邻列重叠。**拖拽列宽本身没有被自动化验证到**：本机的合成鼠标输入只能产生点击，
+  压住再移动不会被 Avalonia 当成拖拽（连拖动滚动条滑块都没有反应），所以只验证到
+  「分隔条配置正确 + 表头不再包在 ScrollViewer 里」这一层。
 - **界面逐屏截图核对**（一个 402 文件 / 4 目录 / 965 MB 的真实照片包）：首页、打开后的树与
   11 列详情、进入子目录（`..` + `JPG 文件` / `Deflate` / CRC / `A__` / `OS:Windows`）、
   图标视图（100 张证件照缩略图全部解出）、系统文件框（标题「打开压缩文件」，类型下拉只有

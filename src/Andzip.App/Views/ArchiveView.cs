@@ -28,8 +28,14 @@ namespace Andzip.App.Views;
 /// </summary>
 internal sealed class ArchiveView : IDisposable
 {
-    /// <summary>列宽。每个 Grid 必须拿到自己的实例（<see cref="ColumnDefinitions"/> 不可跨 Grid 共享）。</summary>
-    private const string ColumnLayout = "160,96,96,110,120,96,96,140,60,80,130,*";
+    /// <summary>各列的默认宽度（逻辑像素）。前 11 列可拖拽调整，末尾还有一列吃掉剩余宽度。</summary>
+    private static readonly double[] DefaultColumnWidths = [160, 96, 96, 110, 120, 96, 96, 140, 60, 80, 130];
+
+    /// <summary>列间分隔条的宽度，同时也是鼠标命中区。</summary>
+    private const double SplitterWidth = 5;
+
+    /// <summary>拖拽时的列宽下限，防止把某一列拖没。</summary>
+    private const double MinimumColumnWidth = 48;
 
     /// <summary>超过这个条数就不做缩略图：WrapPanel 不虚拟化，几百张图会明显拖慢切换。</summary>
     private const int ThumbnailEntryLimit = 400;
@@ -48,6 +54,7 @@ internal sealed class ArchiveView : IDisposable
     private readonly ArchiveFolderNode _root;
     private readonly Dictionary<ArchiveFolderNode, TreeViewItem> _treeItems = new();
     private readonly ColumnSpec[] _columns;
+    private readonly double[] _columnWidths = [.. DefaultColumnWidths];
 
     private readonly TreeView _tree = new();
     private readonly ContentControl _detailHost = new();
@@ -96,6 +103,8 @@ internal sealed class ArchiveView : IDisposable
             Background = new SolidColorBrush(Color.Parse("#D6D6D6")),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
+            ResizeDirection = GridResizeDirection.Columns,
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
         };
 
         var detailPane = new Border { Background = Brushes.White, Child = _detailHost };
@@ -244,13 +253,16 @@ internal sealed class ArchiveView : IDisposable
 
     private Control BuildListView()
     {
-        // 表头单独放在一个只横向滚动的 ScrollViewer 里，再把它与列表的横向偏移同步起来：
-        // 列表纵向要虚拟化，不能整个塞进外层 ScrollViewer。
-        var headerHost = new ScrollViewer
+        // 表头不能再套一层 ScrollViewer：那层的 PointerPressed 处理会跟列分隔条的拖拽抢事件，
+        // 而且表头本身不需要滚动条 —— 把它平移到位移量上、外面用一个裁剪边框拦住就够了。
+        var header = BuildHeader();
+        var shift = new TranslateTransform();
+        header.RenderTransform = shift;
+        var headerHost = new Border
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = BuildHeader(),
+            ClipToBounds = true,
+            Height = 24,
+            Child = header,
         };
 
         var list = new ListBox
@@ -262,11 +274,17 @@ internal sealed class ArchiveView : IDisposable
             BorderThickness = new Thickness(0),
         };
 
+        // ItemsControl 默认不允许横向溢出，于是超宽的列既滚不到、也不出滚动条 —— 右侧那几列
+        // 就等于不存在。显式打开 Auto，行内容超出视口时由列表自己的 ScrollViewer 裁剪并出条。
+        ScrollViewer.SetHorizontalScrollBarVisibility(list, ScrollBarVisibility.Auto);
+        ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Auto);
+
         list.AddHandler(ScrollViewer.ScrollChangedEvent, (_, e) =>
         {
+            // 列表横向滚多少，表头就往反方向平移多少；纵向仍由 ListBox 自己虚拟化。
             if (e.Source is ScrollViewer source)
             {
-                headerHost.Offset = new Vector(source.Offset.X, 0);
+                shift.X = -source.Offset.X;
             }
         });
 
@@ -290,7 +308,12 @@ internal sealed class ArchiveView : IDisposable
 
     private Control BuildHeader()
     {
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions(ColumnLayout), Height = 24 };
+        var header = new Grid
+        {
+            ColumnDefinitions = BuildColumnDefinitions(),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+
         for (var i = 0; i < _columns.Length; i++)
         {
             var index = i;
@@ -301,6 +324,7 @@ internal sealed class ArchiveView : IDisposable
                     Text = _columns[i].Title,
                     FontSize = 13,
                     Foreground = PrimaryText,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
                 Background = new SolidColorBrush(Color.Parse("#FAFAFA")),
@@ -323,11 +347,85 @@ internal sealed class ArchiveView : IDisposable
                 ((TextBlock)cell.Content).Text += _sortAscending ? "  ▲" : "  ▼";
             }
 
-            Grid.SetColumn(cell, index);
+            Grid.SetColumn(cell, ContentColumn(index));
             header.Children.Add(cell);
+
+            if (index < _columnWidths.Length)
+            {
+                var splitter = new GridSplitter
+                {
+                    Width = SplitterWidth,
+                    Background = Brushes.Transparent,
+                    ResizeDirection = GridResizeDirection.Columns,
+                    ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                    Cursor = new Cursor(StandardCursorType.SizeWestEast),
+                };
+                splitter.DragCompleted += (_, _) => CommitColumnWidths(header, index);
+                Grid.SetColumn(splitter, ContentColumn(index) + 1);
+                header.Children.Add(splitter);
+            }
         }
 
         return header;
+    }
+
+    /// <summary>
+    /// 列布局：每条内容列后面跟一条分隔列，末尾再挂一条 <c>*</c> 填充列吃掉剩余宽度。
+    /// 用对象而不是拼字符串，是为了给每列带上 <see cref="ColumnDefinition.MinWidth"/> ——
+    /// 拖拽时免得把某一列拖没。每个 Grid 都要拿到自己的实例（不可跨 Grid 共享）。
+    /// </summary>
+    private ColumnDefinitions BuildColumnDefinitions()
+    {
+        var definitions = new ColumnDefinitions();
+        foreach (var width in _columnWidths)
+        {
+            definitions.Add(new ColumnDefinition(new GridLength(width, GridUnitType.Pixel))
+            {
+                MinWidth = MinimumColumnWidth,
+            });
+            definitions.Add(new ColumnDefinition(new GridLength(SplitterWidth, GridUnitType.Pixel))
+            {
+                MinWidth = SplitterWidth,
+            });
+        }
+
+        definitions.Add(new ColumnDefinition(1, GridUnitType.Star));
+        return definitions;
+    }
+
+    /// <summary>第 index 列的内容落在网格的第几列（分隔列夹在中间）。</summary>
+    private static int ContentColumn(int index) => index * 2;
+
+    /// <summary>
+    /// 松手之后才把宽度落到 <see cref="_columnWidths"/> 并重画列表。拖的过程中只有
+    /// 表头那两格在动 —— 每帧重建整个列表会让拖动本身卡顿。
+    /// <para>
+    /// 取两个列是因为 Avalonia 的 GridSplitter 只有「与隔壁交换宽度」这一种语义
+    /// （<see cref="GridResizeBehavior.PreviousAndNext"/>）：拖宽左边就等于拖窄右边。
+    /// 重画时表头也按 <see cref="_columnWidths"/> 重建，所以被 MinWidth 拦下来的
+    /// 那一列会回到一致的值，不会出现表头与内容错位。
+    /// </para>
+    /// </summary>
+    private void CommitColumnWidths(Grid header, int index)
+    {
+        RememberWidth(header, index);
+        RememberWidth(header, index + 1);
+        Render();
+    }
+
+    private void RememberWidth(Grid header, int index)
+    {
+        if (index >= _columnWidths.Length)
+        {
+            return;
+        }
+
+        var width = header.ColumnDefinitions[ContentColumn(index)].Width.Value;
+        if (double.IsFinite(width) && width >= MinimumColumnWidth)
+        {
+            _columnWidths[index] = width;
+        }
     }
 
     private void SortBy(int index)
@@ -352,7 +450,11 @@ internal sealed class ArchiveView : IDisposable
 
     private Control BuildRow(ArchiveEntryInfo entry)
     {
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions(ColumnLayout), Margin = new Thickness(0, 2, 0, 2) };
+        var row = new Grid
+        {
+            ColumnDefinitions = BuildColumnDefinitions(),
+            Margin = new Thickness(0, 2, 0, 2),
+        };
 
         for (var i = 0; i < _columns.Length; i++)
         {
@@ -365,19 +467,22 @@ internal sealed class ArchiveView : IDisposable
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
+            Control cell = text;
             if (i == 0)
             {
-                // 名称列：图标 + 文字。
-                var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
-                name.Children.Add(entry.IsDirectory ? Glyph(FolderGeometry, 14) : Glyph(FileGeometry, 14));
+                // 名称列是「图标 + 文字」。这里必须用 Grid 而不是 StackPanel：StackPanel 测量
+                // 子项时给的是无限宽度，TextBlock 因此永远不会被约束，长名字会直接压到隔壁列上。
+                var name = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+                var glyph = entry.IsDirectory ? Glyph(FolderGeometry, 14) : Glyph(FileGeometry, 14);
+                glyph.Margin = new Thickness(0, 0, 5, 0);
+                name.Children.Add(glyph);
+                Grid.SetColumn(text, 1);
                 name.Children.Add(text);
-                Grid.SetColumn(name, 0);
-                row.Children.Add(name);
-                continue;
+                cell = name;
             }
 
-            Grid.SetColumn(text, i);
-            row.Children.Add(text);
+            Grid.SetColumn(cell, ContentColumn(i));
+            row.Children.Add(cell);
         }
 
         return row;
