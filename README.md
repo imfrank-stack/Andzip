@@ -231,10 +231,34 @@ powershell -ExecutionPolicy Bypass -File run.ps1 -Check # 只构建 + 跑两套�
 | `UseSystemResourceKeys=true` | ❌ 体积零收益，还会把框架异常文案换成资源**键**，而错误框是直接显示 `ex.Message` 的 |
 | 手工摘掉 `mscordaccore` / `mscordbi` / `DiaSymReader` | ❌ 后两个本来就不进 bundle，实测差 30 字节，不值得为它加一个 MSBuild target |
 
-包内体积构成（未打包前 44 MB）：`libSkiaSharp` 9.0 MB、`av_libglesv2` 5.2 MB、`coreclr` 4.4 MB、
-`System.Private.CoreLib` 2.7 MB、`libHarfBuzzSharp` 1.7 MB、`andzip_core` 1.7 MB、
-`Avalonia.Base` 1.5 MB —— 也就是说剩下的量基本都在渲染栈与内核上，再往下压要么换渲染后端，
-要么放弃单文件。
+#### 包内体积到底花在哪（2026-10-12 实测，v0.9.3）
+
+未打包 41.39 MB / 72 个文件，压成单文件后 19.50 MB：
+
+| 部分 | 未压缩 | 占比 |
+|---|---|---|
+| 渲染栈：`libSkiaSharp` 8.98 + `av_libglesv2`(ANGLE) 5.17 + `libHarfBuzzSharp` 1.72 | 15.87 MB | 38% |
+| .NET 运行时：`coreclr` 4.40 + `clrjit` 2.00 + `System.Private.CoreLib` 2.23 + hostfxr / hostpolicy / gc … | ≈12 MB | 29% |
+| 调试用原生库：`Microsoft.DiaSymReader.Native` 2.27 + `mscordaccore` ×2 2.58 + `mscordbi` 1.18 | 6.03 MB | 14%（单文件包里基本已不带） |
+| Avalonia 与本项目托管 DLL | ≈4 MB | 10% |
+| **`andzip_core.dll`（7-Zip 内核 + C ABI）** | **1.67 MB** | **4%** |
+
+**结论：这个体积不是链接库形式造成的。** 我们的 C/C++ 内核只占 1.67 MB —— 与「7-Zip 本体不到 2 MB」
+是同一个量级；多出来的 17 MB 是 .NET 运行时与 Skia 渲染栈。C++ 代码编译产物必须是机器码二进制，
+要么 `.dll` 要么 `.lib` 链进某个可执行文件，换一种形式不会让代码消失。唯一「不带独立二进制」的路子是
+NativeAOT，但 Avalonia + 大量 P/Invoke + 7-Zip 的 COM 代码在 AOT 下是另一个量级的工程，而且产物通常
+**更大**（IL 换成机器码，一般 25–40 MB）。另外 `andzip_core.dll` 是**故意**以独立文件存在的：同一份内核
+要被 `azcore`、`azgui` 与托管三侧复用，见第七节第 13 条。
+
+真能压的三条路，以及为什么不选（2026-10-12 与用户确认：接受现状，继续做功能）：
+
+| 方案 | 能到 | 代价 |
+|---|---|---|
+| 去掉 ANGLE，渲染退回软件 / 原生 GL | ≈17 MB | 实测删掉 `av_libglesv2.dll` 后能正常启动，但流畅度与显示要人眼确认 |
+| 框架依赖（不打包 .NET 运行时） | 目录 25.28 MB / zip ≈12 MB | 用户机器必须装 .NET 10 Desktop Runtime，不再是免安装绿色版 |
+| 换 UI 技术栈（Win32 + comctl32，内核静态链入） | 2–3 MB | 等于重写整个界面层，现有 Avalonia 代码作废 |
+
+**19.5 MB 是「免安装 + 不挑机器 + 带 GPU 渲染」这个组合的正常代价**，在换掉其中任何一项之前不再优化体积。
 
 
 ```powershell
