@@ -164,6 +164,15 @@ public sealed class SettingsWindow : Window
         Foreground = PageText,
     };
 
+    /// <summary>控件下方那行灰色小字说明。</summary>
+    private static TextBlock Hint(string text) => new()
+    {
+        Text = text,
+        Foreground = HintText,
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(24, 4, 0, 0),
+    };
+
     /// <summary>每页对外的三件事：导航键、要呈现的控件、重新读状态 / 落盘。</summary>
     private interface ISettingsPage
     {
@@ -760,13 +769,8 @@ public sealed class SettingsWindow : Window
             panel.Children.Add(_forFiles);
             panel.Children.Add(_forFolders);
             panel.Children.Add(_forExtract);
-            panel.Children.Add(new TextBlock
-            {
-                Text = lang.Get("TEXT_SETTINGS_CTX_EXTRACT_HINT"),
-                Foreground = HintText,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(24, 4, 0, 0),
-            });
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_CTX_AUTO_EXTRACT_HINT")));
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_CTX_EXTRACT_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = panel;

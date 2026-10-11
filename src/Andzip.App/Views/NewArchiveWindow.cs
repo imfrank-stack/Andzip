@@ -55,7 +55,9 @@ public sealed class NewArchiveWindow : Window
     private int _lastVolumeIndex;
     private bool _suppressVolumeChange;
 
-    public NewArchiveWindow(LangCatalog lang)
+    /// <param name="seedPath">右键「压缩到…」带进来的文件或文件夹：预先填进输入列表，
+    /// 并把「文件名」预填成同名的兄弟位置。null 表示从主菜单新建，一切从空开始。</param>
+    public NewArchiveWindow(LangCatalog lang, string? seedPath = null)
     {
         _lang = lang;
 
@@ -272,7 +274,29 @@ public sealed class NewArchiveWindow : Window
         root.Children.Add(_advancedPanel);
 
         Content = root;
+
+        if (seedPath is not null)
+        {
+            SeedFrom(seedPath);
+        }
+
         RefreshState();
+    }
+
+    /// <summary>
+    /// 右键「压缩到…」的预填：把选中的路径放进输入列表，输出名取同名兄弟位置。
+    /// <para>
+    /// 走 <see cref="ShellTasks.ArchivePathFor"/> 而不是在这里再拼一遍名字 —— 文件夹名里的点
+    /// 不能当扩展名剥掉（<c>my.app</c> 要得到 <c>my.app.zip</c>），这条规则已经测过了，不该有两份。
+    /// </para>
+    /// <para>刻意<strong>不</strong>做重名避让：这里是给用户看的建议名，他自己会改；
+    /// 真到落盘时 <c>ArchiveCreationSettings.Overwrite</c> 那条路径负责不悄悄覆盖。</para>
+    /// </summary>
+    private void SeedFrom(string seedPath)
+    {
+        AddInput(seedPath);
+        _fileNameBox.Text = ShellTasks.ArchivePathFor(
+            seedPath, SelectedFormat().Extension, Directory.Exists(seedPath));
     }
 
     /// <summary>展开 / 收起右侧高级设置面板（按钮文案同步为「« 高级设置」，窗口宽度相应变化）。</summary>

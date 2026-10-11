@@ -55,15 +55,51 @@ internal sealed class ContextMenuService
             }
 
             using var shell = Registry.CurrentUser.CreateSubKey(ClassesRoot + scope + @"\shell");
-            foreach (var verb in verbs)
+            WriteVerbs(shell, verbs, executablePath);
+        }
+    }
+
+    /// <summary>
+    /// 在<strong>已经装了</strong>压缩动词的范围里补齐缺的条目，返回动过的范围数。
+    /// <para>
+    /// 为什么需要它：动词是按条写死的，新版本加一条（比如「压缩到…」对话框）时，老用户注册表里
+    /// 只有前两条，而设置页看到"Andzip. 开头的键存在"就以为全装好了 —— 新那条永远不会出现。
+    /// 一个范围都没装时什么都不做：没勾过的用户不该被塞进菜单。
+    /// </para>
+    /// </summary>
+    public int RepairVerbs(string executablePath, IReadOnlyList<CompressionVerb> verbs)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+
+        var touched = 0;
+        foreach (var (scope, _) in Scopes(forFiles: true, forFolders: true))
+        {
+            if (!IsInstalled(scope))
             {
-                using var key = shell.CreateSubKey(VerbPrefix + verb.Key);
-                key.SetValue(string.Empty, verb.Label);
-                key.SetValue("Icon", executablePath + ",0");
-                // %1 必须带引号：路径里有空格时不带引号会被拆成两个参数。
-                key.CreateSubKey("command")!
-                    .SetValue(string.Empty, "\"" + executablePath + "\" \"%1\" " + verb.Switch);
+                continue;
             }
+
+            using var shell = Registry.CurrentUser.OpenSubKey(ClassesRoot + scope + @"\shell", writable: true);
+            if (shell is not null)
+            {
+                WriteVerbs(shell, verbs, executablePath);
+                touched++;
+            }
+        }
+
+        return touched;
+    }
+
+    private static void WriteVerbs(RegistryKey shell, IReadOnlyList<CompressionVerb> verbs, string executablePath)
+    {
+        foreach (var verb in verbs)
+        {
+            using var key = shell.CreateSubKey(VerbPrefix + verb.Key);
+            key.SetValue(string.Empty, verb.Label);
+            key.SetValue("Icon", executablePath + ",0");
+            // %1 必须带引号：路径里有空格时不带引号会被拆成两个参数。
+            key.CreateSubKey("command")!
+                .SetValue(string.Empty, "\"" + executablePath + "\" \"%1\" " + verb.Switch);
         }
     }
 

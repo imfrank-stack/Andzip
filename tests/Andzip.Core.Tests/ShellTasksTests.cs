@@ -77,12 +77,14 @@ public class ShellTasksTests
 
     [Theory]
     [InlineData(ShellTask.Open)]
+    [InlineData(ShellTask.AutoExtract)]
     [InlineData(ShellTask.CompressZip)]
     [InlineData(ShellTask.CompressSevenZip)]
-    public void ExtractDestination_RejectsNonExtractTasks(ShellTask task)
+    [InlineData(ShellTask.CompressDialog)]
+    public void ExtractDestination_RejectsNonStaticTasks(ShellTask task)
     {
-        // 调用方（ShellTaskRunner）用分支保证只把解压任务送进来；这里守住另一半契约，
-        // 免得误用时静默把文件铺在错误的目录里。
+        // 调用方（ShellTaskRunner）用分支保证只把两个静态落点的任务送进来；AutoExtract 也拒绝，
+        // 因为它的落点要看包里装着什么，只凭路径算出来的一定是错的。
         Assert.Throws<ArgumentOutOfRangeException>(
             () => ShellTasks.ExtractDestination(Path.Combine(Path.GetTempPath(), "a.zip"), task));
     }
@@ -133,12 +135,4 @@ public class ShellTasksTests
 
         Assert.Equal(preferred, ShellTasks.UniqueArchivePath(preferred));
     }
-
-    [Theory]
-    [InlineData(ShellTask.CompressZip, true)]
-    [InlineData(ShellTask.CompressSevenZip, true)]
-    [InlineData(ShellTask.Extract, false)]
-    [InlineData(ShellTask.Open, false)]
-    public void IsCompression_SplitsTheTwoRunners(ShellTask task, bool expected)
-        => Assert.Equal(expected, ShellTasks.IsCompression(task));
 }

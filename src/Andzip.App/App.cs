@@ -27,7 +27,7 @@ public sealed class App : Application
 
             if (target is not null)
             {
-                RepairStaleRegistrations(lang, settings);
+                RepairStaleShellEntries(lang, settings);
             }
 
             // 不建主窗口的两条路径：右键动词带来的 /task=，以及双击 + 「常规 → 双击 = 直接解压」。
@@ -87,7 +87,7 @@ public sealed class App : Application
     }
 
     /// <summary>
-    /// 把注册表里指向旧 exe 的命令行校正到当前这个文件。
+    /// 把注册表里指向旧 exe 的命令行、以及缺条目的右键动词校正到当前这个版本。
     /// <para>
     /// 绿色版的文件名带版本号，升级之后注册表里那条命令还指着上一个 exe，而那个老二进制不认
     /// 新行为 —— 用户看到的就是「关联做了、设置也改了，双击还是老样子」。启动时顺手把自己
@@ -95,21 +95,24 @@ public sealed class App : Application
     /// </para>
     /// <para>只在真的通过关联被拉起来时做（否则首次运行会平白写一次注册表），且只动 <c>Andzip.*</c>。</para>
     /// <para>解压动词按「设置 → 上下文菜单」的选择补写：升级后新认出去的格式也该有右键菜单，
-    /// 但用户明确关掉过的那一项不能被自愈偷偷加回来。</para>
+    /// 但用户明确关掉过的那一项不能被自愈偷偷加回来。压缩动词只补齐<strong>已经装了</strong>的范围，
+    /// 没勾过的用户不会某天突然发现菜单里多了三项。</para>
     /// </summary>
-    private static void RepairStaleRegistrations(LangCatalog lang, AppSettings settings)
+    private static void RepairStaleShellEntries(LangCatalog lang, AppSettings settings)
     {
         if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(Environment.ProcessPath))
         {
             return;
         }
 
+        var executable = Environment.ProcessPath;
+
         try
         {
             var showExtractVerbs = settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true);
             var service = new FileAssociationService();
             var labels = ShellVerbLabels.Extraction(lang, showExtractVerbs);
-            if (service.RepairCommands(Environment.ProcessPath, labels) > 0)
+            if (service.RepairCommands(executable, labels) > 0)
             {
                 service.NotifyChanged();
             }
@@ -117,6 +120,19 @@ public sealed class App : Application
         catch (Exception)
         {
             // 修不动就算了：命令行本身仍然可用，不该因为校正注册表失败就拒绝解压。
+        }
+
+        try
+        {
+            var contextMenu = new ContextMenuService();
+            if (contextMenu.RepairVerbs(executable, ShellVerbLabels.Compression(lang)) > 0)
+            {
+                contextMenu.NotifyChanged();
+            }
+        }
+        catch (Exception)
+        {
+            // 同上：右键压缩不是用户这一步要的结果，缺条目下次再补。
         }
     }
 }

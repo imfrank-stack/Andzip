@@ -15,16 +15,21 @@ internal static class ShellVerbLabels
     /// <param name="showExtractVerbs">「设置 → 上下文菜单 → 解压菜单项」。关掉时 ProgID 里只留 open。</param>
     public static FileAssociationService.ExtractionVerbLabels Extraction(LangCatalog lang, bool showExtractVerbs = true) => new(
         lang.Get("TEXT_MENU_OPEN_WITH"),
-        lang.Get("TEXT_MENU_EXTRACT_TO_FOLDER"),
+        lang.Get("TEXT_MENU_AUTO_EXTRACT"),
         lang.Get("TEXT_MENU_EXTRACT_HERE"))
     {
         ShowExtractVerbs = showExtractVerbs,
     };
 
-    /// <summary>两个压缩动词。键名与 <see cref="ShellTask"/> 的名字保持一致，方便对照注册表排查。</summary>
+    /// <summary>
+    /// 三个压缩动词。键名与 <see cref="ShellTask"/> 的名字保持一致，方便对照注册表排查。
+    /// <para>前两条是"随手压一下"，第三条把「新建压缩文件」对话框开起来 —— 口令、分卷、
+    /// 压缩后删除源文件这些都得有人看着选，静态动词表达不了。</para>
+    /// </summary>
     public static IReadOnlyList<ContextMenuService.CompressionVerb> Compression(LangCatalog lang) =>
     [
         new("compress-zip", ShellTasks.Switch(ShellTask.CompressZip), lang.Get("TEXT_MENU_COMPRESS_ZIP")),
         new("compress-7z", ShellTasks.Switch(ShellTask.CompressSevenZip), lang.Get("TEXT_MENU_COMPRESS_7Z")),
+        new("compress-dialog", ShellTasks.Switch(ShellTask.CompressDialog), lang.Get("TEXT_MENU_COMPRESS_DIALOG")),
     ];
 }

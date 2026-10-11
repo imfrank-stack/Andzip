@@ -9,7 +9,7 @@ using Avalonia.Threading;
 namespace Andzip.App;
 
 /// <summary>
-/// 没有主窗口的解压执行体：右键「直接解压到包名文件夹」/「解压到当前文件夹」，
+/// 没有主窗口的解压执行体：右键「智能解压」/「解压到当前文件夹」，
 /// 以及双击 + 「常规 → 双击 = 直接解压」。由注册表动词带上 <c>/task=</c> 拉起来
 /// （见 <see cref="Services.FileAssociationService"/>）。
 /// <para>
@@ -17,16 +17,19 @@ namespace Andzip.App;
 /// 中间插一张主窗口既挡路又多余。因此调用方把生命周期切成 OnExplicitShutdown，
 /// 结束时代码自己 <c>Shutdown()</c> —— 没有主窗口，默认的生命周期策略会立刻退出进程。
 /// </para>
-/// <para>落盘位置由 <see cref="ShellTasks.ExtractDestination"/> 决定，与「选择解压路径」里
-/// 默认勾选的那一项一致，不额外发明第二套规则。</para>
+/// <para>
+/// 落点分两条路算：<see cref="ShellTask.Extract"/> 与 <see cref="ShellTask.ExtractHere"/> 只看路径
+/// （<see cref="ShellTasks.ExtractDestination"/>）；<see cref="ShellTask.AutoExtract"/> 得先看包里
+/// 装着什么（<see cref="ExtractionLayout"/>），所以它排在口令之后 —— 清单本身也在包里。
+/// </para>
 /// </summary>
 internal static class DirectExtract
 {
     public static async Task RunAsync(
         LangCatalog lang,
         AppSettings settings,
+        ShellTask task,
         string archivePath,
-        string destination,
         IClassicDesktopStyleApplicationLifetime desktop)
     {
         var cts = new CancellationTokenSource();
@@ -40,7 +43,7 @@ internal static class DirectExtract
 
         try
         {
-            await ExtractAsync(lang, archivePath, destination, progress, cts);
+            await ExtractAsync(lang, task, archivePath, progress, cts);
         }
         catch (Exception ex)
         {
@@ -55,8 +58,8 @@ internal static class DirectExtract
 
     private static async Task ExtractAsync(
         LangCatalog lang,
+        ShellTask task,
         string archivePath,
-        string destination,
         ProgressWindow progress,
         CancellationTokenSource cts)
     {
@@ -72,6 +75,10 @@ internal static class DirectExtract
 
             password = prompt.Password;
         }
+
+        var destination = task == ShellTask.AutoExtract
+            ? await AutoExtractDestinationAsync(archivePath, password)
+            : ShellTasks.ExtractDestination(archivePath, task);
 
         var settings = new ExtractionSettings(
             archivePath,
@@ -94,6 +101,17 @@ internal static class DirectExtract
         {
             await ShowError(lang, progress, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 智能解压的落点：读一遍清单，看顶层是单文件、单子目录还是零散一堆。
+    /// 只解析目录结构，不动数据，所以这一步在进度条上几乎不占时间。
+    /// </summary>
+    private static async Task<string> AutoExtractDestinationAsync(string archivePath, string? password)
+    {
+        var listing = await Task.Run(() => ArchiveReader.Read(archivePath, password));
+
+        return ExtractionLayout.Destination(archivePath, ExtractionLayout.Inspect(listing));
     }
 
     /// <summary>重名询问（FR-3.7）：以进度窗口为宿主，在工作线程回调里同步等 UI 答复。</summary>

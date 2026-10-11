@@ -12,6 +12,12 @@ public enum ShellTask
     /// <summary>解压到压缩包所在目录下一个与压缩包同名的文件夹。</summary>
     Extract,
 
+    /// <summary>
+    /// 智能解压：按压缩包顶层的形状决定落点（见 <see cref="ExtractionLayout"/>）。
+    /// 单文件或整棵单子树直接铺在当前目录，零散多个才新建以压缩包命名的文件夹。
+    /// </summary>
+    AutoExtract,
+
     /// <summary>直接解压到压缩包所在目录，不套一层文件夹。</summary>
     ExtractHere,
 
@@ -20,6 +26,9 @@ public enum ShellTask
 
     /// <summary>压缩成同名 .7z。</summary>
     CompressSevenZip,
+
+    /// <summary>打开「新建压缩文件」对话框，把选中的路径预填进去，由用户点开始。</summary>
+    CompressDialog,
 }
 
 /// <summary>右键任务的命令行写法与落点规则。</summary>
@@ -36,9 +45,11 @@ public static class ShellTasks
     public static string Name(ShellTask task) => task switch
     {
         ShellTask.Extract => "extract",
+        ShellTask.AutoExtract => "auto-extract",
         ShellTask.ExtractHere => "extract-here",
         ShellTask.CompressZip => "compress-zip",
         ShellTask.CompressSevenZip => "compress-7z",
+        ShellTask.CompressDialog => "compress-dialog",
         _ => "open",
     };
 
@@ -58,9 +69,11 @@ public static class ShellTasks
                 task = argument[SwitchPrefix.Length..].Trim().ToLowerInvariant() switch
                 {
                     "extract" => ShellTask.Extract,
+                    "auto-extract" => ShellTask.AutoExtract,
                     "extract-here" => ShellTask.ExtractHere,
                     "compress-zip" => ShellTask.CompressZip,
                     "compress-7z" => ShellTask.CompressSevenZip,
+                    "compress-dialog" => ShellTask.CompressDialog,
                     _ => ShellTask.Open,
                 };
                 found = true;
@@ -75,19 +88,19 @@ public static class ShellTasks
         return found;
     }
 
-    /// <summary>这个任务是不是「压缩」（决定走压缩执行体还是解压执行体）。</summary>
-    public static bool IsCompression(ShellTask task)
-        => task is ShellTask.CompressZip or ShellTask.CompressSevenZip;
-
     /// <summary>
     /// 解压落点。<c>Extract</c> 到压缩包旁边的同名文件夹，<c>ExtractHere</c> 就在压缩包所在目录里铺开。
     /// 非解压任务没有落点可言，交给调用方的分支去保证。
     /// </summary>
+    /// <remarks>
+    /// <see cref="ShellTask.AutoExtract"/> 故意不在这里：它的落点取决于<strong>包里装着什么</strong>，
+    /// 必须先读清单（可能还要口令），不能只凭路径算出来。规则在 <see cref="ExtractionLayout"/>。
+    /// </remarks>
     public static string ExtractDestination(string archivePath, ShellTask task) => task switch
     {
         ShellTask.Extract => SiblingFolder(archivePath),
         ShellTask.ExtractHere => ParentFolder(archivePath),
-        _ => throw new ArgumentOutOfRangeException(nameof(task), task, "只有解压任务有解压落点。"),
+        _ => throw new ArgumentOutOfRangeException(nameof(task), task, "只有 Extract / ExtractHere 有静态落点。"),
     };
 
     /// <summary>所在目录。</summary>
@@ -151,5 +164,40 @@ public static class ShellTasks
         }
 
         return preferred;
+    }
+
+    /// <summary>
+    /// 新建解压目录时的同名避让：<c>photos</c> 已被占用就依次试 <c>photos (2)</c>、<c>photos (3)</c>……
+    /// <para>
+    /// 与 <see cref="UniqueArchivePath"/> 不同，这里<strong>不</strong>把最后一段当扩展名剥掉：
+    /// 解压目标 <c>photos.tar</c> 撞名时要得到 <c>photos.tar (2)</c>，而不是 <c>photos (2).tar</c>。
+    /// 判占用时文件也算 —— 一个与目标目录同名的<strong>文件</strong>同样会让建目录失败。
+    /// </para>
+    /// </summary>
+    public static string UniqueFolder(string preferred)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(preferred);
+
+        if (IsFree(preferred))
+        {
+            return preferred;
+        }
+
+        var directory = Path.GetDirectoryName(preferred)
+            ?? throw new InvalidOperationException("路径没有父目录：" + preferred);
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(preferred));
+
+        for (var n = 2; n < 1000; n++)
+        {
+            var candidate = Path.Combine(directory, $"{name} ({n})");
+            if (IsFree(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return preferred;
+
+        static bool IsFree(string path) => !File.Exists(path) && !Directory.Exists(path);
     }
 }

@@ -160,7 +160,7 @@ internal sealed class FileAssociationService
     /// <para><see cref="ShowExtractVerbs"/> 对应「设置 → 上下文菜单 → 解压菜单项」：
     /// 关掉之后 ProgID 里只留 open 动词，双击仍然按「常规 → 双击」设置走，不受影响。</para>
     /// </summary>
-    internal sealed record ExtractionVerbLabels(string Open, string Extract, string ExtractHere)
+    internal sealed record ExtractionVerbLabels(string Open, string AutoExtract, string ExtractHere)
     {
         public bool ShowExtractVerbs { get; init; } = true;
     }
@@ -172,7 +172,7 @@ internal sealed class FileAssociationService
     /// 「把这个文件交给 Andzip 做某件事」，怎么做由参数说清楚，不靠某个动词键是否存在。
     /// </para>
     /// <para>
-    /// <c>shell\open\command</c> 永远不带开关 —— 双击要留给「常规 → 双击行为」判断，
+    /// <c>shell\open\command</c> 永远不带开关 —— 双击的行为由「常规 → 双击」设置决定，
     /// 那样改设置不用重写所有 ProgID。
     /// </para>
     /// </summary>
@@ -182,12 +182,17 @@ internal sealed class FileAssociationService
         shell.SetValue(string.Empty, "open");
 
         WriteVerb(shell, "open", labels.Open, executablePath, Quote(executablePath) + " \"%1\"");
-        WriteVerb(shell, "extract", labels.Extract, executablePath,
-            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Extract),
+        WriteVerb(shell, "auto-extract", labels.AutoExtract, executablePath,
+            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.AutoExtract),
             enabled: labels.ShowExtractVerbs);
         WriteVerb(shell, "extract-here", labels.ExtractHere, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.ExtractHere),
             enabled: labels.ShowExtractVerbs);
+
+        // v0.9.5 的那条 shell\extract（固定套一层同名文件夹）被「智能解压」取代了。
+        // 必须显式删掉：只写新键的话菜单上会同时留着两项，用户分不清点哪个。
+        shell.DeleteSubKeyTree("extract", throwOnMissingSubKey: false);
+
         progId.CreateSubKey("DefaultIcon")!.SetValue(string.Empty, executablePath + ",0");
     }
 
