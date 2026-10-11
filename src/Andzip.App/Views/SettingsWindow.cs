@@ -63,7 +63,7 @@ public sealed class SettingsWindow : Window
         [
             new GeneralPage(this, lang, settings, settingsPath),
             new FileAssociationPage(this, lang, settings, settingsPath),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_CONTEXT_MENU"),
+            new ContextMenuPage(this, lang, settings, settingsPath),
             new PlaceholderPage(lang, "TEXT_SETTINGS_EXTRACT"),
             new PlaceholderPage(lang, "TEXT_SETTINGS_COMPRESS"),
             new PlaceholderPage(lang, "TEXT_SETTINGS_VIEW"),
@@ -314,6 +314,16 @@ public sealed class SettingsWindow : Window
         private readonly Dictionary<string, CheckBox> _boxes = new(StringComparer.Ordinal);
         private readonly Button _applyButton;
 
+        /// <summary>
+        /// 「已关联但默认程序还不是我们」的那串扩展名，以及对应的提示行和「设为默认…」按钮。
+        /// <para>这一栏存在的理由就是用户报的那个 bug：<c>.7z</c> 勾上了、ProgID 也写对了，
+        /// 双击却还是 Bandizip —— 因为 <c>UserChoice</c> 排在 <c>Software\Classes</c> 前面。
+        /// 光显示勾很容易让人以为一切正常，所以必须把"被挡住"这件事摆在脸上并给一条出路。</para>
+        /// </summary>
+        private readonly TextBlock _shadowHint;
+        private readonly Button _setDefaultButton;
+        private List<string> _shadowed = [];
+
         /// <summary>接管前的默认程序（扩展名 → ProgID，空串表示当时没有）。撤销时按它还原。</summary>
         private readonly Dictionary<string, string> _originals;
 
@@ -359,6 +369,34 @@ public sealed class SettingsWindow : Window
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 8),
             });
+
+            _shadowHint = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.Parse("#C42B1C")),
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsVisible = false,
+            };
+            _setDefaultButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_SET_DEFAULT"),
+                MinWidth = 120,
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                IsVisible = false,
+            };
+            _setDefaultButton.Click += (_, _) => OpenWindowsDefaultAppSettings(_shadowed.FirstOrDefault());
+
+            var shadowRow = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Margin = new Thickness(0, 0, 0, 8),
+            };
+            Grid.SetColumn(_shadowHint, 0);
+            Grid.SetColumn(_setDefaultButton, 1);
+            shadowRow.Children.Add(_shadowHint);
+            shadowRow.Children.Add(_setDefaultButton);
+            list.Children.Add(shadowRow);
 
             foreach (var group in _groups)
             {
@@ -448,7 +486,49 @@ public sealed class SettingsWindow : Window
                 box.IsChecked = _live.Contains(id);
             }
 
+            ShowShadowedDefaults(ReadShadowedDefaults(_live));
             UpdateApplyState();
+        }
+
+        /// <summary>
+        /// 把「勾上了但双击还不是 Andzip」这件事显示出来。
+        /// 一个红色的说明加一个「设为默认…」按钮 —— 只弹提示不给出路是用户明确反对过的做法。
+        /// </summary>
+        /// <param name="shadowed">不带点的扩展名，与 <see cref="OpenWindowsDefaultAppSettings"/> 的入参一致。</param>
+        private void ShowShadowedDefaults(IReadOnlyList<string> shadowed)
+        {
+            _shadowed = shadowed.ToList();
+            if (_shadowed.Count == 0)
+            {
+                _shadowHint.IsVisible = false;
+                _setDefaultButton.IsVisible = false;
+                return;
+            }
+
+            _shadowHint.Text = _lang.Format(
+                "TEXT_SETTINGS_DEFAULT_STILL",
+                ("list", string.Join("、", _shadowed.Select(x => "." + x))));
+            _shadowHint.IsVisible = true;
+            _setDefaultButton.IsVisible = true;
+        }
+
+        private IReadOnlyList<string> ReadShadowedDefaults(HashSet<string> registered)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return [];
+            }
+
+            // 写成循环而不是 LINQ：平台兼容性分析器不会把 IsWindows() 的判断带进 lambda 里。
+            var service = new FileAssociationService();
+            var shadowed = new List<string>();
+            foreach (var id in registered)
+            {
+                shadowed.AddRange(service.ShadowedDefaults(FileAssociationCatalog.Find(id)!));
+            }
+
+            shadowed.Sort(StringComparer.Ordinal);
+            return shadowed;
         }
 
         public void Commit()
@@ -498,9 +578,14 @@ public sealed class SettingsWindow : Window
             {
                 var service = new FileAssociationService();
 
+                // 新登记的格式要跟「设置 → 上下文菜单」里的解压开关保持一致，否则菜单会"一半有一半没有"。
+                var labels = ShellVerbLabels.Extraction(
+                    _lang,
+                    _settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true));
+
                 foreach (var id in desired.Except(_live))
                 {
-                    var change = service.Register(FileAssociationCatalog.Find(id)!, executable);
+                    var change = service.Register(FileAssociationCatalog.Find(id)!, executable, labels);
                     blocked.AddRange(change.BlockedExtensions);
                     foreach (var original in change.CapturedDefaults)
                     {
@@ -614,6 +699,187 @@ public sealed class SettingsWindow : Window
                     // 没有 shell 设置页可跳（精简系统 / 无桌面会话）时静默失败即可。
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 上下文菜单页：右键「压缩为」（文件 / 文件夹两个范围）与右键「解压」三个开关。
+    /// <para>
+    /// 两个「压缩」开关写在全局动词键（<c>*</c> 与 <c>Directory</c>）下，与文件关联无关，
+    /// 状态读自注册表 —— 这里要显示的是资源管理器现在真的有哪几项，不是上一次写成功了什么。
+    /// </para>
+    /// <para>
+    /// 「解压」开关不一样：它住在各个 <c>Andzip.*</c> ProgID 里，而 ProgID 会随新关联不断增多，
+    /// 所以它记的是<strong>策略</strong>（<see cref="SettingKeys.ContextMenuExtractVerbs"/>），
+    /// 每次登记关联与启动自愈时都按它补写一遍。
+    /// </para>
+    /// </summary>
+    private sealed class ContextMenuPage : ISettingsPage
+    {
+        private readonly SettingsWindow _owner;
+        private readonly LangCatalog _lang;
+        private readonly AppSettings _settings;
+        private readonly string _settingsPath;
+        private readonly CheckBox _forFiles;
+        private readonly CheckBox _forFolders;
+        private readonly CheckBox _forExtract;
+        private readonly Button _applyButton;
+
+        private (bool Files, bool Folders, bool Extract) _live;
+
+        public ContextMenuPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_CONTEXT_MENU";
+            _owner = owner;
+            _lang = lang;
+            _settings = settings;
+            _settingsPath = settingsPath;
+
+            _forFiles = Check(lang.Get("TEXT_SETTINGS_CTX_COMPRESS_FILES"), UpdateApplyState);
+            _forFolders = Check(lang.Get("TEXT_SETTINGS_CTX_COMPRESS_FOLDERS"), UpdateApplyState);
+            _forExtract = Check(lang.Get("TEXT_SETTINGS_CTX_EXTRACT"), UpdateApplyState);
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 22, 0, 0),
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_CONTEXT_MENU_TITLE")));
+            panel.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_CTX_NOTE"),
+                Foreground = HintText,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 12, 0, 16),
+            });
+            panel.Children.Add(_forFiles);
+            panel.Children.Add(_forFolders);
+            panel.Children.Add(_forExtract);
+            panel.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_CTX_EXTRACT_HINT"),
+                Foreground = HintText,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(24, 4, 0, 0),
+            });
+            panel.Children.Add(_applyButton);
+
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _live = ReadLive();
+            (_forFiles.IsChecked, _forFolders.IsChecked, _forExtract.IsChecked) = (_live.Files, _live.Folders, _live.Extract);
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private (bool Files, bool Folders, bool Extract) Selection()
+            => (_forFiles.IsChecked == true, _forFolders.IsChecked == true, _forExtract.IsChecked == true);
+
+        private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
+
+        private (bool Files, bool Folders, bool Extract) ReadLive()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return (false, false, false);
+            }
+
+            // 写成循环而不是 LINQ：平台兼容性分析器不会把外层的 IsWindows() 判断带进 lambda 里。
+            var contextMenu = new ContextMenuService();
+            return (
+                contextMenu.IsInstalled(ContextMenuService.FilesScope),
+                contextMenu.IsInstalled(ContextMenuService.FoldersScope),
+                _settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true));
+        }
+
+        private void Apply()
+        {
+            var desired = Selection();
+            if (desired.Equals(_live))
+            {
+                return;
+            }
+
+            if (!OperatingSystem.IsWindows())
+            {
+                Message(_lang.Get("TEXT_SETTINGS_CTX_UNSUPPORTED"));
+                return;
+            }
+
+            var executable = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(executable))
+            {
+                Message(_lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
+                return;
+            }
+
+            try
+            {
+                var contextMenu = new ContextMenuService();
+                if (desired.Files || desired.Folders)
+                {
+                    contextMenu.Install(ShellVerbLabels.Compression(_lang), executable, desired.Files, desired.Folders);
+                }
+                else
+                {
+                    contextMenu.Remove();
+                }
+
+                contextMenu.NotifyChanged();
+
+                if (desired.Extract != _live.Extract)
+                {
+                    _settings.SetBool(SettingKeys.ContextMenuExtractVerbs, desired.Extract);
+                    _settings.Save(_settingsPath);
+
+                    // 解压动词住在每个 Andzip.* ProgID 里，所以"改开关"就是把自己命名空间下的
+                    // 动词全部重写一遍 —— 关掉的那几项是真删掉，不是留着键改文字。
+                    var associations = new FileAssociationService();
+                    associations.RepairCommands(executable, ShellVerbLabels.Extraction(_lang, desired.Extract));
+                    associations.NotifyChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Message(_lang.Get("TEXT_SETTINGS_CTX_FAILED") + ex.Message);
+                return;
+            }
+
+            Reload();
+        }
+
+        private void Message(string text) => _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
+
+        private static CheckBox Check(string label, Action onToggled)
+        {
+            var box = new CheckBox { Content = label, Margin = new Thickness(0, 6, 0, 0) };
+            box.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ToggleButton.IsCheckedProperty)
+                {
+                    onToggled();
+                }
+            };
+            return box;
         }
     }
 }

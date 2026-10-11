@@ -110,6 +110,7 @@ TEXT_STATUS_EXTRACTING                  = Extracting...
 TEXT_ERR_DEST_NOT_SET                   = Specify a destination path.
 TEXT_TITLE_ERROR                        = Error
 TEXT_ERR_EXTRACT_FAILED                 = Extraction failed:
+TEXT_ERR_COMPRESS_FAILED                = Compression failed:
 
 ; ---- Duplicate file prompt (FR-3.7) / extract password (dialog #7) ----
 TEXT_TITLE_ASK_DUPEFILE                 = Duplicate file
@@ -176,6 +177,26 @@ TEXT_GROUP_ARCHIVE                      = Archive files
 TEXT_GROUP_UNIX                         = UNIX
 TEXT_GROUP_OTHER                        = Other
 TEXT_GROUP_CD_DVD                       = CD/DVD
+
+; ---- Context-menu verbs and the context-menu settings page ----
+TEXT_MENU_OPEN_WITH                     = Open with Andzip
+TEXT_MENU_EXTRACT_TO_FOLDER             = Extract to "archive name" folder
+TEXT_MENU_EXTRACT_HERE                  = Extract to current folder
+TEXT_MENU_COMPRESS_ZIP                  = Compress as ZIP
+TEXT_MENU_COMPRESS_7Z                   = Compress as 7Z
+TEXT_SETTINGS_CONTEXT_MENU_TITLE        = Context menu
+TEXT_SETTINGS_CTX_NOTE                  = Menu entries are static registry verbs and need no administrator rights; on Windows 11 they live under "Show more options".
+TEXT_SETTINGS_CTX_COMPRESS_FILES        = Add "Compress as" entries for all files
+TEXT_SETTINGS_CTX_COMPRESS_FOLDERS      = Add "Compress as" entries for folders
+TEXT_SETTINGS_CTX_EXTRACT               = Add "Extract" entries for associated archives
+TEXT_SETTINGS_CTX_EXTRACT_HINT          = This one follows the file associations: with nothing associated yet it has nothing to act on. Double-click behaviour is not decided here — see "General → On double-clicking an archive".
+TEXT_SETTINGS_CTX_INSTALLED             = Context menu entries added.
+TEXT_SETTINGS_CTX_REMOVED               = Context menu entries removed.
+TEXT_SETTINGS_CTX_APPLIED               = Context menu updated.
+TEXT_SETTINGS_CTX_UNSUPPORTED           = The context menu can only be configured on Windows.
+TEXT_SETTINGS_CTX_FAILED                = Writing the context menu entries failed:
+TEXT_BTN_SET_DEFAULT                    = Set as default...
+TEXT_SETTINGS_DEFAULT_STILL             = These formats are associated, but another program is still the default (Windows default-app protection). Click "Set as default..." and pick Andzip in the system settings: ${list}
 
 [MENU]
 MENUSTR_FILE                            = &File

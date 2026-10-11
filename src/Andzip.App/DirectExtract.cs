@@ -9,14 +9,15 @@ using Avalonia.Threading;
 namespace Andzip.App;
 
 /// <summary>
-/// 「双击压缩包 → 直接解压」的执行体。由注册表里 <c>shell\extract\command</c> 带
-/// <c>/extract</c> 开关拉起来（见 <see cref="Services.FileAssociationService"/>）。
+/// 没有主窗口的解压执行体：右键「直接解压到包名文件夹」/「解压到当前文件夹」，
+/// 以及双击 + 「常规 → 双击 = 直接解压」。由注册表动词带上 <c>/task=</c> 拉起来
+/// （见 <see cref="Services.FileAssociationService"/>）。
 /// <para>
-/// 刻意<strong>不</strong>创建主窗口：用户双击要的只是一个进度条，跑完自己消失，
-/// 中间插一张主窗口既挡路又多余。因此这里把生命周期切成 OnExplicitShutdown，
+/// 刻意<strong>不</strong>创建主窗口：用户点的是进度条，跑完自己消失，
+/// 中间插一张主窗口既挡路又多余。因此调用方把生命周期切成 OnExplicitShutdown，
 /// 结束时代码自己 <c>Shutdown()</c> —— 没有主窗口，默认的生命周期策略会立刻退出进程。
 /// </para>
-/// <para>落盘位置固定为压缩包所在目录下一个与压缩包同名的文件夹，与「选择解压路径」里
+/// <para>落盘位置由 <see cref="ShellTasks.ExtractDestination"/> 决定，与「选择解压路径」里
 /// 默认勾选的那一项一致，不额外发明第二套规则。</para>
 /// </summary>
 internal static class DirectExtract
@@ -25,6 +26,7 @@ internal static class DirectExtract
         LangCatalog lang,
         AppSettings settings,
         string archivePath,
+        string destination,
         IClassicDesktopStyleApplicationLifetime desktop)
     {
         var cts = new CancellationTokenSource();
@@ -38,7 +40,7 @@ internal static class DirectExtract
 
         try
         {
-            await ExtractAsync(lang, archivePath, progress, cts);
+            await ExtractAsync(lang, archivePath, destination, progress, cts);
         }
         catch (Exception ex)
         {
@@ -54,6 +56,7 @@ internal static class DirectExtract
     private static async Task ExtractAsync(
         LangCatalog lang,
         string archivePath,
+        string destination,
         ProgressWindow progress,
         CancellationTokenSource cts)
     {
@@ -72,7 +75,7 @@ internal static class DirectExtract
 
         var settings = new ExtractionSettings(
             archivePath,
-            SettingKeys.DirectExtractDestination(archivePath),
+            destination,
             OverwritePolicy.Ask,
             Password: password,
             DuplicateResolver: fileName => AskAboutDuplicate(lang, progress, fileName),

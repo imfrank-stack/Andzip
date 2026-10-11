@@ -2,6 +2,78 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [0.9.5] - 2026-10-12（新增：右键解压 / 右键压缩；修复：已关联却当不上默认程序）
+
+> 版本号 0.9.4 → **0.9.5**，BuildNo 13 → **14**。
+
+### 修复
+- **`.7z` 勾上了、双击却还是 Bandizip**：查注册表看到的是一层以前没有说清的关系 ——
+  `HKCU\Software\Classes\.7z` 默认值已经是 `Andzip.7z`，`Andzip.7z` 那棵 ProgID 的
+  `shell\open\command`、`DefaultIcon`、`OpenWithProgids` 全部正常，可
+  `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.7z\UserChoice\ProgId`
+  写着 `Bandizip.7z`，而 **UserChoice 的优先级更高**。同机器上 `.zip` 的 UserChoice 恰好已经被
+  改成 `Andzip.zip`，`.rar` 没有 UserChoice —— 所以只有 `.7z` 表现异常，很容易误判成"关联没写进去"。
+  UserChoice 里的 `Hash` 是每用户随机密钥算的，伪造它属于绕过 Windows 10 1709 之后的默认应用保护，
+  **不做**。能做的是把这件事说出来并给出路：
+  - `FileAssociationService.ShadowedDefaults()` 逐个扩展名比对 UserChoice，
+    关联页把这类列成一条红色说明，附「设为默认…」按钮，直接跳到
+    `ms-settings:defaultapps?fileExtension=.7z`（Windows 10 不认这个参数时退回默认应用总览页）。
+  - 登记过程中新挡下的扩展名仍然当场跳过去，不停留在"只弹一句提示"。
+
+### 新增
+- **右键解压**（FR-2 / FR-3 的入口延伸）：每个 `Andzip.<id>` ProgID 里写两个动词 ——
+  `shell\extract`（直接解压到「包名」文件夹）与 `shell\extract-here`（解压到当前文件夹），
+  命令行是 `Andzip.exe "%1" /task=extract[-here]`。跑起来**只有百分比进度条，完成即消失**，
+  不创建主窗口。
+- **右键压缩**（FR-2 的入口延伸）：`HKCU\Software\Classes\*\shell` 与 `…\Directory\shell` 下各写
+  `Andzip.compress-zip` / `Andzip.compress-7z` 两个静态动词，同样只弹进度条。输出取源路径的同名
+  兄弟位置，**重名往后加序号**（`report (2).zip`）而不是覆盖 —— 右键是用户随手点的，静默删掉一个
+  已有的包不可原谅。压文件夹时把文件夹本身装进去（`docs.zip` 里是 `docs/…`）。
+- **`Core/Archive/ShellTasks.cs`**：任务枚举、命令行写法（`/task=…`，兼容 v0.9.4 的裸 `/extract`）、
+  解压落点与压缩输出名规则集中一处。纯逻辑，没有注册表也没有 GUI 就能测。
+- **设置 → 上下文菜单页**（原来只有占位文案）：三个开关 —— 为所有文件加「压缩为」、
+  为文件夹加「压缩为」、为已关联的压缩包加「解压」。撤销干净：只删带 `Andzip.` 前缀的子树。
+- **进度条窗口**现在压缩与解压共用，「常规 → 解压过程中允许按 Esc 取消」同时管着两边。
+- 语言包新增 12 个键（右键文案、上下文菜单页文案、「设为默认…」按钮等），
+  English / SimpChinese 各 **257 行、226 个键，键集与占位符一致**。
+
+### 变更
+- **动词不再承载行为**：`shell\open\command` 永远不带开关（双击做什么仍由「常规 → 双击」决定），
+  右键动词一律带 `/task=`。`SettingKeys.ExtractSwitch` 与 `DirectExtractDestination` 删除，
+  规则收进 `ShellTasks`；`ShouldExtractDirectly` 的 `hasExplicitSwitch` 参数一并去掉 ——
+  显式开关现在由 `ShellTasks.TryParse` 表达，留两个入口迟早分叉。
+- **启动分发**：`App` 改成「解析出任务 → 交给 `ShellTaskRunner`」，`/task=open` 与没有开关时
+  照旧建主窗口。命令行里的目标路径现在也接受**目录**（右键压缩文件夹要用 `%1` 传目录，
+  而 `File.Exists` 对目录返回 false，会把整个入口漏掉）。
+- **`RepairCommands` 会补齐三个动词**：升级后通过关联被拉起来时，把自己命名空间下的 ProgID
+  整体重写一遍（命令行指向当前 exe、动词按「上下文菜单」的选择补齐），老关联不用重做就能有右键菜单。
+- **`ContextMenuService` 拆成两个范围**：`Install(verbs, exe, forFiles, forFolders)` / `Remove()` /
+  `IsInstalled(scope)`。设置页的两个「压缩」开关状态读自注册表 —— 它们是装好就固定的全局动词，
+  被清理软件删掉了界面就该显示没装；「解压」开关存的是**策略**（`context_menu_extract_verbs`，
+  缺省为开），因为 ProgID 会随新关联不断增多，每次登记与每次自愈都按它补写。
+- 文档：`README.md` 第五节改写「设置与文件关联」，新增后台任务与上下文菜单页两段；
+  第六节新增第 21（UserChoice 优先级实测）、22（静态动词的三条限制）、23（右键压缩走固定默认档位）条。
+
+### 已知限制（本版）
+- Windows 11 上静态动词落在**「显示更多选项」二级菜单**里；进新菜单第一层要写 `IExplorerCommand`
+  的 in-proc shell 扩展，本版不做。
+- 静态动词只能用 `%1`，**一次一个文件或一个文件夹**；多选请进主窗口用「新建压缩文件」。
+- 菜单文字是死的，渲染不出参考软件那种「压缩为 "文件名.zip"」。
+- 右键压缩走固定默认档位：正常压缩、无口令、不分卷、不测试、压完不删源。
+
+### 验证
+- `dotnet build Andzip.slnx`：**0 警告 0 错误**。
+- `dotnet test`（Release）：**257 / 257**（新增 `ShellTasksTests` 25 条：动词往返、兼容裸
+  `/extract`、无开关时不越权、两种解压落点、`archive.tar.gz → archive.tar`、目录名带点不剥
+  （`my.app` → `my.app.7z`）、重名加序号且不动已有包、非解压任务拒绝算落点）。
+- `Andzip.Native.Tests`：**69 条断言 0 失败**。
+- 语言包键集核对：English 与 SimpChinese 各 226 键，**无缺失、无重复、`${占位符}` 一致**；
+  清掉了上一轮 Python heredoc 遗留的 16 处 `\"` 转义污染。
+- `build.ps1` 全流水线通过，产物 `dist\Andzip-v0.9.5-win-x64.exe` **19.51 MB**，
+  二进制内确认已内嵌 `andzip_core.dll`。
+- 右键解压 / 右键压缩 / 「设为默认…」跳转均属 GUI 与资源管理器交互，**按约定由用户手动验证** ——
+  见 README 第九节清单第 11–15 条。
+
 ## [0.9.4] - 2026-10-12（修复：设成「直接解压」后双击仍然弹主窗口）
 
 > 版本号 0.9.3 → **0.9.4**，BuildNo 13。
@@ -31,7 +103,7 @@
   说明「接管前记下原默认程序」这条路径本身是好的，撤销时能把默认值还给 Bandizip。
 - 真机双击（资源管理器里）仍待用户确认 —— 见 README 第九节第 9 条。
 
-## [未发布] - 2026-10-12（体积构成实测记录，无代码改动）
+## [文档] - 2026-10-12（体积构成实测记录，无代码改动）
 
 ### 变更
 - **文档**：把「20 MB 到底花在哪」量清楚写进 `README.md` 第四节第 5 条 —— 未打包 41.39 MB 里

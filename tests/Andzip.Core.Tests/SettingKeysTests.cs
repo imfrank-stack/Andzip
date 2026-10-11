@@ -3,8 +3,9 @@ using Andzip.Core.Settings;
 namespace Andzip.Core.Tests;
 
 /// <summary>
-/// 常规设置的两项取值，以及「双击直接解压」的落盘位置。
-/// 后者值得钉住：它决定双击会不会把文件解压到用户没预期的地方。
+/// 常规设置的两项取值。认不出来的取值一律退回「打开 Andzip」，
+/// 那是最保守的行为 —— 不会在用户没同意时就往磁盘上写东西。
+/// <para>解压落点的规则在 <see cref="ShellTasksTests"/>：它属于右键任务，不属于设置。</para>
 /// </summary>
 public class SettingKeysTests
 {
@@ -35,41 +36,17 @@ public class SettingKeysTests
     public void ParseDoubleClick_IsCaseAndWhitespaceInsensitive(string stored)
         => Assert.Equal(ArchiveDoubleClick.ExtractDirectly, SettingKeys.ParseDoubleClick(stored));
 
-    [Fact]
-    public void DirectExtractDestination_PutsFilesUnderAFolderNamedAfterTheArchive()
-    {
-        var archive = Path.Combine(Path.GetTempPath(), "andzip-dst", "集训队证件照.zip");
-        Directory.CreateDirectory(Path.GetDirectoryName(archive)!);
-
-        var destination = SettingKeys.DirectExtractDestination(archive);
-
-        Assert.Equal(Path.Combine(Path.GetTempPath(), "andzip-dst", "集训队证件照"), destination);
-    }
-
     [Theory]
-    [InlineData(null, false, false)]
-    [InlineData("open", false, false)]
-    [InlineData("extract", false, true)]
-    [InlineData(null, true, true)]
-    [InlineData("open", true, true)]
-    [InlineData("garbage", true, true)]
-    public void ShouldExtractDirectly_HonoursSettingOrExplicitSwitch(string? stored, bool explicitSwitch, bool expected)
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("open", false)]
+    [InlineData("garbage", false)]
+    [InlineData("extract", true)]
+    [InlineData("EXTRACT", true)]
+    [InlineData(" extract ", true)]
+    public void ShouldExtractDirectly_HonoursTheSetting(string? stored, bool expected)
     {
         // 注册表里双击只会调用 shell\open\command，行为全靠这个判断 —— 不能再依赖动词是否存在。
-        Assert.Equal(expected, SettingKeys.ShouldExtractDirectly(stored, explicitSwitch));
+        Assert.Equal(expected, SettingKeys.ShouldExtractDirectly(stored));
     }
-
-    [Fact]
-    public void DirectExtractDestination_UsesOnlyTheFirstExtension()
-    {
-        // .tar.gz 这类复合后缀只剥掉最后一段：目标是 "archive.tar"，不是 "archive"。
-        // 与「选择解压路径」里同名文件夹那条规则保持一致，不另起一套。
-        var destination = SettingKeys.DirectExtractDestination(Path.Combine(Path.GetTempPath(), "archive.tar.gz"));
-
-        Assert.Equal("archive.tar", Path.GetFileName(destination));
-    }
-
-    [Fact]
-    public void DirectExtractDestination_RejectsEmptyPath()
-        => Assert.ThrowsAny<ArgumentException>(() => SettingKeys.DirectExtractDestination(" "));
 }

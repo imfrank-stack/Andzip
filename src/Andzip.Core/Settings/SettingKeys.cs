@@ -15,11 +15,18 @@ public enum ArchiveDoubleClick
 /// </summary>
 public static class SettingKeys
 {
-    /// <summary>「双击直接解压」的命令行开关，由注册表 shell\extract\command 带上。</summary>
-    public const string ExtractSwitch = "/extract";
-
     public const string DoubleClickAction = "double_click_action";
     public const string AllowEscCancelProgress = "allow_esc_cancel_progress";
+
+    /// <summary>
+    /// 右键「解压到…」两项要不要写进 ProgID。
+    /// <para>
+    /// 这一项是<strong>策略</strong>而不是现状的快照：解压动词住在每个 <c>Andzip.*</c> ProgID 里，
+    /// 而ProgID 会随新关联不断增多，所以必须有个地方记住「用户要不要它们有」。设置文件里没这一项时
+    /// 按开启处理 —— 那是这个功能首次出现的那个版本该有的默认。
+    /// </para>
+    /// </summary>
+    public const string ContextMenuExtractVerbs = "context_menu_extract_verbs";
 
     /// <summary>枚举存成稳定的小写标识（不是数字），这样以后插入新值不会让老设置错位。</summary>
     public static string ToStorage(this ArchiveDoubleClick value)
@@ -32,25 +39,15 @@ public static class SettingKeys
             : ArchiveDoubleClick.OpenInAndzip;
 
     /// <summary>
-    /// 这次启动要不要「直接解压」而不是打开主窗口。
+    /// 双击（命令行里没有任何任务开关时）要不要「直接解压」而不是打开主窗口。
     /// <para>
     /// 行为由<strong>设置</strong>决定，而不是由注册表里哪个动词被调用决定 —— 后者踩过坑：
     /// 把 <c>shell</c> 默认值改成 <c>extract</c> 之后，老版本注册出来的 ProgID 里根本没有
     /// <c>shell\extract\command</c>，Windows 找不到动词就退回 <c>open</c>，表现成「设了没用」。
     /// 而且绿色版的文件名带版本号，升级后注册表里那条命令还指着上一个 exe。
     /// </para>
+    /// <para>右键菜单不走这里：它的命令行由 <c>ShellTasks</c> 写明了做什么。</para>
     /// </summary>
-    public static bool ShouldExtractDirectly(string? storedSetting, bool hasExplicitSwitch)
-        => hasExplicitSwitch || ParseDoubleClick(storedSetting) == ArchiveDoubleClick.ExtractDirectly;
-
-    /// <summary>双击解压的落盘位置：压缩包所在目录下一个与压缩包同名的文件夹。</summary>
-    public static string DirectExtractDestination(string archivePath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
-
-        var directory = Path.GetDirectoryName(Path.GetFullPath(archivePath))
-            ?? throw new InvalidOperationException("压缩包没有父目录：" + archivePath);
-
-        return Path.Combine(directory, Path.GetFileNameWithoutExtension(archivePath));
-    }
+    public static bool ShouldExtractDirectly(string? storedSetting)
+        => ParseDoubleClick(storedSetting) == ArchiveDoubleClick.ExtractDirectly;
 }

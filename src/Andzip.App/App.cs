@@ -1,4 +1,5 @@
 using Andzip.App.Services;
+using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia;
@@ -22,20 +23,19 @@ public sealed class App : Application
             // 语言包：程序目录 langs/ 优先（便携覆盖），否则用内嵌资源（单文件绿色版）。
             var lang = LangLoader.CreateCatalog(typeof(App).Assembly, AppContext.BaseDirectory);
             var settings = AppSettings.Load(AppSettings.DefaultFilePath);
-            var target = desktop.Args?.FirstOrDefault(IsExistingFile);
+            var target = desktop.Args?.FirstOrDefault(IsExistingPath);
 
             if (target is not null)
             {
-                RepairStaleRegistrations();
+                RepairStaleRegistrations(lang, settings);
             }
 
-            // 「双击直接解压」：要么命令行显式带 /extract，要么常规设置里把双击行为选成了直接解压。
-            // 这条路径不建主窗口，所以生命周期要改成显式关闭，否则没有主窗口会让进程立刻退出。
-            if (target is not null && SettingKeys.ShouldExtractDirectly(
-                    settings.GetString(SettingKeys.DoubleClickAction), HasSwitch(desktop.Args)))
+            // 不建主窗口的两条路径：右键动词带来的 /task=，以及双击 + 「常规 → 双击 = 直接解压」。
+            // 生命周期要改成显式关闭，否则没有主窗口会让进程立刻退出。
+            if (target is not null && TryResolveTask(desktop.Args, settings, out var task))
             {
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                _ = DirectExtract.RunAsync(lang, settings, target, desktop);
+                _ = ShellTaskRunner.RunAsync(lang, settings, task, target, desktop);
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
@@ -53,11 +53,38 @@ public sealed class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static bool IsExistingFile(string argument)
-        => !argument.StartsWith('-') && File.Exists(argument);
+    /// <summary>
+    /// 命令行里的目标路径。目录也算 —— 右键「压缩到」既给文件也给文件夹，
+    /// 而 <c>File.Exists</c> 对文件夹返回 false，会把这个入口整个漏掉。
+    /// </summary>
+    private static bool IsExistingPath(string argument)
+        => !argument.StartsWith('-') && (File.Exists(argument) || Directory.Exists(argument));
 
-    private static bool HasSwitch(IEnumerable<string>? arguments)
-        => arguments?.Any(a => a.Equals(SettingKeys.ExtractSwitch, StringComparison.OrdinalIgnoreCase)) == true;
+    /// <summary>
+    /// 这次启动要不要走「没有主窗口」的后台路径，以及做哪件事。
+    /// <para>
+    /// 右键动词在命令行里写明了 <c>/task=</c>，直接照办；双击没有开关，做什么由
+    /// 「常规 → 双击打开压缩文件时」决定 —— 行为放在设置里而不是注册表的默认动词里，
+    /// 改设置才不用重写所有 ProgID。
+    /// </para>
+    /// <para><c>open</c> 是反例：它要的正是主窗口，交回给调用方去建。</para>
+    /// </summary>
+    private static bool TryResolveTask(IEnumerable<string>? arguments, AppSettings settings, out ShellTask task)
+    {
+        if (ShellTasks.TryParse(arguments, out task))
+        {
+            return task != ShellTask.Open;
+        }
+
+        if (SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)))
+        {
+            task = ShellTask.Extract;
+            return true;
+        }
+
+        task = default;
+        return false;
+    }
 
     /// <summary>
     /// 把注册表里指向旧 exe 的命令行校正到当前这个文件。
@@ -67,8 +94,10 @@ public sealed class App : Application
     /// 命名空间下的键校正过来，就不必每次升级都重做一遍关联。
     /// </para>
     /// <para>只在真的通过关联被拉起来时做（否则首次运行会平白写一次注册表），且只动 <c>Andzip.*</c>。</para>
+    /// <para>解压动词按「设置 → 上下文菜单」的选择补写：升级后新认出去的格式也该有右键菜单，
+    /// 但用户明确关掉过的那一项不能被自愈偷偷加回来。</para>
     /// </summary>
-    private static void RepairStaleRegistrations()
+    private static void RepairStaleRegistrations(LangCatalog lang, AppSettings settings)
     {
         if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(Environment.ProcessPath))
         {
@@ -77,8 +106,10 @@ public sealed class App : Application
 
         try
         {
+            var showExtractVerbs = settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true);
             var service = new FileAssociationService();
-            if (service.RepairCommands(Environment.ProcessPath) > 0)
+            var labels = ShellVerbLabels.Extraction(lang, showExtractVerbs);
+            if (service.RepairCommands(Environment.ProcessPath, labels) > 0)
             {
                 service.NotifyChanged();
             }
