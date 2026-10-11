@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!--
+      只用于测试：作为“第三方独立实现”来读我们写出的 ZIP（含 AES），以及手工拼装
+      引擎自己不会产出的输入（恶意路径、GZ 头、分卷）。生产代码已不依赖它 ——
+      Andzip.Core 现在把压缩完全交给 native 引擎。
+    -->
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Andzip.Core\Andzip.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 与 App 相同的内嵌机制：用于验证 FromEmbedded 对带命名空间点号的资源名解析（回归 LangLoader 语言代码提取 bug） -->
+    <EmbeddedResource Include="..\..\langs\*.lang" Link="langs\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

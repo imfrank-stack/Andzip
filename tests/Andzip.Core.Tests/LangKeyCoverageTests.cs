@@ -1,0 +1,169 @@
+using Andzip.Core.Lang;
+
+namespace Andzip.Core.Tests;
+
+/// <summary>语言包键覆盖率：确保 UI（尤其是“新建压缩文件”对话框）使用的键在两种语言中都存在，避免界面回退显示键名。</summary>
+public class LangKeyCoverageTests
+{
+    private static readonly string[] DialogKeys =
+    [
+        "TEXT_TITLE_NEW_ARCHIVE",
+        "TEXT_SECTION_ADD_FILES",
+        "TEXT_SECTION_ARCHIVE_SETTINGS",
+        "TEXT_COLUMN_NAME",
+        "TEXT_COLUMN_SIZE",
+        "TEXT_COLUMN_FILE_PATH",
+        "TEXT_BTN_ADD",
+        "TEXT_BTN_DELETE",
+        "TEXT_MENU_ADD_FILES",
+        "TEXT_MENU_ADD_FOLDER",
+        "TEXT_LABEL_FILE_NAME",
+        "TEXT_BTN_BROWSE",
+        "TEXT_LABEL_FORMAT",
+        "TEXT_BTN_SET_PASSWORD",
+        "TEXT_LABEL_VOLUME",
+        "TEXT_VOLUME_NONE",
+        "TEXT_VOLUME_3MB",
+        "TEXT_VOLUME_4MB",
+        "TEXT_VOLUME_5MB",
+        "TEXT_VOLUME_10MB",
+        "TEXT_VOLUME_20MB",
+        "TEXT_VOLUME_25MB_GMAIL",
+        "TEXT_VOLUME_100MB",
+        "TEXT_VOLUME_300MB",
+        "TEXT_VOLUME_650MB_CD",
+        "TEXT_VOLUME_700MB_CD",
+        "TEXT_VOLUME_4GB_FAT32",
+        "TEXT_VOLUME_47GB_DVD",
+        "TEXT_VOLUME_CUSTOM",
+        "TEXT_TITLE_VOLUME_SIZE",
+        "TEXT_LABEL_VOLUME_SIZE",
+        "TEXT_ERR_VOLUME_SIZE_INVALID",
+        "TEXT_LABEL_COMPRESSION_LEVEL",
+        "TEXT_BTN_ADVANCED_SETTINGS",
+        "TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE",
+        "TEXT_ADVANCED_TITLE_ZIP",
+        "TEXT_LABEL_COMPRESSION_METHOD",
+        "TEXT_METHOD_STORE",
+        "TEXT_METHOD_DEFLATE",
+        "TEXT_LABEL_ENCRYPTION_METHOD",
+        "TEXT_ENCRYPTIONMETHOD_ZIPCRYPTO",
+        "TEXT_ENCRYPTIONMETHOD_AES256",
+        "TEXT_LABEL_CPU_THREADS",
+        "TEXT_THREADS_AUTO",
+        "TEXT_CHECK_STORE_SYMLINKS",
+        "TEXT_CHECK_FILE_COMMENT",
+        "TEXT_CHECK_TEST_AFTER_COMPRESSION",
+        "TEXT_CHECK_DELETE_SOURCE",
+        "TEXT_CHECK_SEPARATE_ARCHIVES",
+        "TEXT_CHECK_MORE_OPTIONS",
+        "TEXT_BTN_START",
+        "TEXT_BTN_CANCEL",
+        "TEXT_DEFAULT_ARCHIVE_NAME",
+        "TEXT_STATUS_COMPRESSING",
+        "TEXT_STATUS_NOT_IMPLEMENTED",
+        "TEXT_ERR_NO_INPUT",
+        "TEXT_ERR_OUTPUT_NOT_SET",
+        "TEXT_ERR_GZ_SINGLE_FILE",
+        "TEXT_ERR_PASSWORD_ASCII",
+        "TEXT_COMPRESSIONMETHOD_STORE",
+        "TEXT_COMPRESSIONMETHOD_FAST",
+        "TEXT_COMPRESSIONMETHOD_NORMAL",
+        "TEXT_COMPRESSIONMETHOD_MAX",
+        "TEXT_TITLE_PASSWORD_INPUT",
+        "TEXT_LABEL_PASSWORD",
+        "TEXT_LABEL_PASSWORD_CONFIRM",
+        "TEXT_ERR_PASSWORD_MISMATCH",
+        "TEXT_BTN_OK",
+        "TEXT_TITLE_EXTRACT_PATH",
+        "TEXT_LABEL_DEST_PATH",
+        "TEXT_QUICK_DESKTOP",
+        "TEXT_QUICK_MY_DOCUMENTS",
+        "TEXT_QUICK_MY_PICTURES",
+        "TEXT_QUICK_MY_COMPUTER",
+        "TEXT_SECTION_EXTRACT",
+        "TEXT_RADIO_ALL_FILES",
+        "TEXT_RADIO_SELECTED_FILES",
+        "TEXT_BTN_NEW_FOLDER",
+        "TEXT_CHECK_EXTRACT_TO_SUBFOLDER",
+        "TEXT_CHECK_DELETE_ARCHIVE_AFTER",
+        "TEXT_CHECK_REMEMBER_SETTINGS",
+        "TEXT_NEW_FOLDER_DEFAULT",
+        "TEXT_STATUS_EXTRACTING",
+        "TEXT_ERR_DEST_NOT_SET",
+        "TEXT_TITLE_ERROR",
+        "TEXT_ERR_EXTRACT_FAILED",
+        "TEXT_TITLE_ASK_DUPEFILE",
+        "TEXT_MSG_FILE_EXISTS",
+        "TEXT_BTN_RENAME",
+        "TEXT_BTN_OVERWRITE",
+        "TEXT_BTN_SKIP",
+        "TEXT_ERR_PASSWORD_EMPTY",
+        "TEXT_COLUMN_COMPRESSED_SIZE",
+        "TEXT_COLUMN_ORIGINAL_SIZE",
+        "TEXT_COLUMN_TYPE",
+        "TEXT_TYPE_FOLDER",
+        "TEXT_TYPE_FILE",
+        "TEXT_ARCHIVE_FILES",
+        "TEXT_STATUS_ARCHIVE_SUMMARY",
+        "TEXT_STATUS_SELECTED_SUMMARY",
+        "TEXT_ERR_OPEN_ARCHIVE_FAILED",
+        "TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED",
+        "TEXT_TOOLBAR_OPEN",
+        "TEXT_TOOLBAR_EXTRACT",
+        "TEXT_TOOLBAR_NEW",
+        "TEXT_TOOLBAR_ADD",
+        "TEXT_TOOLBAR_DELETE",
+        "TEXT_TOOLBAR_TEST",
+        "TEXT_TOOLBAR_SCAN",
+        "TEXT_TOOLBAR_VIEW",
+        "TEXT_COLUMN_MODIFIED",
+        "TEXT_COLUMN_CRC",
+        "TEXT_COLUMN_ATTRIBUTES",
+        "TEXT_COLUMN_COMMENT",
+        "TEXT_COLUMN_EXTRA",
+        "TEXT_TYPE_FILE_EXT",
+        "TEXT_ENCRYPTED_FLAG",
+        "TEXT_EXTRA_OS_WINDOWS",
+        "TEXT_EXTRA_OS_UNIX",
+        "TEXT_EXTRA_UTF8",
+        "TEXT_VIEW_DETAILS",
+        "TEXT_VIEW_ICONS",
+        "TEXT_OPEN_ARCHIVE_LOCATION",
+    ];
+
+    [Theory]
+    [InlineData("SimpChinese")]
+    [InlineData("English")]
+    public void NewArchiveDialogKeys_ExistInBothLanguages(string language)
+    {
+        var catalog = LangLoader.CreateCatalog(typeof(LangKeyCoverageTests).Assembly, AppContext.BaseDirectory);
+        Assert.True(catalog.SetLanguage(language), $"缺少语言 {language}");
+
+        foreach (var key in DialogKeys)
+        {
+            var value = catalog.Get(key);
+            Assert.False(value == key, $"[{language}] 缺少语言键 {key}");
+            Assert.False(string.IsNullOrWhiteSpace(value), $"[{language}] 键 {key} 的文案为空");
+        }
+    }
+
+    [Fact]
+    public void MenuKeys_ExistInBothLanguages()
+    {
+        var catalog = LangLoader.CreateCatalog(typeof(LangKeyCoverageTests).Assembly, AppContext.BaseDirectory);
+        var menuKeys = Andzip.Core.Menu.MainMenuModel.Create()
+            .SelectMany(m => new[] { m.TextKey }.Concat(m.Items.Where(i => !i.IsSeparator).Select(i => i.TextKey)))
+            .Distinct();
+
+        foreach (var language in new[] { "SimpChinese", "English" })
+        {
+            Assert.True(catalog.SetLanguage(language));
+
+            foreach (var key in menuKeys)
+            {
+                Assert.False(catalog.Get(key) == key, $"[{language}] 缺少菜单键 {key}");
+            }
+        }
+    }
+}

@@ -1,0 +1,204 @@
+;
+; Andzip language file (English)
+; Note: this file is part of the Andzip project (own wording). Key names are aligned with the product design (see requirements §7.3).
+;
+
+[GENERAL]
+LANG_NAME                               = English
+DLG_FONT_NAME                           = ICONTITLELOGFONT
+DLG_FONT_SIZE                           = 9
+
+[TEXT]
+; ---- Main toolbar (FR-1 home) ----
+TEXT_TOOLBAR_OPEN                       = Open
+TEXT_TOOLBAR_EXTRACT                    = Extract
+TEXT_TOOLBAR_NEW                        = New
+TEXT_TOOLBAR_ADD                        = Add
+TEXT_TOOLBAR_DELETE                     = Delete
+TEXT_TOOLBAR_TEST                       = Test
+TEXT_TOOLBAR_SCAN                       = Scan
+TEXT_TOOLBAR_VIEW                       = View
+
+; ---- New archive dialog (FR-2) ----
+TEXT_TITLE_NEW_ARCHIVE                  = New archive
+TEXT_SECTION_ADD_FILES                  = Files to add
+TEXT_SECTION_ARCHIVE_SETTINGS           = Archive settings
+TEXT_COLUMN_NAME                        = Name
+TEXT_COLUMN_SIZE                        = Size
+TEXT_COLUMN_FILE_PATH                   = File path
+TEXT_BTN_ADD                            = &Add
+TEXT_BTN_DELETE                         = &Delete
+TEXT_MENU_ADD_FILES                     = Add files...
+TEXT_MENU_ADD_FOLDER                    = Add folder...
+TEXT_LABEL_FILE_NAME                    = File name
+TEXT_BTN_BROWSE                         = &Browse...
+TEXT_LABEL_FORMAT                       = Format
+TEXT_BTN_SET_PASSWORD                   = Set &password...
+TEXT_LABEL_VOLUME                       = Volume
+TEXT_VOLUME_NONE                        = No split
+TEXT_VOLUME_3MB                         = 3 MB
+TEXT_VOLUME_4MB                         = 4 MB
+TEXT_VOLUME_5MB                         = 5 MB
+TEXT_VOLUME_10MB                        = 10 MB
+TEXT_VOLUME_20MB                        = 20 MB
+TEXT_VOLUME_25MB_GMAIL                  = 25 MB (Gmail)
+TEXT_VOLUME_100MB                       = 100 MB
+TEXT_VOLUME_300MB                       = 300 MB
+TEXT_VOLUME_650MB_CD                    = 650 MB (CD)
+TEXT_VOLUME_700MB_CD                    = 700 MB (CD)
+TEXT_VOLUME_4GB_FAT32                   = 4 GB (FAT32)
+TEXT_VOLUME_47GB_DVD                    = 4.7 GB (DVD)
+TEXT_VOLUME_CUSTOM                      = Custom size
+TEXT_TITLE_VOLUME_SIZE                  = Volume size
+TEXT_LABEL_VOLUME_SIZE                  = Volume size (MB)
+TEXT_ERR_VOLUME_SIZE_INVALID            = Enter a valid volume size (1 - 102400 MB).
+TEXT_LABEL_COMPRESSION_LEVEL            = Compression level
+TEXT_BTN_ADVANCED_SETTINGS              = Advanced settings »
+TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE     = « Advanced settings
+TEXT_ADVANCED_TITLE_ZIP                 = ZIP compression settings
+TEXT_LABEL_COMPRESSION_METHOD           = Compression method
+TEXT_METHOD_STORE                       = Store
+TEXT_METHOD_DEFLATE                     = Deflate
+TEXT_LABEL_ENCRYPTION_METHOD            = Encryption
+TEXT_ENCRYPTIONMETHOD_ZIPCRYPTO         = ZipCrypto
+TEXT_ENCRYPTIONMETHOD_AES256            = AES-256
+TEXT_LABEL_CPU_THREADS                  = CPU threads
+TEXT_THREADS_AUTO                       = Automatic
+TEXT_CHECK_STORE_SYMLINKS               = Store symbolic links
+TEXT_CHECK_FILE_COMMENT                 = File comment
+TEXT_CHECK_TEST_AFTER_COMPRESSION       = &Test archive
+TEXT_CHECK_DELETE_SOURCE                = Delete source files after compression
+TEXT_CHECK_SEPARATE_ARCHIVES            = Compress each file/folder to a separate archive
+TEXT_CHECK_MORE_OPTIONS                 = More options...
+TEXT_BTN_START                          = &Start
+TEXT_BTN_CANCEL                         = Cancel
+TEXT_DEFAULT_ARCHIVE_NAME               = New archive
+TEXT_STATUS_COMPRESSING                 = Compressing...
+TEXT_STATUS_NOT_IMPLEMENTED             = Not implemented yet
+TEXT_ERR_NO_INPUT                       = Add files or folders first.
+TEXT_ERR_OUTPUT_NOT_SET                 = Specify the output archive path.
+TEXT_ERR_GZ_SINGLE_FILE                 = GZ format can only compress a single file.
+TEXT_ERR_PASSWORD_ASCII                 = The ZIP format only accepts ASCII characters in the password. Use 7Z for a password with Chinese or other non-ASCII characters.
+TEXT_COMPRESSIONMETHOD_STORE            = 0-Store
+TEXT_COMPRESSIONMETHOD_FAST             = 1-Fast
+TEXT_COMPRESSIONMETHOD_NORMAL           = 2-Normal
+TEXT_COMPRESSIONMETHOD_MAX              = 3-Maximum
+
+; ---- Password input dialog (FR-2.6) ----
+TEXT_TITLE_PASSWORD_INPUT               = Enter password
+TEXT_LABEL_PASSWORD                     = Password
+TEXT_LABEL_PASSWORD_CONFIRM             = Confirm password
+TEXT_ERR_PASSWORD_MISMATCH              = The two passwords do not match.
+TEXT_BTN_OK                             = &OK
+
+; ---- Extract path dialog (FR-3.1) ----
+TEXT_TITLE_EXTRACT_PATH                 = Extract to
+TEXT_LABEL_DEST_PATH                    = Destination &path
+TEXT_QUICK_DESKTOP                      = Desktop
+TEXT_QUICK_MY_DOCUMENTS                 = My Documents
+TEXT_QUICK_MY_PICTURES                  = My Pictures
+TEXT_QUICK_MY_COMPUTER                  = My Computer
+TEXT_SECTION_EXTRACT                    = Extract:
+TEXT_RADIO_ALL_FILES                    = All &files
+TEXT_RADIO_SELECTED_FILES               = &Selected files
+TEXT_BTN_NEW_FOLDER                     = &New folder
+TEXT_CHECK_EXTRACT_TO_SUBFOLDER         = Extract to a subfolder named after the archive (&E)
+TEXT_CHECK_DELETE_ARCHIVE_AFTER         = Delete the archive after extraction (&L)
+TEXT_CHECK_REMEMBER_SETTINGS            = &Remember settings
+TEXT_NEW_FOLDER_DEFAULT                 = New folder
+TEXT_STATUS_EXTRACTING                  = Extracting...
+TEXT_ERR_DEST_NOT_SET                   = Specify a destination path.
+TEXT_TITLE_ERROR                        = Error
+TEXT_ERR_EXTRACT_FAILED                 = Extraction failed:
+
+; ---- Duplicate file prompt (FR-3.7) / extract password (dialog #7) ----
+TEXT_TITLE_ASK_DUPEFILE                 = Duplicate file
+TEXT_MSG_FILE_EXISTS                    = A file with the same name already exists in the destination:
+TEXT_BTN_RENAME                         = &Rename
+TEXT_BTN_OVERWRITE                      = &Overwrite
+TEXT_BTN_SKIP                           = &Skip
+TEXT_ERR_PASSWORD_EMPTY                 = Enter a password.
+
+; ---- Archive view (FR-4) ----
+TEXT_COLUMN_COMPRESSED_SIZE             = Compressed size
+TEXT_COLUMN_ORIGINAL_SIZE               = Original size
+TEXT_COLUMN_TYPE                        = Type
+TEXT_COLUMN_MODIFIED                    = Date modified
+TEXT_COLUMN_CRC                         = CRC-32
+TEXT_COLUMN_ATTRIBUTES                  = Attributes
+TEXT_COLUMN_COMMENT                     = Comment
+TEXT_COLUMN_EXTRA                       = Extra info
+TEXT_TYPE_FOLDER                        = Folder
+TEXT_TYPE_FILE                          = File
+TEXT_TYPE_FILE_EXT                      = ${ext} file
+TEXT_ENCRYPTED_FLAG                     = Yes
+TEXT_EXTRA_OS_WINDOWS                   = OS:Windows
+TEXT_EXTRA_OS_UNIX                      = OS:Unix
+TEXT_EXTRA_UTF8                         = UTF-8
+TEXT_VIEW_DETAILS                       = Details view
+TEXT_VIEW_ICONS                         = Icon view
+TEXT_OPEN_ARCHIVE_LOCATION              = Open archive location
+TEXT_ARCHIVE_FILES                      = Archive files
+TEXT_STATUS_ARCHIVE_SUMMARY             = Files: ${files}, Folders: ${folders}, Archive size: ${size}
+TEXT_STATUS_SELECTED_SUMMARY            = Selected ${files} file(s), ${size} bytes (compressed: ${compressed} bytes, ${percent}%)
+TEXT_ERR_OPEN_ARCHIVE_FAILED            = Failed to open the archive:
+TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED     = Unsupported archive format.
+
+[MENU]
+MENUSTR_FILE                            = &File
+MENUSTR_EDIT                            = &Edit
+MENUSTR_FIND                            = F&ind
+MENUSTR_SETTING                         = &Options
+MENUSTR_VIEW                            = &View
+MENUSTR_TOOLS                           = &Tools
+MENUSTR_HELP                            = &Help
+
+MENUSTR_OPEN                            = &Open archive
+MENUSTR_RECENT                          = Recent files
+MENUSTR_CREATE_ARCHIVE                  = &New archive
+MENUSTR_CLOSE_FILE                      = &Close archive
+MENUSTR_SAVE_AS_ARCHIVE                 = Save as...
+MENUSTR_DELETE_ARCHIVE                  = Delete archive
+MENUSTR_PERM_DELETE_ARCHIVE             = Permanently delete archive
+MENUSTR_OPEN_ARCHIVE_FOLDER             = Open archive location
+MENUSTR_TEST_ARCHIVE                    = &Test archive
+MENUSTR_SCAN_ARCHIVE                    = Scan archive for malware
+MENUSTR_EXTRACT_FILE                    = &Extract files
+MENUSTR_NEW_WINDOW                      = New application window
+MENUSTR_NEW_WINDOW_ADMIN                = New application window (as administrator)
+MENUSTR_EXIT                            = E&xit
+
+MENUSTR_RENAME_FILE                     = &Rename file
+MENUSTR_ADD_FILE                        = &Add file
+MENUSTR_DELETE_FILE                     = &Delete file
+MENUSTR_EDIT_COMMENT                    = Archive comment
+MENUSTR_COPY_FILES2CLIPBOARD            = Copy files to clipboard
+MENUSTR_PASTE_FILESFROMCLIPBOARD        = Paste files from clipboard
+MENUSTR_COPY_FULL_PATHNAMES             = Copy full file path
+
+MENUSTR_FIND_ITEM                       = Find file (&I)
+
+MENUSTR_SETTING_SUB                     = &Settings
+MENUSTR_REGISTER                        = Register Andzip
+MENUSTR_UNREGISTER                      = Unregister Andzip
+MENUSTR_PASSMAN                         = Password manager...
+
+MENUSTR_VIEW_STARTSCREEN                = Start screen
+MENUSTR_VIEW_TREECONTROL                = Folder tree
+MENUSTR_VIEW_COMMENT                    = Archive comment
+MENUSTR_VIEW_PREVIEW                    = Image preview
+MENUSTR_VIEW_STATUS_BAR                 = Status bar
+MENUSTR_VIEW_TOOLBAR                    = Toolbar
+MENUSTR_VIEW_LISTVIEW                   = View style
+MENUSTR_VIEW_COLUMN                     = Columns
+MENUSTR_VIEW_ALWAYS_ON_TOP              = Always on top
+MENUSTR_VIEW_COLOR_SETTING              = Color settings...
+
+MENUSTR_TOOLS_REPAIR                    = Repair archive...
+MENUSTR_TOOLS_RECOVERY                  = Password recovery...
+
+MENUSTR_ABOUT                           = &About Andzip
+MENUSTR_HELPPAGE                        = Go to help page (&G)
+MENUSTR_OPEN_FOLDER                     = Open Andzip install folder (&O)
+MENUSTR_FORUM                           = Go to user forum (&F)
+MENUSTR_HOMEPAGE                        = Go to website (&W)

@@ -1,0 +1,24 @@
+# Build output: all of it is regenerable, none of it belongs in a commit.
+# The one native binary that IS tracked is the staged engine under
+# src/Andzip.Native/runtimes/<rid>/native/ -- without it, "dotnet build" needs the
+# C++ toolchain and CI's managed jobs cannot run at all. See README section 4.1.
+build/
+dist/
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# Visual Studio per-user state. It also holds the chosen startup project, which is
+# why a stale copy can make F5 fail even after the solution is fixed.
+.vs/
+*.user
+*.suo
+
+# Test/coverage output
+TestResults/
+*.trx
+*.coverage
+
+# Editor scratch
+*.log
+*.tmp

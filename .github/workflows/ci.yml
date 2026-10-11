@@ -1,0 +1,93 @@
+name: ci
+
+# The Windows job runs ci.ps1, the same gate a developer runs locally, so a green
+# badge here means the same thing as a green run on a workstation. The Linux and
+# macOS jobs cover the legs this machine cannot: they are the first time the engine
+# binaries are ever *executed* off Windows (README section 6 item 16).
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows x64 - engine, tests, package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # shell: powershell (Windows PowerShell 5.1), not pwsh: the .ps1 scripts in
+      # this repo are written and tested against 5.1 and are kept ASCII-only.
+      - name: Gate (engine + 532 native + exports + 178 xUnit + 69 self-check + package)
+        shell: powershell
+        run: ./ci.ps1 -Static
+
+      - name: Upload the single-file app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Andzip-win-x64
+          path: dist/Andzip-*.exe
+          if-no-files-found: error
+
+      - name: Upload engine binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: andzip-engine-win-x64
+          if-no-files-found: error
+          path: |
+            build/native/bin/andzip_core.dll
+            build/native/bin/azcore.exe
+            build/native/bin/azgui.exe
+            build/native/bin/andzip_core_tests.exe
+            build/native-static/lib/andzip_core.lib
+
+  linux:
+    name: Linux x64 - engine executed for real
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build engine and run the native assertions
+        run: bash native/scripts/build-unix.sh -T
+
+      - name: Export table matches andzip.h
+        run: pwsh native/scripts/check-exports.ps1 build/native/bin/libandzip_core.so
+
+      # Informational on purpose: the managed suite has never run on Linux, and its
+      # path handling tests were written against Windows semantics. Turn this into a
+      # gate once it has been green here and the failures have been read, not muted.
+      - name: Managed build and tests (informational)
+        continue-on-error: true
+        run: |
+          dotnet build Andzip.slnx -c Release --nologo
+          dotnet test Andzip.slnx -c Release --no-build --nologo
+          dotnet run --project src/Andzip.Native.Tests -c Release --no-build
+
+  macos:
+    name: macOS - engine (exploratory)
+    runs-on: macos-latest
+    # The engine has never been compiled for macOS at all (README section 6, macOS
+    # row). Keep this job as a probe: it reports, it does not block.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build engine and run the native assertions
+        run: bash native/scripts/build-unix.sh -T

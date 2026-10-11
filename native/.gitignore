@@ -1,0 +1,25 @@
+# The build root is <repo>/build/native, and the repo root already ignores
+# [Bb]in/ and [Oo]bj/, which covers the C# projects here. What is left are the
+# native object trees and the staged copies of the engine binary that
+# build-windows.ps1 / build-unix.sh drop next to the output.
+
+CMakeCache.txt
+CMakeFiles/
+DartConfiguration.tcl
+Testing/
+
+# Native build artifacts, wherever a build is pointed.
+*.obj
+*.exp
+*.pdb
+*.ilk
+libandzip_core.so*
+libandzip_core.dylib
+
+# Engine binaries staged for the C# shell. These are produced by a build; they
+# are not sources, and the C# projects build fine without them.
+csharp/Andzip.Native/runtimes/
+csharp/Andzip.Native.Tests/runtimes/
+
+# scripts/vendor-sources.ps1 scratch area when it is not pointed elsewhere.
+third_party/.vendor-tmp/

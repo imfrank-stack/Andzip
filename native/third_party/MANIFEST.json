@@ -1,0 +1,80 @@
+﻿{
+    "generatedUtc":  "2026-10-10T20:22:34.7438837Z",
+    "note":  "Regenerate with native/scripts/vendor-sources.ps1. Do not edit vendored files by hand.",
+    "sources":  [
+                    {
+                        "path":  "third_party/7zip",
+                        "origin":  "cankao/7zip-main.zip",
+                        "upstream":  "https://github.com/ip7z/7zip",
+                        "license":  "LGPL-2.1-or-later with unRAR restriction (see 7zip/DOC/License.txt and 7zip/DOC/unRarLicense.txt)",
+                        "included":  [
+                                         "C",
+                                         "CPP",
+                                         "DOC"
+                                     ],
+                        "excluded":  [
+                                         "CPP/7zip/UI (console/GUI front ends)",
+                                         "Asm (x86 optimisations, C fallbacks used instead)"
+                                     ]
+                    },
+                    {
+                        "path":  "third_party/7zip/C/zstd",
+                        "origin":  "cankao/7-Zip-zstd-master.zip -\u003e C/zstd",
+                        "upstream":  "https://github.com/facebook/zstd",
+                        "license":  "BSD-3-Clause OR GPL-2.0-only"
+                    },
+                    {
+                        "path":  "third_party/7zip/C/zstdmt",
+                        "origin":  "cankao/7-Zip-zstd-master.zip -\u003e C/zstdmt",
+                        "upstream":  "https://github.com/oneunified/zstdmt",
+                        "license":  "MIT"
+                    },
+                    {
+                        "path":  "third_party/7zip/CPP/7zip/Compress/Zstd*",
+                        "origin":  "cankao/7-Zip-zstd-master.zip -\u003e CPP/7zip/Compress/Zstd*",
+                        "license":  "LGPL-2.1-or-later (7-Zip-Zstandard, see codecs/zstd-COPYING)"
+                    },
+                    {
+                        "path":  "third_party/codecs/lz4",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.Codecs/LZ4",
+                        "upstream":  "https://github.com/lz4/lz4",
+                        "license":  "BSD-2-Clause OR GPL-2.0-only"
+                    },
+                    {
+                        "path":  "third_party/codecs/blake3",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.Codecs/BLAKE3",
+                        "upstream":  "https://github.com/BLAKE3-team/BLAKE3",
+                        "license":  "CC0-1.0 OR Apache-2.0"
+                    },
+                    {
+                        "path":  "third_party/codecs/xxhash",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.Codecs/xxHash",
+                        "upstream":  "https://github.com/Cyan4973/xxHash",
+                        "license":  "BSD-2-Clause"
+                    },
+                    {
+                        "path":  "third_party/codecs/brotli",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.ZS.Codecs/Brotli",
+                        "upstream":  "https://github.com/google/brotli",
+                        "license":  "MIT"
+                    },
+                    {
+                        "path":  "third_party/codecs/lizard",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.ZS.Codecs/Lizard",
+                        "upstream":  "https://github.com/inikep/lizard",
+                        "license":  "BSD-2-Clause OR GPL-2.0-only"
+                    },
+                    {
+                        "path":  "third_party/codecs/lz5",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.ZS.Codecs/LZ5",
+                        "upstream":  "https://github.com/inikep/lz5",
+                        "license":  "BSD-2-Clause OR GPL-2.0-only"
+                    },
+                    {
+                        "path":  "third_party/7zip/CPP/7zip/{Compress,Archive}/{Lz4,Lz5,Lizard,Brotli}*",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.ZS.Codecs/SevenZip/CPP/7zip/{Compress,Archive}",
+                        "license":  "MIT (NanaZip, see NanaZip-License.md)",
+                        "note":  "7-Zip wrappers for the codec libraries above; placed in the engine tree so their relative includes resolve"
+                    }
+                ]
+}

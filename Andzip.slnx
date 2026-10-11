@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Andzip.App/Andzip.App.csproj" />
+    <Project Path="src/Andzip.Core/Andzip.Core.csproj" />
+    <Project Path="src/Andzip.Native/Andzip.Native.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Andzip.Core.Tests/Andzip.Core.Tests.csproj" />
+    <Project Path="src/Andzip.Native.Tests/Andzip.Native.Tests.csproj" />
+  </Folder>
+</Solution>

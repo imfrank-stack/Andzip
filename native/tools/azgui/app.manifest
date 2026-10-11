@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity version="1.0.0.0"
+                    processorArchitecture="*"
+                    name="Andzip.AzGui"
+                    type="win32"/>
+  <!-- Common controls v6: themed widgets, and the ListView styles azgui uses. -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32"
+                        name="Microsoft.Windows.Common-Controls"
+                        version="6.0.0.0"
+                        processorArchitecture="*"
+                        publicKeyToken="6595b64144ccf1df"
+                        language="*"/>
+    </dependentAssembly>
+  </dependency>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- The layout is a fixed pixel grid sized for 96 dpi. Declaring the app
+           dpi-unaware makes Windows scale the whole window on high-dpi displays,
+           which stays legible; making it dpi-aware would require scaling every
+           coordinate. -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">false</dpiAware>
+    </windowsSettings>
+  </application>
+</assembly>

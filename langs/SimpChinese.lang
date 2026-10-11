@@ -1,0 +1,204 @@
+;
+; Andzip 语言文件（简体中文）
+; 说明：本文件为本项目自有文案（键名与产品设计对齐，见需求文档 §7.3），请勿手工修改键名。
+;
+
+[GENERAL]
+LANG_NAME                               = 中文 (简体)
+DLG_FONT_NAME                           = ICONTITLELOGFONT
+DLG_FONT_SIZE                           = 9
+
+[TEXT]
+; ---- 主工具栏（FR-1 首页）----
+TEXT_TOOLBAR_OPEN                       = 打开
+TEXT_TOOLBAR_EXTRACT                    = 解压
+TEXT_TOOLBAR_NEW                        = 新建
+TEXT_TOOLBAR_ADD                        = 添加
+TEXT_TOOLBAR_DELETE                     = 删除
+TEXT_TOOLBAR_TEST                       = 测试
+TEXT_TOOLBAR_SCAN                       = 扫描
+TEXT_TOOLBAR_VIEW                       = 查看
+
+; ---- 新建压缩文件对话框（FR-2）----
+TEXT_TITLE_NEW_ARCHIVE                  = 新建压缩文件
+TEXT_SECTION_ADD_FILES                  = 添加文件到压缩文件
+TEXT_SECTION_ARCHIVE_SETTINGS           = 压缩文件设置
+TEXT_COLUMN_NAME                        = 名称
+TEXT_COLUMN_SIZE                        = 大小
+TEXT_COLUMN_FILE_PATH                   = 文件路径
+TEXT_BTN_ADD                            = 添加(&A)
+TEXT_BTN_DELETE                         = 删除(&D)
+TEXT_MENU_ADD_FILES                     = 添加文件...
+TEXT_MENU_ADD_FOLDER                    = 添加文件夹...
+TEXT_LABEL_FILE_NAME                    = 文件名
+TEXT_BTN_BROWSE                         = 浏览(&B)...
+TEXT_LABEL_FORMAT                       = 压缩格式
+TEXT_BTN_SET_PASSWORD                   = 设置密码(&P)...
+TEXT_LABEL_VOLUME                       = 分卷
+TEXT_VOLUME_NONE                        = 不分卷
+TEXT_VOLUME_3MB                         = 3 MB
+TEXT_VOLUME_4MB                         = 4 MB
+TEXT_VOLUME_5MB                         = 5 MB
+TEXT_VOLUME_10MB                        = 10 MB
+TEXT_VOLUME_20MB                        = 20 MB
+TEXT_VOLUME_25MB_GMAIL                  = 25 MB (Gmail)
+TEXT_VOLUME_100MB                       = 100 MB
+TEXT_VOLUME_300MB                       = 300 MB
+TEXT_VOLUME_650MB_CD                    = 650 MB (CD)
+TEXT_VOLUME_700MB_CD                    = 700 MB (CD)
+TEXT_VOLUME_4GB_FAT32                   = 4 GB (FAT32)
+TEXT_VOLUME_47GB_DVD                    = 4.7 GB (DVD)
+TEXT_VOLUME_CUSTOM                      = 自定义大小
+TEXT_TITLE_VOLUME_SIZE                  = 分卷大小
+TEXT_LABEL_VOLUME_SIZE                  = 分卷大小 (MB)
+TEXT_ERR_VOLUME_SIZE_INVALID            = 请输入有效的分卷大小（1 - 102400 MB）。
+TEXT_LABEL_COMPRESSION_LEVEL            = 压缩级别
+TEXT_BTN_ADVANCED_SETTINGS              = 高级设置 »
+TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE     = « 高级设置
+TEXT_ADVANCED_TITLE_ZIP                 = ZIP 压缩设置
+TEXT_LABEL_COMPRESSION_METHOD           = 压缩方法
+TEXT_METHOD_STORE                       = 仅存储
+TEXT_METHOD_DEFLATE                     = Deflate
+TEXT_LABEL_ENCRYPTION_METHOD            = 加密算法
+TEXT_ENCRYPTIONMETHOD_ZIPCRYPTO         = ZipCrypto
+TEXT_ENCRYPTIONMETHOD_AES256            = AES-256
+TEXT_LABEL_CPU_THREADS                  = CPU 线程数
+TEXT_THREADS_AUTO                       = 自动
+TEXT_CHECK_STORE_SYMLINKS               = 存储符号链接
+TEXT_CHECK_FILE_COMMENT                 = 文件说明
+TEXT_CHECK_TEST_AFTER_COMPRESSION       = 测试压缩文件(&T)
+TEXT_CHECK_DELETE_SOURCE                = 压缩后删除原始文件
+TEXT_CHECK_SEPARATE_ARCHIVES            = 把每个文件/文件夹添加到单独的压缩文件
+TEXT_CHECK_MORE_OPTIONS                 = 更多选项...
+TEXT_BTN_START                          = 开始(&S)
+TEXT_BTN_CANCEL                         = 取消
+TEXT_DEFAULT_ARCHIVE_NAME               = 新建压缩
+TEXT_STATUS_COMPRESSING                 = 正在压缩...
+TEXT_STATUS_NOT_IMPLEMENTED             = 该功能暂未实现
+TEXT_ERR_NO_INPUT                       = 请先添加要压缩的文件或文件夹。
+TEXT_ERR_OUTPUT_NOT_SET                 = 请指定压缩文件路径。
+TEXT_ERR_GZ_SINGLE_FILE                 = GZ 格式只能压缩单个文件。
+TEXT_ERR_PASSWORD_ASCII                 = ZIP 格式的密码只支持 ASCII 字符。需要使用中文等非 ASCII 密码时，请改用 7Z 格式。
+TEXT_COMPRESSIONMETHOD_STORE            = 0-仅存储
+TEXT_COMPRESSIONMETHOD_FAST             = 1-快速压缩
+TEXT_COMPRESSIONMETHOD_NORMAL           = 2-正常压缩
+TEXT_COMPRESSIONMETHOD_MAX              = 3-极限压缩
+
+; ---- 密码输入对话框（FR-2.6）----
+TEXT_TITLE_PASSWORD_INPUT               = 输入密码
+TEXT_LABEL_PASSWORD                     = 密码
+TEXT_LABEL_PASSWORD_CONFIRM             = 确认密码
+TEXT_ERR_PASSWORD_MISMATCH              = 两次输入的密码不一致。
+TEXT_BTN_OK                             = 确定(&O)
+
+; ---- 选择解压路径对话框（FR-3.1）----
+TEXT_TITLE_EXTRACT_PATH                 = 选择解压路径
+TEXT_LABEL_DEST_PATH                    = 目标路径(&D)
+TEXT_QUICK_DESKTOP                      = 桌面
+TEXT_QUICK_MY_DOCUMENTS                 = 我的文档
+TEXT_QUICK_MY_PICTURES                  = 我的图片
+TEXT_QUICK_MY_COMPUTER                  = 我的电脑
+TEXT_SECTION_EXTRACT                    = 解压缩:
+TEXT_RADIO_ALL_FILES                    = 全部文件(&A)
+TEXT_RADIO_SELECTED_FILES               = 选定的文件(&S)
+TEXT_BTN_NEW_FOLDER                     = 新建文件夹(&N)
+TEXT_CHECK_EXTRACT_TO_SUBFOLDER         = 解压到选定文件夹下与压缩包同名的文件夹(&E)
+TEXT_CHECK_DELETE_ARCHIVE_AFTER         = 解压后删除压缩文件(&L)
+TEXT_CHECK_REMEMBER_SETTINGS            = 记住设置(&R)
+TEXT_NEW_FOLDER_DEFAULT                 = 新建文件夹
+TEXT_STATUS_EXTRACTING                  = 正在解压...
+TEXT_ERR_DEST_NOT_SET                   = 请指定解压目标路径。
+TEXT_TITLE_ERROR                        = 错误
+TEXT_ERR_EXTRACT_FAILED                 = 解压失败：
+
+; ---- 重名询问（FR-3.7）/ 解压密码（对话框 #7）----
+TEXT_TITLE_ASK_DUPEFILE                 = 要解压的文件
+TEXT_MSG_FILE_EXISTS                    = 目标文件夹中已存在同名文件：
+TEXT_BTN_RENAME                         = 重命名(&R)
+TEXT_BTN_OVERWRITE                      = 覆盖(&O)
+TEXT_BTN_SKIP                           = 跳过(&S)
+TEXT_ERR_PASSWORD_EMPTY                 = 请输入密码。
+
+; ---- 压缩包视图（FR-4）----
+TEXT_COLUMN_COMPRESSED_SIZE             = 压缩后大小
+TEXT_COLUMN_ORIGINAL_SIZE               = 原始大小
+TEXT_COLUMN_TYPE                        = 类型
+TEXT_COLUMN_MODIFIED                    = 修改日期
+TEXT_COLUMN_CRC                         = 循环冗余检验 (CRC)
+TEXT_COLUMN_ATTRIBUTES                  = 属性
+TEXT_COLUMN_COMMENT                     = 注释
+TEXT_COLUMN_EXTRA                       = 附加信息
+TEXT_TYPE_FOLDER                        = 文件夹
+TEXT_TYPE_FILE                          = 文件
+TEXT_TYPE_FILE_EXT                      = ${ext} 文件
+TEXT_ENCRYPTED_FLAG                     = 是
+TEXT_EXTRA_OS_WINDOWS                   = OS:Windows
+TEXT_EXTRA_OS_UNIX                      = OS:Unix
+TEXT_EXTRA_UTF8                         = UTF-8
+TEXT_VIEW_DETAILS                       = 文件详情列表
+TEXT_VIEW_ICONS                         = 文件图标视图
+TEXT_OPEN_ARCHIVE_LOCATION              = 打开压缩文件位置
+TEXT_ARCHIVE_FILES                      = 压缩文件
+TEXT_STATUS_ARCHIVE_SUMMARY             = 文件: ${files}, 文件夹: ${folders}, 压缩文件大小: ${size}
+TEXT_STATUS_SELECTED_SUMMARY            = 已选择 ${files} 个文件, ${size} 字节 (压缩后大小: ${compressed} 字节, ${percent}%)
+TEXT_ERR_OPEN_ARCHIVE_FAILED            = 打开压缩文件失败：
+TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED     = 不支持该压缩格式。
+
+[MENU]
+MENUSTR_FILE                            = 文件(&F)
+MENUSTR_EDIT                            = 编辑(&E)
+MENUSTR_FIND                            = 查找(&I)
+MENUSTR_SETTING                         = 选项(&O)
+MENUSTR_VIEW                            = 视图(&V)
+MENUSTR_TOOLS                           = 工具(&T)
+MENUSTR_HELP                            = 帮助(&H)
+
+MENUSTR_OPEN                            = 打开压缩文件(&O)
+MENUSTR_RECENT                          = 最近的文件
+MENUSTR_CREATE_ARCHIVE                  = 新建压缩文件(&N)
+MENUSTR_CLOSE_FILE                      = 关闭压缩文件(&C)
+MENUSTR_SAVE_AS_ARCHIVE                 = 另存为...
+MENUSTR_DELETE_ARCHIVE                  = 删除压缩文件
+MENUSTR_PERM_DELETE_ARCHIVE             = 永久删除压缩文件
+MENUSTR_OPEN_ARCHIVE_FOLDER             = 打开压缩文件位置
+MENUSTR_TEST_ARCHIVE                    = 测试压缩文件(&T)
+MENUSTR_SCAN_ARCHIVE                    = 扫描压缩包中的恶意软件
+MENUSTR_EXTRACT_FILE                    = 解压文件(&E)
+MENUSTR_NEW_WINDOW                      = 新建程序窗口
+MENUSTR_NEW_WINDOW_ADMIN                = 新建程序窗口 (管理员权限)
+MENUSTR_EXIT                            = 退出(&X)
+
+MENUSTR_RENAME_FILE                     = 重命名文件(&R)
+MENUSTR_ADD_FILE                        = 添加文件(&A)
+MENUSTR_DELETE_FILE                     = 删除文件(&D)
+MENUSTR_EDIT_COMMENT                    = 压缩文件注释
+MENUSTR_COPY_FILES2CLIPBOARD            = 将文件复制到剪贴板
+MENUSTR_PASTE_FILESFROMCLIPBOARD        = 从剪贴板粘贴文件
+MENUSTR_COPY_FULL_PATHNAMES             = 复制文件完整路径
+
+MENUSTR_FIND_ITEM                       = 查找文件(&I)
+
+MENUSTR_SETTING_SUB                     = 设置(&S)
+MENUSTR_REGISTER                        = 注册 Andzip
+MENUSTR_UNREGISTER                      = 取消注册 Andzip
+MENUSTR_PASSMAN                         = 密码管理器...
+
+MENUSTR_VIEW_STARTSCREEN                = 启动画面
+MENUSTR_VIEW_TREECONTROL                = 树形目录
+MENUSTR_VIEW_COMMENT                    = 压缩文件注释
+MENUSTR_VIEW_PREVIEW                    = 图像预览
+MENUSTR_VIEW_STATUS_BAR                 = 状态栏
+MENUSTR_VIEW_TOOLBAR                    = 工具栏
+MENUSTR_VIEW_LISTVIEW                   = 视图样式
+MENUSTR_VIEW_COLUMN                     = 列设置
+MENUSTR_VIEW_ALWAYS_ON_TOP              = 置顶
+MENUSTR_VIEW_COLOR_SETTING              = 颜色设置...
+
+MENUSTR_TOOLS_REPAIR                    = 修复压缩包...
+MENUSTR_TOOLS_RECOVERY                  = 密码恢复...
+
+MENUSTR_ABOUT                           = 关于 Andzip(&A)
+MENUSTR_HELPPAGE                        = 转到帮助页面(&G)
+MENUSTR_OPEN_FOLDER                     = 打开 Andzip 安装目录(&O)
+MENUSTR_FORUM                           = 转到用户论坛(&F)
+MENUSTR_HOMEPAGE                        = 转到官网(&W)

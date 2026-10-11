@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Andzip.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      压缩/解压全部走 native 引擎（native/ 下的 7-Zip + 扁平 C ABI），
+      Andzip.Native 是它的 P/Invoke 外壳。对 GUI 而言它是 Core 的实现细节，
+      App 不直接引用，所以这里用 PrivateAssets 之外的常规引用即可。
+    -->
+    <ProjectReference Include="..\Andzip.Native\Andzip.Native.csproj" />
+  </ItemGroup>
+
+</Project>

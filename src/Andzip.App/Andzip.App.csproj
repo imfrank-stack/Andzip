@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Andzip</AssemblyName>
+    <RootNamespace>Andzip.App</RootNamespace>
+    <Version>0.9.0</Version>
+    <ApplicationIcon>..\..\assets\andzip.ico</ApplicationIcon>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- 单文件绿色版：把原生库（Skia 等）一并内嵌，运行时自解压（否则 exe 离开发布目录会因缺少 libSkiaSharp 崩溃） -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Simple" Version="11.3.22" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Andzip.Core\Andzip.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\langs\*.lang" Link="langs\%(Filename)%(Extension)" />
+    <None Include="..\..\langs\*.lang" Link="langs\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
