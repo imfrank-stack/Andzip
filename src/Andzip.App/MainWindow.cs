@@ -36,11 +36,12 @@ public sealed class MainWindow : Window
     private readonly Control _homeContent;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
-    private readonly Lazy<AppSettings> _settings = new(() => AppSettings.Load(AppSettings.DefaultFilePath));
+    private readonly AppSettings _settings;
 
-    public MainWindow(LangCatalog lang)
+    public MainWindow(LangCatalog lang, AppSettings settings)
     {
         _lang = lang;
+        _settings = settings;
 
         Title = EngineTitle;
         Width = 1040;
@@ -140,7 +141,7 @@ public sealed class MainWindow : Window
     /// <summary>设置窗口（F5，FR-5）：模态，与参考软件一致。</summary>
     private void OpenSettingsDialog()
     {
-        var dialog = new SettingsWindow(_lang, _settings.Value, AppSettings.DefaultFilePath);
+        var dialog = new SettingsWindow(_lang, _settings, AppSettings.DefaultFilePath);
         _ = dialog.ShowDialog(this);
     }
 
@@ -240,7 +241,9 @@ public sealed class MainWindow : Window
         }
 
         var cts = new CancellationTokenSource();
-        var progress = new ProgressWindow(_lang, cts, "TEXT_STATUS_EXTRACTING");
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_EXTRACTING",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
 
         // 重名询问（FR-3.7「要解压的文件」）：以进度窗口为属主，在 UI 线程弹出并等待用户选择
         DuplicateDecision ResolveDuplicate(string fileName)

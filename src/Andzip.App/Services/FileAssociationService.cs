@@ -38,6 +38,8 @@ internal sealed class FileAssociationService
     /// <summary>ProgID 前缀。设置存储与注册表都靠它识别“哪些是 Andzip 登记的”。</summary>
     public const string ProgIdPrefix = "Andzip.";
 
+    private ArchiveDoubleClick _doubleClickMode = ArchiveDoubleClick.OpenInAndzip;
+
     private const string ClassesRoot = @"Software\Classes\";
     private const string FileExtsRoot = @"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\";
     private const int ShellAssocChanged = 0x08000000;
@@ -56,9 +58,15 @@ internal sealed class FileAssociationService
         {
             key.SetValue(string.Empty, "Andzip " + association.Label);
             key.CreateSubKey("DefaultIcon").SetValue(string.Empty, executablePath + ",0");
+
+            // 两个动词都注册，双击走哪一个由 shell 键的默认值决定 —— 这样改「双击行为」
+            // 只需要重写那一个值，不用把整棵 ProgID 删了重建。
             // %1 必须带引号：路径里有空格时不带引号会被拆成两个参数。
-            key.CreateSubKey(@"shell\open\command").SetValue(string.Empty, "\"" + executablePath + "\" \"%1\"");
+            key.CreateSubKey(@"shell\open\command").SetValue(string.Empty, Quote(executablePath) + " \"%1\"");
+            key.CreateSubKey(@"shell\extract\command").SetValue(string.Empty, Quote(executablePath) + " \"%1\" " + SettingKeys.ExtractSwitch);
         }
+
+        SetDefaultVerb(ProgId(association), _doubleClickMode);
 
         var captured = new List<AssociationOriginal>();
         var blocked = new List<string>();
@@ -113,6 +121,59 @@ internal sealed class FileAssociationService
             RestoreDefault(extension, original.ProgId);
         }
     }
+
+    /// <summary>
+    /// 告诉服务当前「双击」应当走哪个动词。新登记的 ProgID 直接按它写；
+    /// 已经登记过的用 <see cref="ApplyDoubleClickVerb"/> 批量改。
+    /// </summary>
+    public void UseDoubleClick(ArchiveDoubleClick mode) => _doubleClickMode = mode;
+
+    /// <summary>
+    /// 把所有 Andzip.* ProgID 的默认动词改成当前设置（改了「双击」选项后调用）。
+    /// 只动我们自己命名空间下的键，别的软件的 ProgID 一概不碰。
+    /// </summary>
+    /// <returns>改掉的 ProgID 数量。</returns>
+    public int ApplyDoubleClickVerb(ArchiveDoubleClick mode)
+    {
+        _doubleClickMode = mode;
+
+        var count = 0;
+        using var classes = Registry.CurrentUser.OpenSubKey(@"Software\Classes", writable: true);
+        if (classes is null)
+        {
+            return 0;
+        }
+
+        foreach (var name in classes.GetSubKeyNames())
+        {
+            if (!name.StartsWith(ProgIdPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            using var shell = classes.OpenSubKey(name + @"\shell", writable: true);
+            if (shell is null)
+            {
+                continue;
+            }
+
+            shell.SetValue(string.Empty, Verb(mode));
+            count++;
+        }
+
+        return count;
+    }
+
+    private static string Verb(ArchiveDoubleClick mode)
+        => mode == ArchiveDoubleClick.ExtractDirectly ? "extract" : "open";
+
+    private static void SetDefaultVerb(string progId, ArchiveDoubleClick mode)
+    {
+        using var shell = Registry.CurrentUser.CreateSubKey(ClassesRoot + progId + @"\shell");
+        shell.SetValue(string.Empty, Verb(mode));
+    }
+
+    private static string Quote(string path) => "\"" + path + "\"";
 
     /// <summary>
     /// 这个格式当前是否已经登记在系统里。<strong>以注册表为准</strong>，不看设置文件 ——

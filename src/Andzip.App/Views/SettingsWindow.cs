@@ -5,8 +5,8 @@ using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
 using Avalonia.Controls.Primitives;
+using Avalonia.Layout;
 using Avalonia.Media;
 
 namespace Andzip.App.Views;
@@ -14,7 +14,7 @@ namespace Andzip.App.Views;
 /// <summary>
 /// 设置窗口（选项 → 设置，F5）：左侧蓝色导航 + 右侧页面 + 底部「重置 / 确定」。
 /// <para>
-/// 目前只有「文件关联」是实装的页面，其余按参考软件的导航顺序列出并显示占位文案 ——
+/// 已实装「常规」与「文件关联」两页，其余按参考软件的导航顺序列出并显示占位文案 ——
 /// 空着的导航项比假装能用的控件诚实。
 /// </para>
 /// </summary>
@@ -27,21 +27,15 @@ public sealed class SettingsWindow : Window
     private static readonly IBrush NavBlueSelected = new SolidColorBrush(Color.Parse("#1668C8"));
     private static readonly IBrush PageText = new SolidColorBrush(Color.Parse("#1F1F1F"));
     private static readonly IBrush LinkBlue = new SolidColorBrush(Color.Parse("#1A6FD4"));
+    private static readonly IBrush HintText = new SolidColorBrush(Color.Parse("#6B6B6B"));
 
-    private readonly LangCatalog _lang;
-    private readonly AppSettings _settings;
-    private readonly string _settingsPath;
     private readonly ContentControl _pageHost = new();
     private readonly Dictionary<string, Button> _navButtons = new(StringComparer.Ordinal);
-    private readonly List<Func<Control>> _pages;
-    private string _currentPageKey;
+    private readonly ISettingsPage[] _pages;
+    private ISettingsPage? _currentPage;
 
     public SettingsWindow(LangCatalog lang, AppSettings settings, string settingsPath)
     {
-        _lang = lang;
-        _settings = settings;
-        _settingsPath = settingsPath;
-
         Title = lang.Get("TEXT_TITLE_SETTINGS");
         Width = 1000;
         Height = 660;
@@ -51,7 +45,7 @@ public sealed class SettingsWindow : Window
         Background = new SolidColorBrush(Color.Parse("#F0F0F0"));
         FontSize = 14;
 
-        // 导航顺序与参考软件一致；索引即页面工厂的下标。
+        // 导航顺序与参考软件一致。
         var navKeys = new[]
         {
             "TEXT_SETTINGS_GENERAL",
@@ -67,29 +61,27 @@ public sealed class SettingsWindow : Window
 
         _pages =
         [
-            () => PlaceholderPage(),
-            () => FileAssociationPage(),
-            () => PlaceholderPage(),
-            () => PlaceholderPage(),
-            () => PlaceholderPage(),
-            () => PlaceholderPage(),
-            () => PlaceholderPage(),
-            () => PlaceholderPage(),
-            () => PlaceholderPage(),
+            new GeneralPage(this, lang, settings, settingsPath),
+            new FileAssociationPage(this, lang, settings, settingsPath),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_CONTEXT_MENU"),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_EXTRACT"),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_COMPRESS"),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_VIEW"),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_SECURITY"),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_ADVANCED"),
+            new PlaceholderPage(lang, "TEXT_SETTINGS_LANGUAGE"),
         ];
 
         var nav = new StackPanel { Spacing = 2, Margin = new Thickness(0, 14, 0, 0) };
         for (var i = 0; i < navKeys.Length; i++)
         {
-            var key = navKeys[i];
             var index = i;
-            var button = NavButton(lang.Get(key), () => ShowPage(key, index));
-            _navButtons[key] = button;
+            var button = NavButton(lang.Get(navKeys[i]), () => ShowPage(index));
+            _navButtons[navKeys[i]] = button;
             nav.Children.Add(button);
         }
 
         var navPane = new Border { Background = NavBlue, Child = nav, Width = 190 };
-
         var contentPane = new Border
         {
             Background = Brushes.White,
@@ -103,8 +95,8 @@ public sealed class SettingsWindow : Window
         body.Children.Add(navPane);
         body.Children.Add(contentPane);
 
-        var resetButton = new Button { Content = lang.Get("TEXT_BTN_RESET"), MinWidth = 120, IsCancel = true };
-        resetButton.Click += (_, _) => ResetCurrentPage();
+        var resetButton = new Button { Content = lang.Get("TEXT_BTN_RESET"), MinWidth = 120 };
+        resetButton.Click += (_, _) => _currentPage?.Reload();
         var okButton = new Button { Content = lang.Get("TEXT_BTN_OK"), MinWidth = 120, IsDefault = true };
         okButton.Click += (_, _) => AcceptAndClose();
 
@@ -123,20 +115,21 @@ public sealed class SettingsWindow : Window
         root.Children.Add(body);
 
         Content = root;
-
-        _currentPageKey = navKeys[1];
-        ShowPage(navKeys[1], 1);
+        ShowPage(0);
     }
 
-    private void ShowPage(string key, int index)
+    private void ShowPage(int index)
     {
-        _currentPageKey = key;
-        foreach (var (navKey, button) in _navButtons)
+        var page = _pages[index];
+        _currentPage = page;
+
+        foreach (var (key, button) in _navButtons)
         {
-            button.Background = navKey == key ? NavBlueSelected : NavBlue;
+            button.Background = key == page.NavKey ? NavBlueSelected : NavBlue;
         }
 
-        _pageHost.Content = _pages[index]();
+        page.Reload();
+        _pageHost.Content = page.Root;
     }
 
     private Button NavButton(string text, Action onClick)
@@ -156,21 +149,11 @@ public sealed class SettingsWindow : Window
         return button;
     }
 
-    private Control PlaceholderPage()
+    private void AcceptAndClose()
     {
-        var panel = new StackPanel
-        {
-            Margin = new Thickness(22, 20, 22, 20),
-            Spacing = 14,
-        };
-        panel.Children.Add(SectionTitle(_lang.Get(_currentPageKey)));
-        panel.Children.Add(new TextBlock
-        {
-            Text = _lang.Get("TEXT_SETTINGS_NOT_IMPLEMENTED"),
-            Foreground = new SolidColorBrush(Color.Parse("#6B6B6B")),
-            TextWrapping = TextWrapping.Wrap,
-        });
-        return panel;
+        // 「确定」= 让当前页把没应用的改动落盘再关窗；右上角的 X 才是放弃改动。
+        _currentPage?.Commit();
+        Close();
     }
 
     private static TextBlock SectionTitle(string text) => new()
@@ -181,33 +164,154 @@ public sealed class SettingsWindow : Window
         Foreground = PageText,
     };
 
-    // ---------- 文件关联页 ----------
-
-    private FileAssociationTab? _associationPage;
-
-    private Control FileAssociationPage()
+    /// <summary>每页对外的三件事：导航键、要呈现的控件、重新读状态 / 落盘。</summary>
+    private interface ISettingsPage
     {
-        _associationPage = new FileAssociationTab(this, _lang, _settings, _settingsPath);
-        return _associationPage.Root;
+        string NavKey { get; }
+
+        Control Root { get; }
+
+        /// <summary>从真实来源（设置文件或注册表）重读一遍，放弃界面里没应用的改动。</summary>
+        void Reload();
+
+        void Commit();
     }
 
-    private void ResetCurrentPage() => _associationPage?.Reset();
-
-    private void AcceptAndClose()
+    /// <summary>还没实现的页面：显示占位文案，而不是摆一堆不生效的控件。</summary>
+    private sealed class PlaceholderPage : ISettingsPage
     {
-        // 「确定」= 有未应用的改动就顺手应用掉再关窗；右上角的 X 才是放弃改动。
-        _associationPage?.ApplyIfDirty();
-        Close();
+        public PlaceholderPage(LangCatalog lang, string navKey)
+        {
+            NavKey = navKey;
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20), Spacing = 14 };
+            panel.Children.Add(SectionTitle(lang.Get(navKey)));
+            panel.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_NOT_IMPLEMENTED"),
+                Foreground = HintText,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+        }
+
+        public void Commit()
+        {
+        }
+    }
+
+    /// <summary>
+    /// 常规页：双击行为 + 进度窗口能否按 Esc 取消。
+    /// <para>
+    /// 双击那一项不是界面偏好开关 —— 它会改写注册表里所有 <c>Andzip.*</c> ProgID 的默认动词，
+    /// 所以在设置里改成「直接解压」之后，资源管理器里双击才真的跟着变。
+    /// </para>
+    /// </summary>
+    private sealed class GeneralPage : ISettingsPage
+    {
+        private readonly AppSettings _settings;
+        private readonly string _settingsPath;
+        private readonly ComboBox _doubleClick;
+        private readonly CheckBox _escCancel;
+
+        public GeneralPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_GENERAL";
+            _settings = settings;
+            _settingsPath = settingsPath;
+
+            _doubleClick = new ComboBox
+            {
+                Width = 260,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                ItemsSource = new[] { lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_OPEN"), lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT") },
+            };
+
+            _escCancel = new CheckBox
+            {
+                Content = lang.Get("TEXT_SETTINGS_ESC_CANCEL"),
+                Margin = new Thickness(0, 20, 0, 0),
+            };
+
+            var doubleClickRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 12,
+                Margin = new Thickness(0, 20, 0, 0),
+            };
+            doubleClickRow.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"),
+                Width = 170,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            doubleClickRow.Children.Add(_doubleClick);
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_GENERAL_TITLE")));
+            panel.Children.Add(doubleClickRow);
+            panel.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_HINT"),
+                Foreground = HintText,
+                Margin = new Thickness(182, 6, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+            });
+            panel.Children.Add(_escCancel);
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _doubleClick.SelectedIndex = SettingKeys.ParseDoubleClick(_settings.GetString(SettingKeys.DoubleClickAction))
+                == ArchiveDoubleClick.ExtractDirectly ? 1 : 0;
+            _escCancel.IsChecked = _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true);
+        }
+
+        public void Commit()
+        {
+            var mode = _doubleClick.SelectedIndex == 1
+                ? ArchiveDoubleClick.ExtractDirectly
+                : ArchiveDoubleClick.OpenInAndzip;
+            var previous = SettingKeys.ParseDoubleClick(_settings.GetString(SettingKeys.DoubleClickAction));
+
+            _settings.SetString(SettingKeys.DoubleClickAction, mode.ToStorage());
+            _settings.SetBool(SettingKeys.AllowEscCancelProgress, _escCancel.IsChecked == true);
+            _settings.Save(_settingsPath);
+
+            if (mode == previous || !OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            // 双击动词只影响已经关联出去的格式；没关联的格式本来就不走我们。
+            var service = new FileAssociationService();
+            service.ApplyDoubleClickVerb(mode);
+            service.NotifyChanged();
+        }
     }
 
     /// <summary>
     /// 文件关联页：分组复选框 + 全选 / 取消全选 + 立即应用。
     /// <para>
-    /// 候选项来自 <see cref="FileAssociationCatalog.Supported"/>，也就是引擎实际报上来的可读扩展名 ——
-    /// 勾不上我们读不了的格式。应用只往 HKCU 的 OpenWithProgids 里挂，不改默认程序。
+    /// 候选项来自 <see cref="FileAssociationCatalog.Supported"/>，也就是引擎实际报告的扩展名集合 ——
+    /// 勾不上我们读不了的格式。勾选状态<strong>读自注册表</strong>而不是设置文件：后者记的是
+    /// 「上次写成功的那批」，而注册表会被别的软件改、被清理软件清，照它回显就会显示一堆没生效的勾。
     /// </para>
     /// </summary>
-    private sealed class FileAssociationTab
+    private sealed class FileAssociationPage : ISettingsPage
     {
         private readonly SettingsWindow _owner;
         private readonly LangCatalog _lang;
@@ -216,19 +320,20 @@ public sealed class SettingsWindow : Window
         private readonly IReadOnlyList<AssociationGroup> _groups;
         private readonly Dictionary<string, CheckBox> _boxes = new(StringComparer.Ordinal);
         private readonly Button _applyButton;
-        private HashSet<string> _saved;
 
         /// <summary>接管前的默认程序（扩展名 → ProgID，空串表示当时没有）。撤销时按它还原。</summary>
         private readonly Dictionary<string, string> _originals;
 
-        public FileAssociationTab(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
+        private HashSet<string> _live = new(StringComparer.Ordinal);
+
+        public FileAssociationPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
         {
+            NavKey = "TEXT_SETTINGS_FILE_ASSOCIATION";
             _owner = owner;
             _lang = lang;
             _settings = settings;
             _settingsPath = settingsPath;
             _groups = FileAssociationCatalog.Supported(ArchiveFormatOption.OpenableExtensions);
-            _saved = ReadLiveSelection(settings, _groups);
             _originals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var original in AssociationOriginals.Decode(settings.GetString(AssociationOriginals.SettingKey)))
             {
@@ -237,7 +342,6 @@ public sealed class SettingsWindow : Window
 
             var titleRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             var title = SectionTitle(lang.Get("TEXT_SETTINGS_FILE_ASSOCIATION"));
-            title.Margin = new Thickness(0, 0, 0, 0);
             Grid.SetColumn(title, 0);
             titleRow.Children.Add(title);
 
@@ -250,7 +354,7 @@ public sealed class SettingsWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Padding = new Thickness(6, 0, 0, 0),
             };
-            defaultAppsLink.Click += (_, _) => OpenWindowsDefaultAppSettings();
+            defaultAppsLink.Click += (_, _) => OpenWindowsDefaultAppSettings(null);
             Grid.SetColumn(defaultAppsLink, 1);
             titleRow.Children.Add(defaultAppsLink);
 
@@ -258,7 +362,7 @@ public sealed class SettingsWindow : Window
             list.Children.Add(new TextBlock
             {
                 Text = lang.Get("TEXT_SETTINGS_ASSOC_HINT"),
-                Foreground = new SolidColorBrush(Color.Parse("#6B6B6B")),
+                Foreground = HintText,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 8),
             });
@@ -274,8 +378,8 @@ public sealed class SettingsWindow : Window
                         Content = association.Label,
                         Width = 120,
                         Margin = new Thickness(0, 2, 0, 2),
-                        IsChecked = _saved.Contains(association.Id),
                     };
+                    ToolTip.SetTip(box, string.Join(' ', association.Extensions.Select(x => "." + x)));
                     box.PropertyChanged += (_, e) =>
                     {
                         if (e.Property == ToggleButton.IsCheckedProperty)
@@ -283,7 +387,6 @@ public sealed class SettingsWindow : Window
                             UpdateApplyState();
                         }
                     };
-                    ToolTip.SetTip(box, string.Join(' ', association.Extensions.Select(x => "." + x)));
                     _boxes[association.Id] = box;
                     items.Children.Add(box);
                 }
@@ -337,24 +440,25 @@ public sealed class SettingsWindow : Window
             columns.Children.Add(side);
 
             Root = columns;
-            UpdateApplyState();
         }
+
+        public string NavKey { get; }
 
         public Control Root { get; }
 
-        /// <summary>「重置」= 重新读一遍系统实际状态，放弃窗口里没应用的改动。</summary>
-        public void Reset()
+        /// <summary>重新读一遍注册表 —— 这就是「重置」的语义：放弃没应用的改动，回到系统现状。</summary>
+        public void Reload()
         {
-            _saved = ReadLiveSelection(_settings, _groups);
+            _live = ReadLiveSelection(_settings, _groups);
             foreach (var (id, box) in _boxes)
             {
-                box.IsChecked = _saved.Contains(id);
+                box.IsChecked = _live.Contains(id);
             }
 
             UpdateApplyState();
         }
 
-        public void ApplyIfDirty()
+        public void Commit()
         {
             if (_applyButton.IsEnabled)
             {
@@ -373,26 +477,26 @@ public sealed class SettingsWindow : Window
         private HashSet<string> CurrentSelection()
             => _boxes.Where(pair => pair.Value.IsChecked == true).Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal);
 
-        private void UpdateApplyState() => _applyButton.IsEnabled = !CurrentSelection().SetEquals(_saved);
+        private void UpdateApplyState() => _applyButton.IsEnabled = !CurrentSelection().SetEquals(_live);
 
         private void Apply()
         {
             var desired = CurrentSelection();
-            if (desired.SetEquals(_saved))
+            if (desired.SetEquals(_live))
             {
                 return;
             }
 
             if (!OperatingSystem.IsWindows())
             {
-                Message(_owner, _lang.Get("TEXT_TITLE_SETTINGS"), _lang.Get("TEXT_SETTINGS_ASSOC_UNSUPPORTED"));
+                Message(_lang.Get("TEXT_TITLE_SETTINGS"), _lang.Get("TEXT_SETTINGS_ASSOC_UNSUPPORTED"));
                 return;
             }
 
             var executable = Environment.ProcessPath;
             if (string.IsNullOrEmpty(executable))
             {
-                Message(_owner, _lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
+                Message(_lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
                 return;
             }
 
@@ -400,8 +504,9 @@ public sealed class SettingsWindow : Window
             try
             {
                 var service = new FileAssociationService();
+                service.UseDoubleClick(SettingKeys.ParseDoubleClick(_settings.GetString(SettingKeys.DoubleClickAction)));
 
-                foreach (var id in desired.Except(_saved))
+                foreach (var id in desired.Except(_live))
                 {
                     var change = service.Register(FileAssociationCatalog.Find(id)!, executable);
                     blocked.AddRange(change.BlockedExtensions);
@@ -417,7 +522,7 @@ public sealed class SettingsWindow : Window
                 }
 
                 var restore = _originals.Select(pair => new AssociationOriginal(pair.Key, pair.Value)).ToList();
-                foreach (var id in _saved.Except(desired))
+                foreach (var id in _live.Except(desired))
                 {
                     var association = FileAssociationCatalog.Find(id)!;
                     service.Unregister(association, restore);
@@ -430,44 +535,28 @@ public sealed class SettingsWindow : Window
                 service.NotifyChanged();
 
                 _settings.SetStringList(AssociationSettingKey, desired);
-                // 存的是「还在我们手上的那些」：restore 是取消勾选之前的快照，拿它写回去会把
-                // 刚刚还原掉、并且已经从记录里删掉的扩展名又存回来。
                 _settings.SetString(
                     AssociationOriginals.SettingKey,
                     AssociationOriginals.Encode(_originals.Select(pair => new AssociationOriginal(pair.Key, pair.Value))));
                 _settings.Save(_settingsPath);
-                _saved = desired;
-                UpdateApplyState();
             }
             catch (Exception ex)
             {
-                Message(_owner, _lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + ex.Message);
+                Message(_lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + ex.Message);
                 return;
             }
+
+            Reload();
 
             if (blocked.Count > 0)
             {
-                // 被 UserChoice 挡住时不写提示就等于什么也没说：用户只会觉得“勾了没反应”。
-                Message(_owner,
-                    _lang.Get("TEXT_TITLE_SETTINGS"),
-                    _lang.Format("TEXT_SETTINGS_ASSOC_BLOCKED", ("list", string.Join(", ", blocked.Select(x => "." + x)))));
-                return;
+                // 改不动就别只弹一句“失败了”：直接把系统设置里对应扩展名的默认应用页开起来。
+                OpenWindowsDefaultAppSettings(blocked[0]);
             }
-
-            Message(_owner, _lang.Get("TEXT_TITLE_SETTINGS"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLIED"));
         }
 
-        private void Message(Window owner, string title, string text)
-            => _ = new MessageWindow(_lang, title, text).ShowDialog(owner);
+        private void Message(string title, string text) => _ = new MessageWindow(_lang, title, text).ShowDialog(_owner);
 
-        /// <summary>
-        /// 当前系统的真实勾选状态。
-        /// <para>
-        /// Windows 上直接问注册表，<strong>不</strong>拿设置文件当答案：设置文件记的是“上次写成功的
-        /// 那批”，而注册表会被别的软件改、被清理软件清、被用户手动撤销 —— 照它回显就会显示一堆
-        /// 勾着但实际没生效的项，用户点了「应用」也看不出自己已经点过了。
-        /// </para>
-        /// </summary>
         private static HashSet<string> ReadLiveSelection(AppSettings settings, IReadOnlyList<AssociationGroup> groups)
         {
             var offered = groups.SelectMany(g => g.Items).Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
@@ -505,24 +594,33 @@ public sealed class SettingsWindow : Window
             },
         };
 
-        private static void OpenWindowsDefaultAppSettings()
+        /// <param name="extension">要直接跳到的扩展名；null 表示打开默认应用总览页。</param>
+        private static void OpenWindowsDefaultAppSettings(string? extension)
         {
             if (!OperatingSystem.IsWindows())
             {
                 return;
             }
 
+            // Windows 11 认 fileExtension 参数，Windows 10 不认 —— 打不开就退回总览页。
+            var targeted = extension is null
+                ? "ms-settings:defaultapps"
+                : "ms-settings:defaultapps?fileExtension=." + extension;
+
             try
             {
-                // ms-settings: URI 只在 Windows 上有意义；失败也不该打扰设置流程。
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "ms-settings:defaultapps",
-                    UseShellExecute = true,
-                });
+                Process.Start(new ProcessStartInfo { FileName = targeted, UseShellExecute = true });
             }
             catch (Exception)
             {
+                try
+                {
+                    Process.Start(new ProcessStartInfo { FileName = "ms-settings:defaultapps", UseShellExecute = true });
+                }
+                catch (Exception)
+                {
+                    // 没有 shell 设置页可跳（精简系统 / 无桌面会话）时静默失败即可。
+                }
             }
         }
     }
