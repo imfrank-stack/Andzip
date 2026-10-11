@@ -1,7 +1,8 @@
 # Build output: all of it is regenerable, none of it belongs in a commit.
 # The one native binary that IS tracked is the staged engine under
 # src/Andzip.Native/runtimes/<rid>/native/ -- without it, "dotnet build" needs the
-# C++ toolchain and CI's managed jobs cannot run at all. See README section 4.1.
+# C++ toolchain and CI's managed jobs cannot run at all. See step 1 of the build
+# section in README.md.
 build/
 dist/
 [Bb]in/

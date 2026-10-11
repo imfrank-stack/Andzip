@@ -3,7 +3,7 @@ name: ci
 # The Windows job runs ci.ps1, the same gate a developer runs locally, so a green
 # badge here means the same thing as a green run on a workstation. The Linux and
 # macOS jobs cover the legs this machine cannot: they are the first time the engine
-# binaries are ever *executed* off Windows (README section 6 item 16).
+# binaries are ever *executed* off Windows (known-limitations list in the development record under docs/).
 
 on:
   push:
@@ -83,8 +83,8 @@ jobs:
   macos:
     name: macOS - engine (exploratory)
     runs-on: macos-latest
-    # The engine has never been compiled for macOS at all (README section 6, macOS
-    # row). Keep this job as a probe: it reports, it does not block.
+    # The engine has never been compiled for macOS at all (see the macOS row of the
+    # development record under docs/). Keep this job as a probe: it reports, it does not block.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

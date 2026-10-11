@@ -6,11 +6,11 @@
     1. compression engine: configure + build + 532 native assertions + export-table check
     2. managed solution build
     3. tests + packaging via build.ps1, which itself gates on
-       dotnet test (178) AND the console self-check (69)
+       dotnet test AND the console self-check (69)
 
   Why step 3 does not just call "dotnet test": Andzip.Native.Tests is a console
   runner without an xUnit adapter, so "dotnet test" silently runs zero of its
-  checks. build.ps1 runs it explicitly; see README section 7 item 11.
+  checks. build.ps1 runs it explicitly; see the development record under docs/ (section 7, item 11).
 
   Usage:
     powershell -ExecutionPolicy Bypass -File ci.ps1
