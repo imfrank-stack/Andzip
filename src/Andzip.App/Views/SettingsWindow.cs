@@ -211,8 +211,8 @@ public sealed class SettingsWindow : Window
     /// <summary>
     /// 常规页：双击行为 + 进度窗口能否按 Esc 取消。
     /// <para>
-    /// 双击那一项不是界面偏好开关 —— 它会改写注册表里所有 <c>Andzip.*</c> ProgID 的默认动词，
-    /// 所以在设置里改成「直接解压」之后，资源管理器里双击才真的跟着变。
+    /// 双击那一项不是界面偏好开关：程序启动时读它决定「开主窗口」还是「直接解压」，
+    /// 所以对已经关联出去的所有扩展名立即生效，不需要回头改注册表。
     /// </para>
     /// </summary>
     private sealed class GeneralPage : ISettingsPage
@@ -285,21 +285,14 @@ public sealed class SettingsWindow : Window
             var mode = _doubleClick.SelectedIndex == 1
                 ? ArchiveDoubleClick.ExtractDirectly
                 : ArchiveDoubleClick.OpenInAndzip;
-            var previous = SettingKeys.ParseDoubleClick(_settings.GetString(SettingKeys.DoubleClickAction));
 
             _settings.SetString(SettingKeys.DoubleClickAction, mode.ToStorage());
             _settings.SetBool(SettingKeys.AllowEscCancelProgress, _escCancel.IsChecked == true);
             _settings.Save(_settingsPath);
 
-            if (mode == previous || !OperatingSystem.IsWindows())
-            {
-                return;
-            }
-
-            // 双击动词只影响已经关联出去的格式；没关联的格式本来就不走我们。
-            var service = new FileAssociationService();
-            service.ApplyDoubleClickVerb(mode);
-            service.NotifyChanged();
+            // 这里刻意不碰注册表：双击行为是启动时读设置决定的，不是由哪个动词被调用决定的。
+            // 早先把默认动词改成 extract 的做法会留下「动词名写了、命令键不存在」的半截状态，
+            // Windows 找不到动词就退回 open，用户看到的就是“设了没反应”。
         }
     }
 
@@ -504,7 +497,6 @@ public sealed class SettingsWindow : Window
             try
             {
                 var service = new FileAssociationService();
-                service.UseDoubleClick(SettingKeys.ParseDoubleClick(_settings.GetString(SettingKeys.DoubleClickAction)));
 
                 foreach (var id in desired.Except(_live))
                 {

@@ -2,6 +2,35 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [0.9.4] - 2026-10-12（修复：设成「直接解压」后双击仍然弹主窗口）
+
+> 版本号 0.9.3 → **0.9.4**，BuildNo 13。
+
+### 修复
+- **双击行为绑在注册表动词上，留下半截状态**：用户实测「常规 → 直接解压」设完仍弹主窗口。
+  查注册表看到的就是症状本身 —— `Andzip.zip\shell` 的默认值被改成了 `extract`，但
+  `shell\extract\command` **根本不存在**（那棵 ProgID 是 v0.9.2 注册的，那时还没有 extract 动词），
+  Windows 找不到动词就退回 `open`，于是打开主窗口。
+  现在**行为改由程序启动时读设置决定**（`SettingKeys.ShouldExtractDirectly`）：注册表只负责
+  「双击把文件交给我们」，怎么处置是设置说了算。默认动词恒为 `open`，改设置对已关联的
+  所有扩展名立即生效，也不再依赖某个动词键是否存在。
+- **注册表里指着旧 exe**：同一台机器上那条命令写的是 `dist\Andzip-v0.9.2-win-x64.exe` ——
+  绿色版文件名带版本号，升级后旧路径仍然有效，而那个老二进制不认新行为。现在通过关联被拉起来时
+  会把自己命名空间下的 `Andzip.*` ProgID 命令行校正到当前运行的 exe（`FileAssociationService.RepairCommands`），
+  顺带补齐缺失的动词键。只动 `Andzip.*`，不碰别的软件登记的 ProgID。
+
+### 验证
+- `dotnet build Andzip.slnx` 0 警告 0 错误；`dotnet test` **235 / 235**（新增 6 条
+  `ShouldExtractDirectly` 判定用例）；`Andzip.Native.Tests` 69 条断言 0 失败。
+- **完全模拟双击**（只传文件路径、不带任何开关）：设置 = `extract` 时进程自己以 0 退出、
+  文件解到 `dl\` 下、不出现主窗口；设置改回 `open` 时同样的调用方式弹出主窗口并显示该包。
+- **注册表自修复实测**：修复前 `shell` 默认值是 `extract` 且没有 `shell\extract` 子键、命令指向
+  v0.9.2；跑过一次之后 —— 默认动词回到 `open`，`shell\extract\command` 存在，命令路径指向当前 exe，
+  `.zip` 默认值为 `Andzip.zip`。
+- 用户机器上原有的 `file_association_defaults` 记的是 `Bandizip.zip` / `Bandizip.7z` 等，
+  说明「接管前记下原默认程序」这条路径本身是好的，撤销时能把默认值还给 Bandizip。
+- 真机双击（资源管理器里）仍待用户确认 —— 见 README 第九节第 9 条。
+
 ## [未发布] - 2026-10-12（体积构成实测记录，无代码改动）
 
 ### 变更

@@ -46,6 +46,19 @@ public class SettingKeysTests
         Assert.Equal(Path.Combine(Path.GetTempPath(), "andzip-dst", "集训队证件照"), destination);
     }
 
+    [Theory]
+    [InlineData(null, false, false)]
+    [InlineData("open", false, false)]
+    [InlineData("extract", false, true)]
+    [InlineData(null, true, true)]
+    [InlineData("open", true, true)]
+    [InlineData("garbage", true, true)]
+    public void ShouldExtractDirectly_HonoursSettingOrExplicitSwitch(string? stored, bool explicitSwitch, bool expected)
+    {
+        // 注册表里双击只会调用 shell\open\command，行为全靠这个判断 —— 不能再依赖动词是否存在。
+        Assert.Equal(expected, SettingKeys.ShouldExtractDirectly(stored, explicitSwitch));
+    }
+
     [Fact]
     public void DirectExtractDestination_UsesOnlyTheFirstExtension()
     {

@@ -1,3 +1,4 @@
+using Andzip.App.Services;
 using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia;
@@ -23,9 +24,15 @@ public sealed class App : Application
             var settings = AppSettings.Load(AppSettings.DefaultFilePath);
             var target = desktop.Args?.FirstOrDefault(IsExistingFile);
 
-            // 「双击直接解压」：注册表 shell\extracterb 带着 /extract 拉起来。
+            if (target is not null)
+            {
+                RepairStaleRegistrations();
+            }
+
+            // 「双击直接解压」：要么命令行显式带 /extract，要么常规设置里把双击行为选成了直接解压。
             // 这条路径不建主窗口，所以生命周期要改成显式关闭，否则没有主窗口会让进程立刻退出。
-            if (target is not null && HasSwitch(desktop.Args))
+            if (target is not null && SettingKeys.ShouldExtractDirectly(
+                    settings.GetString(SettingKeys.DoubleClickAction), HasSwitch(desktop.Args)))
             {
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 _ = DirectExtract.RunAsync(lang, settings, target, desktop);
@@ -51,4 +58,34 @@ public sealed class App : Application
 
     private static bool HasSwitch(IEnumerable<string>? arguments)
         => arguments?.Any(a => a.Equals(SettingKeys.ExtractSwitch, StringComparison.OrdinalIgnoreCase)) == true;
+
+    /// <summary>
+    /// 把注册表里指向旧 exe 的命令行校正到当前这个文件。
+    /// <para>
+    /// 绿色版的文件名带版本号，升级之后注册表里那条命令还指着上一个 exe，而那个老二进制不认
+    /// 新行为 —— 用户看到的就是「关联做了、设置也改了，双击还是老样子」。启动时顺手把自己
+    /// 命名空间下的键校正过来，就不必每次升级都重做一遍关联。
+    /// </para>
+    /// <para>只在真的通过关联被拉起来时做（否则首次运行会平白写一次注册表），且只动 <c>Andzip.*</c>。</para>
+    /// </summary>
+    private static void RepairStaleRegistrations()
+    {
+        if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(Environment.ProcessPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var service = new FileAssociationService();
+            if (service.RepairCommands(Environment.ProcessPath) > 0)
+            {
+                service.NotifyChanged();
+            }
+        }
+        catch (Exception)
+        {
+            // 修不动就算了：命令行本身仍然可用，不该因为校正注册表失败就拒绝解压。
+        }
+    }
 }

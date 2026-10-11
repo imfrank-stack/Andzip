@@ -31,6 +31,18 @@ public static class SettingKeys
             ? ArchiveDoubleClick.ExtractDirectly
             : ArchiveDoubleClick.OpenInAndzip;
 
+    /// <summary>
+    /// 这次启动要不要「直接解压」而不是打开主窗口。
+    /// <para>
+    /// 行为由<strong>设置</strong>决定，而不是由注册表里哪个动词被调用决定 —— 后者踩过坑：
+    /// 把 <c>shell</c> 默认值改成 <c>extract</c> 之后，老版本注册出来的 ProgID 里根本没有
+    /// <c>shell\extract\command</c>，Windows 找不到动词就退回 <c>open</c>，表现成「设了没用」。
+    /// 而且绿色版的文件名带版本号，升级后注册表里那条命令还指着上一个 exe。
+    /// </para>
+    /// </summary>
+    public static bool ShouldExtractDirectly(string? storedSetting, bool hasExplicitSwitch)
+        => hasExplicitSwitch || ParseDoubleClick(storedSetting) == ArchiveDoubleClick.ExtractDirectly;
+
     /// <summary>双击解压的落盘位置：压缩包所在目录下一个与压缩包同名的文件夹。</summary>
     public static string DirectExtractDestination(string archivePath)
     {
