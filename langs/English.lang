@@ -222,6 +222,19 @@ TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = Only opens once extraction actually fi
 TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS     = Keep the progress window open when extraction finishes
 TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = Applies to "Extract files" in the main window only. The right-click and double-click paths still disappear when done, deliberately, and do not follow this setting.
 
+; ---- Settings: view page / language page ----
+TEXT_SETTINGS_VIEW_TITLE                = View settings
+TEXT_SETTINGS_VIEW_TOOLBAR              = Show the toolbar
+TEXT_SETTINGS_VIEW_STATUS               = Show the status bar (summary line at the bottom)
+TEXT_SETTINGS_VIEW_TREE                 = Show the folder tree
+TEXT_SETTINGS_VIEW_ICON_DEFAULT         = Open archives in icon view
+TEXT_SETTINGS_VIEW_AUTO_EXPAND          = Expand folders in the tree automatically
+TEXT_SETTINGS_VIEW_APPLY_HINT           = The toolbar applies at once; the rest apply the next time an archive is opened (or as soon as this dialog closes if one is already open).
+TEXT_SETTINGS_LANGUAGE_TITLE            = Language
+TEXT_SETTINGS_LANGUAGE_LABEL            = Interface language
+TEXT_SETTINGS_LANGUAGE_HINT             = The list comes from the language packs actually loaded (files under langs/ next to the program first, otherwise the embedded ones), so everything here is genuinely selectable.
+TEXT_SETTINGS_LANGUAGE_RESTART          = Changing language only fully applies after restarting Andzip: menu, toolbar and title text are read once when the UI is built and then fixed onto the controls.
+
 [MENU]
 MENUSTR_FILE                            = &File
 MENUSTR_EDIT                            = &Edit

@@ -89,6 +89,30 @@ public static class SettingKeys
     /// </summary>
     public const string ExtractKeepProgress = "extract_keep_progress_window";
 
+    // ------------------------------------------------------------- 查看页
+    //
+    // 这一组影响的是"界面骨架露哪几块"，MainWindow 在设置对话框关掉后会重新应用一次，
+    // 所以改完立刻见效，不用重启。
+
+    public const string ViewShowToolBar = "view_show_toolbar";
+    public const string ViewShowStatusBar = "view_show_status_bar";
+    public const string ViewShowTree = "view_show_tree";
+
+    /// <summary>打开压缩包时先用图标视图而不是详情列表。</summary>
+    public const string ViewIconByDefault = "view_icon_by_default";
+
+    /// <summary>树形目录里的文件夹是否预先展开。</summary>
+    public const string ViewAutoExpandTree = "view_auto_expand_tree";
+
+    // ------------------------------------------------------------- 语言页
+
+    /// <summary>
+    /// 界面语言（<c>SimpChinese</c> / <c>English</c>，取语言包文件名）。
+    /// <para>换语言要重启才全面生效：菜单、工具栏、标题栏这些文案是在构造时从语言包取一次
+    /// 就固化到控件上的，翻 <c>LangCatalog</c> 只会影响之后新建的界面。这一点在界面上要如实告诉用户。</para>
+    /// </summary>
+    public const string Language = "language";
+
     /// <summary>认不出来回落到 <see cref="OutputFolderMode.LastUsed"/> —— 那是改动前的行为。</summary>
     public static OutputFolderMode ParseOutputFolderMode(string? stored)
         => stored?.Trim().ToLowerInvariant() == "fixed" ? OutputFolderMode.Fixed : OutputFolderMode.LastUsed;

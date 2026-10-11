@@ -147,4 +147,56 @@ public class SettingsDefaultsTests
         Assert.False(loaded.OpenFolderAfterExtract);
         Assert.False(loaded.KeepProgressWindow);
     }
+
+    // ---------- ViewDefaults（设置 → 查看） ----------
+
+    [Fact]
+    public void ViewDefaults_FallbackShowsEverything()
+    {
+        // 这一页之前的界面是"全都在、默认详情列表"。缺省必须一模一样，
+        // 否则更新完设置文件不存在（或被删过）的用户会发现工具栏不见了。
+        var loaded = ViewDefaults.Load(new AppSettings());
+
+        Assert.Equal(ViewDefaults.Fallback, loaded);
+        Assert.True(loaded.ShowToolBar);
+        Assert.True(loaded.ShowStatusBar);
+        Assert.True(loaded.ShowTree);
+        Assert.False(loaded.IconViewByDefault);
+        Assert.True(loaded.AutoExpandTree);
+    }
+
+    [Fact]
+    public void ViewDefaults_RoundTripsIncludingTheOffCases()
+    {
+        var wanted = new ViewDefaults(
+            ShowToolBar: false, ShowStatusBar: false, ShowTree: false,
+            IconViewByDefault: true, AutoExpandTree: false);
+
+        var settings = new AppSettings();
+        wanted.Save(settings);
+
+        Assert.Equal(wanted, ViewDefaults.Load(settings));
+    }
+
+    [Fact]
+    public void ViewDefaults_TurningTheToolBarOffSurvivesAReLoad()
+    {
+        // "关掉的项"是最容易写错的一类：存储用 "0"，而 GetBool 的缺省是 true，
+        // 一旦键被误删就会变成"关不掉"。
+        var settings = new AppSettings();
+        (ViewDefaults.Fallback with { ShowToolBar = false }).Save(settings);
+
+        Assert.True(settings.Has(SettingKeys.ViewShowToolBar));
+        Assert.False(ViewDefaults.Load(settings).ShowToolBar);
+    }
+
+    [Fact]
+    public void LanguageKey_AbsentMeansNoPreference()
+    {
+        // 没设置过语言时 LangLoader 要走它自己的回退（SimpChinese），
+        // 所以这里必须是 null 而不是空串 —— 空串会被当成一个查不到的语言代码。
+        var settings = new AppSettings();
+
+        Assert.Equal(string.Empty, settings.GetString(SettingKeys.Language));
+    }
 }

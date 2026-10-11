@@ -67,10 +67,10 @@ public sealed class SettingsWindow : Window
             new ContextMenuPage(this, lang, settings, settingsPath),
             new ExtractionPage(lang, settingsPath),
             new CompressionPage(this, lang, settings, settingsPath),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_VIEW"),
+            new ViewPage(lang, settings, settingsPath),
             new PlaceholderPage(lang, "TEXT_SETTINGS_SECURITY"),
             new PlaceholderPage(lang, "TEXT_SETTINGS_ADVANCED"),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_LANGUAGE"),
+            new LanguagePage(lang, settings, settingsPath),
         ];
 
         var nav = new StackPanel { Spacing = 2, Margin = new Thickness(0, 14, 0, 0) };
@@ -972,6 +972,233 @@ public sealed class SettingsWindow : Window
             var settings = AppSettings.Load(_settingsPath);
             desired.Save(settings);
             settings.Save(_settingsPath);
+            Reload();
+        }
+    }
+
+    /// <summary>
+    /// 查看页：界面骨架露哪几块。
+    /// <para>
+    /// 只放真正接得上线的五块。参考软件这一页上的「列设置」「图像预览」「压缩文件注释」「置顶」
+    /// 「颜色设置」「视图样式子菜单」都没做 —— 前四个对应的功能本身还不存在，
+    /// 摆一个勾了什么都不发生的复选框比不做更糟。
+    /// </para>
+    /// </summary>
+    private sealed class ViewPage : ISettingsPage
+    {
+        private readonly string _settingsPath;
+        private readonly CheckBox _toolBar;
+        private readonly CheckBox _statusBar;
+        private readonly CheckBox _tree;
+        private readonly CheckBox _iconDefault;
+        private readonly CheckBox _autoExpand;
+        private readonly Button _applyButton;
+
+        private ViewDefaults _live = ViewDefaults.Fallback;
+
+        public ViewPage(LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_VIEW";
+            _settingsPath = settingsPath;
+
+            _toolBar = Check(lang.Get("TEXT_SETTINGS_VIEW_TOOLBAR"), UpdateApplyState);
+            _statusBar = Check(lang.Get("TEXT_SETTINGS_VIEW_STATUS"), UpdateApplyState);
+            _tree = Check(lang.Get("TEXT_SETTINGS_VIEW_TREE"), UpdateApplyState);
+            _iconDefault = Check(lang.Get("TEXT_SETTINGS_VIEW_ICON_DEFAULT"), UpdateApplyState);
+            _autoExpand = Check(lang.Get("TEXT_SETTINGS_VIEW_AUTO_EXPAND"), UpdateApplyState);
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 24, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_VIEW_TITLE")));
+            panel.Children.Add(_toolBar);
+            panel.Children.Add(_statusBar);
+            panel.Children.Add(_tree);
+            panel.Children.Add(_iconDefault);
+            panel.Children.Add(_autoExpand);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_VIEW_APPLY_HINT")));
+            panel.Children.Add(_applyButton);
+
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _live = ViewDefaults.Load(AppSettings.Load(_settingsPath));
+            _toolBar.IsChecked = _live.ShowToolBar;
+            _statusBar.IsChecked = _live.ShowStatusBar;
+            _tree.IsChecked = _live.ShowTree;
+            _iconDefault.IsChecked = _live.IconViewByDefault;
+            _autoExpand.IsChecked = _live.AutoExpandTree;
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private ViewDefaults Selection() => new(
+            _toolBar.IsChecked == true,
+            _statusBar.IsChecked == true,
+            _tree.IsChecked == true,
+            _iconDefault.IsChecked == true,
+            _autoExpand.IsChecked == true);
+
+        private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
+
+        private void Apply()
+        {
+            var desired = Selection();
+            if (desired.Equals(_live))
+            {
+                return;
+            }
+
+            var settings = AppSettings.Load(_settingsPath);
+            desired.Save(settings);
+            settings.Save(_settingsPath);
+            Reload();
+        }
+    }
+
+    /// <summary>
+    /// 语言页：从<strong>实际加载到的</strong>语言包里列出候选，而不是写死两个名字。
+    /// <para>
+    /// 这样程序目录 <c>langs/</c> 下多放一份 <c>Russian.lang</c>，这一页就会多一项，
+    /// 而且选了确实能切 —— 不会出现"列表里有、切过去又回退"的假选项。
+    /// </para>
+    /// <para>
+    /// 换语言要重启才全面生效：菜单、工具栏、标题这些文案是在控件构造时取一次就固化了的。
+    /// 这一点如实写在页面上，而不是假装立刻生效。
+    /// </para>
+    /// </summary>
+    private sealed class LanguagePage : ISettingsPage
+    {
+        private readonly LangCatalog _catalog;
+        private readonly string _settingsPath;
+        private readonly ComboBox _language;
+        private readonly Button _applyButton;
+
+        private string _live;
+
+        public LanguagePage(LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_LANGUAGE";
+            _catalog = lang;
+            _settingsPath = settingsPath;
+            _live = settings.GetString(SettingKeys.Language) is { Length: > 0 } stored
+                ? stored : lang.CurrentLanguage;
+
+            _language = new ComboBox
+            {
+                ItemsSource = lang.Languages
+                    .OrderBy(code => code, StringComparer.Ordinal)
+                    .Select(code => new DisplayItem(lang.GetLanguageDisplayName(code), code))
+                    .ToList(),
+                Width = 260,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _language.SelectionChanged += (_, _) => UpdateApplyState();
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 20, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 12,
+                Margin = new Thickness(0, 20, 0, 0),
+            };
+            row.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_LANGUAGE_LABEL"),
+                Width = 170,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            row.Children.Add(_language);
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_LANGUAGE_TITLE")));
+            panel.Children.Add(row);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_LANGUAGE_HINT")));
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_LANGUAGE_RESTART")));
+            panel.Children.Add(_applyButton);
+
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _live = AppSettings.Load(_settingsPath).GetString(SettingKeys.Language) is { Length: > 0 } stored
+                ? stored : _catalog.CurrentLanguage;
+            Select(_live);
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private void Select(string code)
+        {
+            // 设置里存了一个当前没有的语言包（换机器、删了 langs/）时别硬塞：
+            // 停在列表第一项，用户看得见也能马上改，比一个空白框好。
+            var match = _language.Items.OfType<DisplayItem>()
+                .FirstOrDefault(item => string.Equals((string?)item.Value, code, StringComparison.OrdinalIgnoreCase));
+            _language.SelectedItem = match ?? _language.Items.OfType<DisplayItem>().FirstOrDefault();
+        }
+
+        private string? Selection() => (_language.SelectedItem as DisplayItem)?.Value as string;
+
+        private void UpdateApplyState()
+            => _applyButton.IsEnabled = Selection() is { } chosen
+               && !string.Equals(chosen, _live, StringComparison.OrdinalIgnoreCase);
+
+        private void Apply()
+        {
+            if (Selection() is not { } chosen)
+            {
+                return;
+            }
+
+            var settings = AppSettings.Load(_settingsPath);
+            settings.SetString(SettingKeys.Language, chosen);
+            settings.Save(_settingsPath);
+
+            // 当场把目录翻过去：之后新建的界面（对话框、下次打开的压缩包视图）立刻是新语言，
+            // 已经画好的那些要等重启。两者都如实如此，不做"看起来全变了"的假动作。
+            _catalog.SetLanguage(chosen);
             Reload();
         }
     }

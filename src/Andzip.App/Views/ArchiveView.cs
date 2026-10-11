@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
+using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
@@ -55,8 +56,19 @@ internal sealed class ArchiveView : IDisposable
     private readonly Dictionary<ArchiveFolderNode, TreeViewItem> _treeItems = new();
     private readonly ColumnSpec[] _columns;
     private readonly double[] _columnWidths = [.. DefaultColumnWidths];
+    private readonly ViewDefaults _view;
 
     private readonly TreeView _tree = new();
+    private readonly Border _treePane = new() { Background = Brushes.White };
+    private readonly GridSplitter _splitter = new()
+    {
+        Width = 4,
+        Background = new SolidColorBrush(Color.Parse("#D6D6D6")),
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        VerticalAlignment = VerticalAlignment.Stretch,
+        ResizeDirection = GridResizeDirection.Columns,
+        ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+    };
     private readonly ContentControl _detailHost = new();
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 4, 0) };
     private readonly Button _listToggle;
@@ -70,10 +82,16 @@ internal sealed class ArchiveView : IDisposable
     private CancellationTokenSource? _navigateCts;
     private Task<ArchiveContentSession?>? _session;
 
-    public ArchiveView(LangCatalog lang, ArchiveListing listing)
+    /// <summary>
+    /// 压缩包视图（FR-4）：树 + 详情列表 / 图标视图 + 底部栏。
+    /// </summary>
+    /// <param name="view">「设置 → 查看」带来的界面骨架选择：树要不要、状态栏要不要、
+    /// 开出来是列表还是图标。默认全开、默认列表 —— 与引入这一页之前完全一致。</param>
+    public ArchiveView(LangCatalog lang, ArchiveListing listing, ViewDefaults? view = null)
     {
         _lang = lang;
         _listing = listing;
+        _view = view ?? ViewDefaults.Fallback;
         _root = ArchiveHierarchy.Build(listing);
         _current = _root;
         _columns = BuildColumns(lang);
@@ -81,6 +99,9 @@ internal sealed class ArchiveView : IDisposable
         _listToggle = ViewBar.Toggle(ViewIcon.List, lang.Get("TEXT_VIEW_DETAILS"), () => SetIconView(false));
         _iconToggle = ViewBar.Toggle(ViewIcon.Grid, lang.Get("TEXT_VIEW_ICONS"), () => SetIconView(true));
         _locateButton = ViewBar.Toggle(ViewIcon.Folder, lang.Get("TEXT_OPEN_ARCHIVE_LOCATION"), () => RevealArchive());
+
+        // 图标视图要在建树之前定下来：Render() 会按它生成详情区内容。
+        _iconView = _view.IconViewByDefault;
 
         BuildTree();
         Render();
@@ -95,27 +116,27 @@ internal sealed class ArchiveView : IDisposable
 
     private Control BuildLayout()
     {
-        var treePane = new Border { Background = Brushes.White, Child = _tree };
-
-        var splitter = new GridSplitter
-        {
-            Width = 4,
-            Background = new SolidColorBrush(Color.Parse("#D6D6D6")),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            ResizeDirection = GridResizeDirection.Columns,
-            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
-        };
+        _treePane.Child = _tree;
 
         var detailPane = new Border { Background = Brushes.White, Child = _detailHost };
 
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("300,4,*") };
-        Grid.SetColumn(treePane, 0);
-        Grid.SetColumn(splitter, 1);
+        // 关掉树的时候把两列宽度一起归零，只藏控件不够 —— Grid 仍会给 300px 与 4px 留位置，
+        // 结果是一条拖不动也点不到的空白。
+        var body = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions(_view.ShowTree ? "300,4,*" : "0,0,*"),
+        };
+        _treePane.IsVisible = _view.ShowTree;
+        _splitter.IsVisible = _view.ShowTree;
+
+        Grid.SetColumn(_treePane, 0);
+        Grid.SetColumn(_splitter, 1);
         Grid.SetColumn(detailPane, 2);
-        body.Children.Add(treePane);
-        body.Children.Add(splitter);
+        body.Children.Add(_treePane);
+        body.Children.Add(_splitter);
         body.Children.Add(detailPane);
+
+        _status.IsVisible = _view.ShowStatusBar;
 
         var panel = new DockPanel();
         var bar = ViewBar.Create(_listToggle, _iconToggle, _locateButton, _status);
@@ -155,6 +176,10 @@ internal sealed class ArchiveView : IDisposable
             Tag = node,
         };
         _treeItems[node] = item;
+
+        // 根节点始终展开（不展开就什么都看不见），这一项管的是里面那些子文件夹
+        // 要不要预先摊开。关掉它，深包打开时是一棵收起来的树，一层层自己点。
+        item.IsExpanded = _view.AutoExpandTree;
 
         foreach (var child in node.Folders)
         {

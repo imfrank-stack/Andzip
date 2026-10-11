@@ -20,9 +20,12 @@ public sealed class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // 语言包：程序目录 langs/ 优先（便携覆盖），否则用内嵌资源（单文件绿色版）。
-            var lang = LangLoader.CreateCatalog(typeof(App).Assembly, AppContext.BaseDirectory);
+            // 设置要先读：语言页存的那一项决定界面用什么语言，而语言包一旦建成就到处引用。
             var settings = AppSettings.Load(AppSettings.DefaultFilePath);
+
+            // 语言包：程序目录 langs/ 优先（便携覆盖），否则用内嵌资源（单文件绿色版）。
+            var lang = LangLoader.CreateCatalog(
+                typeof(App).Assembly, AppContext.BaseDirectory, PreferredLanguage(settings));
             var target = desktop.Args?.FirstOrDefault(IsExistingPath);
 
             if (target is not null)
@@ -51,6 +54,12 @@ public sealed class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static string? PreferredLanguage(AppSettings settings)
+    {
+        var stored = settings.GetString(SettingKeys.Language);
+        return string.IsNullOrWhiteSpace(stored) ? null : stored;
     }
 
     /// <summary>

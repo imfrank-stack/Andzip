@@ -222,6 +222,19 @@ TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = 只在真的解完之后打开；失�
 TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS     = 解压完成后不关闭进度窗口
 TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = 只作用于主窗口的「解压文件」。右键与双击那条路径跑完即消失，是有意为之，不跟随这一项。
 
+; ---- 设置：查看页 / 语言页 ----
+TEXT_SETTINGS_VIEW_TITLE                = 查看设置
+TEXT_SETTINGS_VIEW_TOOLBAR              = 显示工具栏
+TEXT_SETTINGS_VIEW_STATUS               = 显示状态栏（底部那行汇总）
+TEXT_SETTINGS_VIEW_TREE                 = 显示树形目录
+TEXT_SETTINGS_VIEW_ICON_DEFAULT         = 打开压缩包时默认用图标视图
+TEXT_SETTINGS_VIEW_AUTO_EXPAND          = 自动展开树里的文件夹
+TEXT_SETTINGS_VIEW_APPLY_HINT           = 工具栏立即生效；其余几项在下次打开压缩包时生效（正看着包的时候，关掉设置窗口就会重画）。
+TEXT_SETTINGS_LANGUAGE_TITLE            = 语言
+TEXT_SETTINGS_LANGUAGE_LABEL            = 界面语言
+TEXT_SETTINGS_LANGUAGE_HINT             = 列表来自实际加载到的语言包（程序目录 langs/ 优先，否则用内嵌的那几份），所以这里出现的都是真能选的。
+TEXT_SETTINGS_LANGUAGE_RESTART          = 换语言要重启 Andzip 才全面生效：菜单、工具栏与标题这些文案是在界面构造时取一次就固化到控件上的。
+
 [MENU]
 MENUSTR_FILE                            = 文件(&F)
 MENUSTR_EDIT                            = 编辑(&E)

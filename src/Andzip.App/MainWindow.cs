@@ -35,14 +35,19 @@ public sealed class MainWindow : Window
     private readonly LangCatalog _lang;
     private readonly ContentControl _contentHost = new();
     private readonly Control _homeContent;
+    private readonly Control _toolBar;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
     private readonly AppSettings _settings;
+
+    /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
+    private ViewDefaults _view;
 
     public MainWindow(LangCatalog lang, AppSettings settings)
     {
         _lang = lang;
         _settings = settings;
+        _view = ViewDefaults.Load(settings);
 
         Title = EngineTitle;
         Width = 1040;
@@ -72,18 +77,29 @@ public sealed class MainWindow : Window
         root.Children.Add(menuBar);
 
         // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
-        var toolBar = MainToolBar.Create(_lang, new MainToolBarActions(
+        _toolBar = MainToolBar.Create(_lang, new MainToolBarActions(
             OpenArchive: OpenArchiveAsync,
             ExtractArchive: ExtractArchiveAsync,
             NewArchive: OpenNewArchiveDialog));
-        DockPanel.SetDock(toolBar, Dock.Top);
-        root.Children.Add(toolBar);
+        DockPanel.SetDock(_toolBar, Dock.Top);
+        root.Children.Add(_toolBar);
 
         root.Children.Add(_contentHost);
 
         Content = root;
         ShowHome();
+        ApplyViewDefaults();
         RegisterShortcuts(commands);
+    }
+
+    /// <summary>
+    /// 把「设置 → 查看」应用到当前窗口。工具栏是这里唯一能立刻生效的一块 ——
+    /// 树、状态栏、视图样式属于压缩包视图内部，那些是在下次打开包（或本就在看包时重开视图）时生效。
+    /// </summary>
+    private void ApplyViewDefaults()
+    {
+        _view = ViewDefaults.Load(_settings);
+        _toolBar.IsVisible = _view.ShowToolBar;
     }
 
     // ---------- 视图切换 ----------
@@ -100,7 +116,7 @@ public sealed class MainWindow : Window
     private void ShowArchiveView(ArchiveListing listing)
     {
         _browser?.Dispose();
-        _browser = new ArchiveView(_lang, listing);
+        _browser = new ArchiveView(_lang, listing, _view);
         _listing = listing;
         _contentHost.Content = _browser.Root;
         Title = $"{Path.GetFileName(listing.ArchivePath)} - {BaseTitle}";
@@ -139,11 +155,28 @@ public sealed class MainWindow : Window
 
     // ---------- 命令 ----------
 
-    /// <summary>设置窗口（F5，FR-5）：模态，与参考软件一致。</summary>
-    private void OpenSettingsDialog()
+    /// <summary>
+    /// 设置窗口（F5，FR-5）：模态，与参考软件一致。
+    /// <para>关掉之后重新应用一次「查看」那组设置 —— 不然用户勾掉工具栏要重启才看得见效果，
+    /// 而那看起来就像设置没生效。</para>
+    /// </summary>
+    private async void OpenSettingsDialog()
     {
         var dialog = new SettingsWindow(_lang, _settings, AppSettings.DefaultFilePath);
-        _ = dialog.ShowDialog(this);
+        await dialog.ShowDialog(this);
+        ApplyViewDefaults();
+
+        // 树、状态栏、默认视图样式是压缩包视图内部的构造期决定，重开一次视图才看得到。
+        // 但要看用户此刻停在哪一面：正看着首页就别把人扔进压缩包视图。
+        if (_listing is not null && _browser is not null)
+        {
+            var wasShowingHome = ReferenceEquals(_contentHost.Content, _homeContent);
+            ShowArchiveView(_listing);
+            if (wasShowingHome)
+            {
+                ShowHome();
+            }
+        }
     }
 
     /// <summary>
