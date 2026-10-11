@@ -714,15 +714,19 @@ internal sealed class ArchiveView : IDisposable
 
     /// <summary>
     /// 属性列：参考软件用三个字符位显示 Win32 属性（<c>D__</c> / <c>A__</c> / <c>R__</c>…）。
-    /// 第一位是目录位（否则取存档位），后两位是只读与隐藏。格式没存属性时留空，不猜。
+    /// 第一位是目录位（否则取存档位），后两位是只读与隐藏。
+    /// <para>
+    /// 只看低 16 位：ZIP 的外部属性字段高 16 位装的是 Unix mode（Python 的 zipfile 就写
+    /// <c>081A00000</c> 这种值），整字去测 D/A 位会一个都测不到。
+    /// </para>
+    /// <para>格式没存属性时按 Windows 建条目时的默认值补（目录 D、文件 A），留一列空白没有意义。</para>
     /// </summary>
     private static string AttributeText(ArchiveEntryInfo entry)
     {
         const uint readOnlyFlag = 0x01, hiddenFlag = 0x02, directoryFlag = 0x10, archiveFlag = 0x20;
 
-        // 很多包（尤其 ZIP 的简写入方）不存外部属性。这时按 Windows 建条目时的默认值补：
-        // 目录补 D、文件补 A —— 参考软件也是这么显示的，留一列空白没有意义。
-        var attributes = entry.Attributes ?? (entry.IsDirectory ? directoryFlag : archiveFlag);
+        var stored = (entry.Attributes ?? 0) & 0xFFFF;
+        var attributes = stored != 0 ? stored : (entry.IsDirectory ? directoryFlag : archiveFlag);
         var first = (attributes & directoryFlag) != 0 ? 'D' : (attributes & archiveFlag) != 0 ? 'A' : '_';
         var second = (attributes & readOnlyFlag) != 0 ? 'R' : '_';
         var third = (attributes & hiddenFlag) != 0 ? 'H' : '_';

@@ -16,7 +16,7 @@ Bandizip 风格的压缩工具：C#（Avalonia）界面 + C/C++ 压缩内核。�
 | Windows x64 全量构建（引擎 + 界面 + 测试） | ✅ 已通过，0 警告（`PROPVARIANT` 修复后重建） |
 | 单元测试 | ✅ **788 项断言全部通过**（原生 532 ×2 种链接方式 + Core 187 + 外壳 69），Core 连续 5 次运行稳定 |
 | 间歇性 0xC0000005（测试主机崩溃） | ✅ **已定位并修复**，见第七节第 10 条；修复后 69,000 次写入往返 0 崩溃 |
-| 单文件绿色版打包（trim + 压缩 + 内嵌 native） | ✅ 19.66 MB，已验证运行时能加载引擎（标题栏报告内核版本与格式数） |
+| 单文件绿色版打包（trim + 压缩 + 内嵌 native） | ✅ **19.47 MB**，已验证运行时能加载引擎（标题栏报告内核版本与格式数） |
 | 界面实际运行 | ✅ 绿色版直接启动并正常关闭；首页 / 打开压缩包 / 树导航 / 图标视图已逐屏截图核对；azcore 命令行往返 + SHA-256 逐文件复核 3/3 一致 |
 | Linux x86_64 / aarch64 动态库、x86_64 静态库 | ✅ 修复后重新交叉编译，导出符号三侧核对一致（41 个）；❌ **未在这些平台运行过** |
 | macOS | ❌ 本机无 Apple SDK，未构建 |
@@ -218,6 +218,22 @@ powershell -ExecutionPolicy Bypass -File run.ps1 -Check # 只构建 + 跑两套�
 **如果显示 `compression engine unavailable`，就是第 1 步没做或没暂存成功。**
 
 ### 5. 打包单文件绿色版
+
+打包体积的实测结论（别再重复试错）：
+
+| 开关 | 结果 |
+|---|---|
+| 自包含 + `PublishTrimmed` + `TrimMode=full` + `EnableCompressionInSingleFile` | 19.72 MB（基线） |
+| 再加 `DebuggerSupport=false` + `EventSourceSupport=false` + `MetadataTrimming=complete` | **19.47 MB** ✅ 已进 `build.ps1` |
+| 改框架依赖（`--self-contained false`） | ❌ **25.18 MB，反而更大**：不能裁剪，而 Skia / ANGLE / HarfBuzz / 内核这些原生库占了大头且单文件包里压不动 |
+| `UseSystemResourceKeys=true` | ❌ 体积零收益，还会把框架异常文案换成资源**键**，而错误框是直接显示 `ex.Message` 的 |
+| 手工摘掉 `mscordaccore` / `mscordbi` / `DiaSymReader` | ❌ 后两个本来就不进 bundle，实测差 30 字节，不值得为它加一个 MSBuild target |
+
+包内体积构成（未打包前 44 MB）：`libSkiaSharp` 9.0 MB、`av_libglesv2` 5.2 MB、`coreclr` 4.4 MB、
+`System.Private.CoreLib` 2.7 MB、`libHarfBuzzSharp` 1.7 MB、`andzip_core` 1.7 MB、
+`Avalonia.Base` 1.5 MB —— 也就是说剩下的量基本都在渲染栈与内核上，再往下压要么换渲染后端，
+要么放弃单文件。
+
 
 ```powershell
 pwsh build.ps1                 # 版本号 → 单元测试（不过就拒绝打包）→ 发布 → 体积核对
@@ -695,7 +711,7 @@ zip / 7z 不较真，tar 较真。
 退出当失败，否则「测试全绿」这句话会漏掉 69 条 ABI/句柄生命周期检查。
 
 构建 0 警告；`build.ps1` 全流水线（版本号 → 测试门禁 → 发布 → 字节扫描确认内核已内嵌 → 体积）
-退出码 0，产物 `dist/Andzip-v0.9.0-win-x64.exe` **19.66 MB**（预算 25 MB）。
+退出码 0，产物 `dist/Andzip-v0.9.0-win-x64.exe` **19.47 MB**（预算 25 MB）。
 
 Core 测试的覆盖面：ABI 协商、格式/编解码器表、内存与目录往返、三种口令方案、进度与取消、
 路径穿越、非法文件名清洗、智能解压、分卷命名与拼接、GZ/TGZ 约束、语言包解析与键覆盖、
@@ -715,7 +731,7 @@ Core 测试的覆盖面：ABI 协商、格式/编解码器表、内存与目录�
 | `dotnet build Andzip.slnx -c Release` | ✅ 成功，0 警告 0 错误，4.7 秒（**不需要 CMake、不需要 C++ 工作负载**） |
 | `dotnet test Andzip.slnx -c Release` | ✅ 187 / 187 |
 | `dotnet run --project src/Andzip.Native.Tests` | ✅ 69 条断言 0 失败（含 4000 次写入压力） |
-| `powershell -File build.ps1` | ✅ 全门禁通过，产出 `dist/Andzip-v0.9.0-win-x64.exe` 19.66 MB，字节扫描确认内核已内嵌 |
+| `powershell -File build.ps1` | ✅ 全门禁通过，产出 `dist/Andzip-v0.9.0-win-x64.exe` 19.47 MB，字节扫描确认内核已内嵌 |
 | `powershell -File run.ps1` | ✅ 启动主程序，截图核对首页：菜单栏 + 蓝色工具栏 + 空白双栏 |
 
 审计过的对外依赖只剩一处：`native/scripts/vendor-sources.ps1` 需要上游原始压缩包
@@ -731,7 +747,7 @@ Core 测试的覆盖面：ABI 协商、格式/编解码器表、内存与目录�
 | 2 导出表核对 | ✅ exported 41 |
 | 3 引擎静态库 + 原生断言 | ✅ 532 checks, 0 failures |
 | 4 托管解决方案构建 | ✅ 0 警告 0 错误 |
-| 5 打包（内含两套测试） | ✅ 187 / 187，69 checks 0 failures，内核已内嵌，19.66 MB |
+| 5 打包（内含两套测试） | ✅ 187 / 187，69 checks 0 failures，内核已内嵌，19.47 MB |
 
 同一轮还跑通了 Linux 交叉三目标：`libandzip_core.so`（x86_64 / aarch64，各 41 导出）与
 `libandzip_core.a`（30.9 MB，被 `azcore` 成功链接）。

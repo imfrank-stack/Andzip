@@ -48,6 +48,12 @@
 - **菜单与文件框标题去掉 Win32 助记符标记**（`MnemonicText.cs`）：SimpleTheme 不解析 `&`，
   不过滤就显示成「文件(&F)」。语言包保留原写法，将来接真正的访问键时不用回头改文案。
 
+- **打包体积 19.72 → 19.47 MB**：`build.ps1` 的发布命令补 `DebuggerSupport=false`、
+  `EventSourceSupport=false`、`MetadataTrimming=complete`。同时记下三条**试过但不要再用**的：
+  框架依赖发布反而更大（25.18 MB，不能裁剪且原生库压不动）、`UseSystemResourceKeys` 零收益
+  还会把异常文案换成资源键（我们的错误框直接显示 `ex.Message`）、手工摘调试用原生库只省 30 字节
+  （`mscordbi` / `DiaSymReader` 本来就不进 bundle）。构成见 `README.md` 第四节第 5 条。
+
 ### 修复
 - **详情列表长文字压到隔壁列、列宽不可调**：两个独立的原因。
   ① 名称列原本是「图标 + 文字」的 `StackPanel`，而 StackPanel 测量子项时给的是**无限宽度**，
@@ -64,6 +70,10 @@
 - **底部栏按钮的图标不显示**：`Avalonia.Controls.Shapes.Path` 在代码里构造时没有隐式的
   `StrokeThickness`，只给 `Stroke` 不给粗细就什么都不画。截图核对时才发现 —— 按钮的
   高亮底色在，图标是空的。
+
+- **属性列对 Python 写的 ZIP 显示 `___`**：ZIP 外部属性字段的高 16 位是 Unix mode
+  （`0o644 << 16` = `0x81A00000`），而 Win32 属性只占低 16 位；整字去测 D/A 位会一个都测不到。
+  改成先 `& 0xFFFF` 再判位，低 16 位为 0 时才回落到默认位。
 
 ### 验证
 - `dotnet build Andzip.slnx` 0 警告 0 错误；`dotnet test` **187 / 187**（新增 9 条：

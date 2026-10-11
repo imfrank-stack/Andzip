@@ -49,9 +49,20 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 # reaches the app as a copied content item under runtimes/<rid>/native/, which is not
 # a RID-graph asset, so IncludeNativeLibrariesForSelfExtract alone does NOT bundle it.
 # Without this the single-file exe starts but reports "compression engine unavailable".
+#
+# The three switches at the bottom are the ones that actually move the needle
+# (19.72 -> 19.34 MB, measured). Two tempting ones do not and were rejected:
+#   UseSystemResourceKeys=true  -- zero size gain here, and it replaces framework
+#       exception messages with resource KEYS, while our error dialogs show
+#       ex.Message verbatim.
+#   Framework-dependent publish -- LARGER (25.18 MB): it cannot be trimmed, and the
+#       native libraries (Skia / ANGLE / HarfBuzz / the engine) dominate the bundle and
+#       are not compressible in a single-file package. Self-contained + trim + compress
+#       is the smaller option, not the bigger one.
 dotnet publish (Join-Path $root "src\Andzip.App\Andzip.App.csproj") -c Release -r $Rid --self-contained true `
     -p:PublishSingleFile=true -p:PublishTrimmed=true -p:TrimMode=$TrimMode -p:EnableCompressionInSingleFile=true `
     -p:IncludeAllContentForSelfExtract=true `
+    -p:DebuggerSupport=false -p:EventSourceSupport=false -p:MetadataTrimming=complete `
     -p:Version=$version -p:FileVersion="$version.0" -p:InformationalVersion="$version+$buildNo" `
     -o $stage --nologo
 if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
