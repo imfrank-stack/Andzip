@@ -86,7 +86,7 @@ pwsh native/scripts/build-windows.ps1                    # Release x64
 pwsh native/scripts/build-windows.ps1 -RunTests          # 构建后跑 532 条原生断言
 pwsh native/scripts/build-windows.ps1 -Arch arm64
 pwsh native/scripts/build-windows.ps1 -Config Debug -RunTests
-pwsh native/scripts/build-windows.ps1 -ExtraCodecs       # 打开 zstd/lz4/brotli 编码器
+pwsh native/scripts/build-windows.ps1 -ExtraCodecs       # 尝试编入 lz4/lz5/lizard/brotli 编码器（当前会失败，见「已知限制」）
 pwsh native/scripts/build-windows.ps1 -Static -BuildRoot build/native-static -RunTests
 pwsh native/scripts/build-windows.ps1 -NoGui -NoTests    # 只要库和 CLI
 ```
@@ -297,8 +297,8 @@ Linux 作业时发现的（见 `../README.md` 第七节第 13 条）。
   `AES256CBC`，以及 `Rar1/Rar2/Rar3` 解码器。
 - 已注册 `ARM`、`ARM64`、`ARMT`、`IA64`、`PPC`、`SPARC`、`RISCV` 转换过滤器，所以
   7z/zip 里的可执行数据自动获得分支调用优化。
-- **Zstandard**：解码可用（7-Zip 的 `C/ZstdDec.c` 加 `ZstdHandler`）。编码需要
-  `-ExtraCodecs`，它会引入 7-Zip-zstd fork 的编码器。
+- **Zstandard**：只有解码（7-Zip 的 `C/ZstdDec.c` 加 `ZstdHandler`）。编码**当前不可得**：
+  fork 的 `ZstdEncoder.cpp` 随 `cankao/7-Zip-zstd-master.zip` 一起没了，见下面「额外编码器」那条。
 - `rar`、`cab`、`iso`、`nsis`、`wim`、`chm`、`apfs`、`ext`、`fat`、`ntfs`、`udf`、
   `squashfs`、`dmg`、`vhd/vhdx`、`rpm`、`arj`、`lzh` 等其余格式随引擎免费提供。
 
@@ -483,8 +483,26 @@ finish 之后再用、分卷请求被拒）。
 - **`word_size` 的含义随方法而变。** 依据方法名它分别变成 PPMd 的 order（`"o"`）、LZMA 的
   `lc`、或 BZip2 的 pass 数，其余情况下被忽略并给出警告。需要更精确的控制请用
   `extra_properties`。
-- **额外编码器是可选的，且上述通过的断言里没有开启。** `cmake/codecs.cmake` 是按 vendor
-  之后的文件布局写的；请把 `-ExtraCodecs` 当作需要单独跑一次首次构建来看待。
+- **额外编码器是可选的，而且到 2026-10-12 为止仍未跑通。** `cmake/codecs.cmake` 当初是按
+  vendor 之后的文件布局**写**的，从没真编过一次；打开 `-ExtraCodecs` 立刻暴露三个布局问题，
+  已修的两个：
+  - `CMAKE_CURRENT_LIST_DIR` 在**函数体内**取的是调用方的目录（`native/`），不是模块自己的
+    目录（`native/cmake/`），于是 `third_party/codecs` 被解析到仓库根上面一层。
+    现在改成与 `cmake/7zip-sources.cmake` 同样的写法：在文件作用域算好 `AZ_CODEC_ROOT`。
+  - zstd 的 `zstd_internal.h` 里是 `#include "../hashes/xxhash.h"` —— `C/hashes/` 是
+    7-Zip-zstd fork 的布局，我们的树里没有（xxhash 本体在 `third_party/codecs/xxhash/`）。
+    配置期从那份唯一副本里物化出期望路径。
+  还没修的是 Lizard：它的 `entropy/*.h` 写的是 `#include "Zstandard/common/mem.h"`，
+  而我们 vendor 的 zstd 是**平铺**在 `C/zstd/*.c`，没有 `common/` 这一层。
+- **Zstandard 的编码器拿不回来。** fork 的 `ZstdEncoder.cpp` 在 `NCompress::NZstd` 命名空间里，
+  只存在于 `cankao/7-Zip-zstd-master.zip`，而那个归档已经不在磁盘上了。NanaZip 里那份
+  `NanaZip.Core/Extensions/ZSCodecs/ZstdEncoder.hpp` 是 `namespace NanaZip::Core::Extensions`
+  —— 应用层的包装，注册不成引擎 codec，不能直接搬。所以 zstd 仍然只有解码
+  （`C/ZstdDec.c`），`codecs.cmake` 里也不再要求 `ZstdEncoder.cpp` / `ZstdRegister.cpp`。
+- **LZ4 / LZ5 / Lizard / Brotli 的 7-Zip 胶水层已经 vendor 进来**（24 个文件，来自
+  `zipcopy/NanaZip-main/NanaZip.ZS.Codecs/SevenZip/CPP/7zip`，命名空间正确，
+  且 `C/zstdmt/` 里已有它们依赖的 `lz4-mt.h` / `lz5-mt.h` / `lizard-mt.h` / `brotli-mt.h`）。
+  开启条件仍未满足（上面那个 Lizard 的 include 布局），所以默认 `OFF`、产品不受影响。
 
 ---
 

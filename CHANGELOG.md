@@ -2,6 +2,63 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [构建] - 2026-10-12（`-ExtraCodecs` 首次真编：修掉两个布局 bug，第三个待解）
+
+### 背景
+用户要求把压缩级别改成 5 档（仅存储 / 极速 / 快速 / 标准 / 极限），并先拿
+`zipcopy/`（NanaZip + 抽出来的编码器）与我们的算法逐个实测比较。核查后的结论有两条：
+
+- **编码器本体没有可比性** —— `zipcopy/Extracted-Compression-Codecs/{LZ4,LZ5,Lizard,Brotli,Zstandard}`
+  与我们 `third_party/codecs/` 里的**逐字节相同**（LZ4 1.10.0、zstd 1.5.7，`cmp` 全过）。
+  本来就是同一批上游，比出来的只会是编译开关的差别。
+- **真正缺的是 7-Zip 胶水层，而那确实是新东西** ——
+  `NanaZip.ZS.Codecs/SevenZip/CPP/7zip/{Compress,Archive}` 下的
+  `Lz4/Lz5/Lizard/Brotli{Decoder,Encoder,Register}` + 四个 `*Handler.cpp`，
+  命名空间是 `NCompress::N<CODEC>`，可以直接落进引擎树。已 vendor 24 个文件。
+
+### 修复
+`ANDZIP_EXTRA_CODECS` 从写下来到这次是**第一次真的拿去编译**，一开就暴露三个布局问题：
+- **`CMAKE_CURRENT_LIST_DIR` 在函数体里取的是调用方目录。** `codecs.cmake` 里
+  `set(CODECS "${CMAKE_CURRENT_LIST_DIR}/../third_party/codecs")` 写在
+  `az_add_extra_codecs()` 内部，而该函数是从 `native/CMakeLists.txt` 调用的 ——
+  于是解析成 `native/../third_party/...`，落到仓库根上面一层。改成与
+  `cmake/7zip-sources.cmake` 里 `AZ_7ZIP_ROOT` 同样的写法：在**文件作用域**算好
+  `AZ_CODEC_ROOT` 再给函数用。
+- **zstd 要求的 `C/hashes/` 目录我们根本没有。** `zstd_internal.h` 里是
+  `#include "../hashes/xxhash.h"`，那是 7-Zip-zstd fork 的布局；xxhash 本体我们已有
+  （`third_party/codecs/xxhash/`）。配置期从唯一那份物化出期望路径，代码仍然只有一份。
+- **未解：Lizard 的 include 布局。** 它的 `entropy/*.h` 写的是
+  `#include "Zstandard/common/mem.h"`，而我们 vendor 的 zstd 是**平铺**在 `C/zstd/*.c`，
+  没有 `common/` 这一层。停在这里。
+
+### 变更
+- **`codecs.cmake` 不再要求 zstd 的三个胶水文件**，并把原因写在注释里：fork 的
+  `ZstdEncoder.cpp` 在 `NCompress::NZstd` 命名空间，只存在于已删除的
+  `cankao/7-Zip-zstd-master.zip`；zipcopy 里那份 `NanaZip.Core/Extensions/ZSCodecs/ZstdEncoder.hpp`
+  是 `namespace NanaZip::Core::Extensions`，属应用层包装，注册不成引擎 codec。
+  **zstd 因此确定仍是只解不编**，不是"再修修就好"。
+- `native/README.md`：把「编码需要 `-ExtraCodecs`」这句已经不成立的话改掉，
+  「已知限制」里补上三个布局问题的准确状态与 zstd 拿不回来的原因。
+- `third_party/MANIFEST.json`：24 个胶水文件的 `origin` 改成如实描述（本地 NanaZip-main
+  检出，`cankao/` 已不存在所以 `vendor-sources.ps1 -ExtraCodecs` 无法复跑），
+  并新增 `C/hashes/xxhash.h` 一条说明它是配置期物化的。
+
+### 验证
+- **默认构建（`-ExtraCodecs` 关闭）完全不受影响**：原生 **532 条断言 0 失败**、
+  Core **271 / 271**、`Andzip.slnx` 0 警告 0 错误，暂存的 `andzip_core.dll` 与提交时一致。
+  新增文件与 `codecs.cmake` 的改动全部在那个 OFF 开关后面。
+- `MANIFEST.json` 仍是合法 JSON（12 条来源）。
+
+> 没有递增版本号：产品代码一行未动，产物与 v0.9.6（Build 14）逐字节相同。
+> 递增反而会让两个内容一致的可执行文件顶着不同版本号。
+
+### 待办（用户已提出、本轮未做）
+- **压缩级别改 5 档**（仅存储 / 极速 / 快速 / 标准 / 极限），并按
+  「1–3 档只比速度、4 档看速度与压缩率平衡、5 档只看压缩率」的标准为每档定默认参数。
+- **设置 → 压缩设置页**（现在还是占位文案）。
+- 二者的前置分歧：Lizard 的 include 布局修不修得动。即使修不动，5 档也能只靠现有的
+  Copy / Deflate / LZMA2 / BZip2 / PPMd 做出来 —— 极速档会弱一些（低级别 Deflate 而非 LZ4）。
+
 ## [0.9.6] - 2026-10-12（变更：右键解压改成按包内容判断的智能解压；右键压缩加第三条带对话框）
 
 > 版本号 0.9.5 → **0.9.6**，BuildNo 14 → **15**。

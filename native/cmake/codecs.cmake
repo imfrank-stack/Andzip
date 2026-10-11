@@ -14,14 +14,35 @@
 #   pwsh native/scripts/vendor-sources.ps1 -ExtraCodecs
 # Enabling one without the other is caught up front below.
 
+# Resolved at FILE scope, not inside the function: CMAKE_CURRENT_LIST_DIR tracks
+# the listfile being processed, so reading it from az_add_extra_codecs() -- which
+# runs later, called from CMakeLists.txt -- yields native/ instead of native/cmake/
+# and every codec path lands one directory above third_party/. Same idiom as
+# cmake/7zip-sources.cmake uses for AZ_7ZIP_ROOT.
+if(NOT DEFINED AZ_CODEC_ROOT)
+  set(AZ_CODEC_ROOT "${CMAKE_CURRENT_LIST_DIR}/../third_party/codecs")
+endif()
+
 function(az_add_extra_codecs target)
-  set(CODECS "${CMAKE_CURRENT_LIST_DIR}/../third_party/codecs")
+  set(CODECS "${AZ_CODEC_ROOT}")
   set(ZSTD   "${AZ_7ZIP_ROOT}/C/zstd")
   set(ZSTDMT "${AZ_7ZIP_ROOT}/C/zstdmt")
   set(COMPR  "${AZ_7ZIP_ROOT}/CPP/7zip/Compress")
   set(ARCH   "${AZ_7ZIP_ROOT}/CPP/7zip/Archive")
 
   # ------------------------------------------------------------------ zstd
+  # third_party/7zip/C/zstd/zstd_internal.h does `#include "../hashes/xxhash.h"`.
+  # That sibling directory is part of the 7-Zip-zstd fork's layout and is not in
+  # our tree (the fork archive is gone); the header itself we already vendor as
+  # third_party/codecs/xxhash/xxhash.h. Materialise the expected path from it so
+  # there is still exactly one copy of the code -- and so a future re-vendor that
+  # does bring C/hashes back simply overwrites an identical file.
+  set(HASHES "${AZ_7ZIP_ROOT}/C/hashes")
+  if(NOT EXISTS "${HASHES}/xxhash.h")
+    file(MAKE_DIRECTORY "${HASHES}")
+    file(COPY "${CODECS}/xxhash/xxhash.h" DESTINATION "${HASHES}")
+  endif()
+
   file(GLOB AZ_ZSTD_SOURCES "${ZSTD}/*.c")
   # Legacy decoders (v0.1 .. v0.7) are only reachable through
   # ZSTD_LEGACY_SUPPORT, which we turn off; they also redefine entropy symbols.
@@ -53,8 +74,18 @@ function(az_add_extra_codecs target)
   set(AZ_XXHASH_SOURCES "${CODECS}/xxhash/xxhash.c")
 
   # ------------------------------------------- 7-Zip wrappers for the above
+  #
+  # Zstd is deliberately NOT in this list. Its 7-Zip glue (ZstdEncoder /
+  # ZstdRegister / the fork's ZstdHandler) ships in cankao/7-Zip-zstd-master.zip,
+  # which is no longer on disk, and the copy in NanaZip lives one layer too high
+  # to drop in: NanaZip.Core/Extensions/ZSCodecs/ZstdEncoder.hpp is
+  # `namespace NanaZip::Core::Extensions`, not `NCompress::NZstd`, so it cannot
+  # register as an engine codec. Zstandard therefore stays decode-only, served by
+  # the stock third_party/7zip/C/ZstdDec.c -- exactly as before this option.
+  # The zstd *library* is still compiled below because zstdmt/ hosts the shared
+  # multithreaded wrappers (lz4-mt / lz5-mt / lizard-mt / brotli-mt) that the
+  # four codecs here do depend on.
   set(AZ_GLUE_SOURCES
-    "${COMPR}/ZstdDecoder.cpp"   "${COMPR}/ZstdEncoder.cpp"   "${COMPR}/ZstdRegister.cpp"
     "${COMPR}/Lz4Decoder.cpp"    "${COMPR}/Lz4Encoder.cpp"    "${COMPR}/Lz4Register.cpp"
     "${COMPR}/Lz5Decoder.cpp"    "${COMPR}/Lz5Encoder.cpp"    "${COMPR}/Lz5Register.cpp"
     "${COMPR}/LizardDecoder.cpp" "${COMPR}/LizardEncoder.cpp" "${COMPR}/LizardRegister.cpp"
@@ -103,6 +134,10 @@ function(az_add_extra_codecs target)
     "${CODECS}/lizard/entropy"
     "${CODECS}/brotli"
     "${CODECS}/brotli/include"
+    # zstdmt/brotli-mt_*.c include "encode.h" and "decode.h" bare -- written
+    # against the fork's flat C/brotli/ layout. Our vendored brotli keeps the
+    # upstream tree, so expose its public header directory by name as well.
+    "${CODECS}/brotli/include/brotli"
     "${CODECS}/xxhash"
   )
 

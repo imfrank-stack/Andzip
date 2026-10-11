@@ -23,3 +23,9 @@ TestResults/
 # Editor scratch
 *.log
 *.tmp
+
+# Materialised by cmake/codecs.cmake at configure time (only when
+# -DANDZIP_EXTRA_CODECS=ON) from third_party/codecs/xxhash/xxhash.h, because
+# zstd's zstd_internal.h includes "../hashes/xxhash.h". Committing it would put a
+# second copy of that header in the tree, which is exactly what we avoided.
+native/third_party/7zip/C/hashes/
