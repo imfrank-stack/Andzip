@@ -1,11 +1,9 @@
 namespace Andzip.Core.Archive;
 
 /// <summary>
-/// 压缩包<strong>顶层</strong>的形状 —— 「智能解压」就是按它决定内容铺在哪儿。
-/// <para>
+/// 压缩包<strong>顶层</strong>的形状。「智能解压」按它决定内容铺在哪儿 ——
 /// 分成三种不是为了分类好看，而是用户能直接感知的三种预期：单文件包想直接拿到那个文件、
 /// 整棵目录树想直接拿到那个目录、零散一堆才需要一个袋子把它们装起来。
-/// </para>
 /// </summary>
 public enum ArchiveTopLevel
 {
@@ -20,20 +18,30 @@ public enum ArchiveTopLevel
 }
 
 /// <summary>
+/// <see cref="ArchiveTopLevel"/> 加上判定过程中顺手拿到的那个顶层名。
+/// </summary>
+/// <param name="Kind">顶层形状。</param>
+/// <param name="RootName">
+/// <see cref="ArchiveTopLevel.SingleFile"/> 时就是那个文件的名字 —— 要照它建同名文件夹就得知道
+/// 叫什么，而它跟压缩包的名字并不总是一致（<c>photo.jpg.gz</c> 里装的是 <c>photo.jpg</c>）。
+/// 其余情形为 null。
+/// </param>
+public readonly record struct ArchiveShape(ArchiveTopLevel Kind, string? RootName);
+
+/// <summary>
 /// 智能解压的落点判定。
 /// <para>
-/// <see cref="Inspect"/> 只看清单的顶层，不碰数据；<see cref="Destination"/> 把它翻译成目录：
-/// 前两种情形就解压到压缩包所在目录（于是那个文件或那个目录直接出现在眼前，
-/// <strong>不会</strong>再套一层与包同名的空壳），第三种新建一个以压缩包命名的文件夹收纳。
+/// <see cref="Inspect"/> 只看清单的顶层，不碰数据；<see cref="Destination"/> 把它翻译成目录。
 /// </para>
 /// </summary>
 public static class ExtractionLayout
 {
     /// <summary>
-    /// 顶层只有一个条目且它是文件 → <see cref="SingleFile"/>；所有条目共享同一个顶层目录 →
-    /// <see cref="SingleFolder"/>；其余（含空包）→ <see cref="Mixed"/>。
+    /// 顶层只有一个条目且它是文件 → <see cref="ArchiveTopLevel.SingleFile"/>；所有条目共享同一个
+    /// 顶层目录 → <see cref="ArchiveTopLevel.SingleFolder"/>；其余（含空包）→
+    /// <see cref="ArchiveTopLevel.Mixed"/>。
     /// </summary>
-    public static ArchiveTopLevel Inspect(ArchiveListing listing)
+    public static ArchiveShape Inspect(ArchiveListing listing)
     {
         ArgumentNullException.ThrowIfNull(listing);
 
@@ -70,23 +78,36 @@ public static class ExtractionLayout
             }
         }
 
-        var roots = rootFiles.Count + rootFolders.Count;
-        if (roots != 1)
+        if (rootFiles.Count + rootFolders.Count != 1)
         {
-            // 0 个（空包）也算 Mixed：真发生什么的时候，宁可往一个明确的袋子里放。
-            return ArchiveTopLevel.Mixed;
+            // 0 个（空包）也算 Mixed：真要放东西的时候，宁可往一个明确的袋子里放。
+            return new ArchiveShape(ArchiveTopLevel.Mixed, null);
         }
 
-        return rootFolders.Count == 1 ? ArchiveTopLevel.SingleFolder : ArchiveTopLevel.SingleFile;
+        return rootFolders.Count == 1
+            ? new ArchiveShape(ArchiveTopLevel.SingleFolder, null)
+            : new ArchiveShape(ArchiveTopLevel.SingleFile, rootFiles.First());
     }
 
     /// <summary>
-    /// 这个形状的包该解压到哪个目录。返回的是<strong>内容铺进去的那个目录</strong>，
-    /// 不是"新建的那个文件夹" —— 只有 <see cref="ArchiveTopLevel.Mixed"/> 时两者才不同。
+    /// 这个形状该解压到哪个目录。返回的是<strong>内容铺进去的那个目录</strong>。
+    /// <para>
+    /// <see cref="ArchiveTopLevel.SingleFile"/> 与 <see cref="ArchiveTopLevel.SingleFolder"/> 都铺在
+    /// 压缩包所在目录 —— 于是那个文件或那个目录直接出现在眼前，<strong>不会</strong>再套一层与包
+    /// 同名的空壳；<see cref="ArchiveTopLevel.Mixed"/> 才新建一个以压缩包命名的文件夹收纳。
+    /// </para>
     /// </summary>
-    public static string Destination(string archivePath, ArchiveTopLevel shape)
-        => shape switch
+    /// <param name="singleFileToFolder">
+    /// 「设置 → 解压 → 单个文件也解压到新建文件夹」。只影响单文件情形：建一个以<strong>那个文件</strong>
+    /// （不是压缩包）命名的文件夹。默认关 —— 压一个 <c>photo.jpg.gz</c> 却得到
+    /// <c>photo.jpg\photo.jpg</c> 是多数人没预期的结果。
+    /// </param>
+    public static string Destination(string archivePath, ArchiveShape shape, bool singleFileToFolder = false)
+        => shape.Kind switch
         {
+            ArchiveTopLevel.SingleFile when singleFileToFolder && shape.RootName is { Length: > 0 } name
+                => ShellTasks.UniqueFolder(Path.Combine(
+                    ShellTasks.ParentFolder(archivePath), Path.GetFileNameWithoutExtension(name))),
             ArchiveTopLevel.SingleFile or ArchiveTopLevel.SingleFolder
                 => ShellTasks.ParentFolder(archivePath),
             _ => ShellTasks.UniqueFolder(ShellTasks.SiblingFolder(archivePath)),

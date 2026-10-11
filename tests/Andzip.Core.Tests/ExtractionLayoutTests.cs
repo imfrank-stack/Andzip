@@ -5,7 +5,7 @@ namespace Andzip.Core.Tests;
 /// <summary>
 /// 智能解压的三情形判定与落点。
 /// <para>
-/// 这几条值得钉死：判错一个情形就会把用户的文件解到他没预期的地方，
+/// 这几条值得钉死：判错一个情形就会把文件解到用户没预期的地方，
 /// 或者在已有目录上盖一层同名目录 —— 两种都很难看，而且都不会报错。
 /// </para>
 /// </summary>
@@ -13,33 +13,47 @@ public class ExtractionLayoutTests
 {
     [Fact]
     public void SingleFileAtRoot_IsSingleFile()
-        => Assert.Equal(ArchiveTopLevel.SingleFile, ExtractionLayout.Inspect(Listing("photo.jpg")));
+    {
+        var shape = ExtractionLayout.Inspect(Listing("photo.jpg"));
+
+        Assert.Equal(ArchiveTopLevel.SingleFile, shape.Kind);
+        // 顶层名要带出来：建同名文件夹时用的是<strong>文件</strong>的名字，不是压缩包的名字。
+        Assert.Equal("photo.jpg", shape.RootName);
+    }
 
     [Fact]
     public void EverythingUnderOneFolder_IsSingleFolder()
         => Assert.Equal(ArchiveTopLevel.SingleFolder, ExtractionLayout.Inspect(
-            Listing("docs/", "docs/a.txt", "docs/sub/b.txt")));
+            Listing("docs/", "docs/a.txt", "docs/sub/b.txt")).Kind);
 
     [Fact]
     public void FolderEntryWithoutChildren_StillCountsAsSingleFolder()
     {
         // 空目录包：唯一条目本身就是目录（以 '/' 结尾），不能因为"没有深层条目"就判成文件。
-        Assert.Equal(ArchiveTopLevel.SingleFolder, ExtractionLayout.Inspect(Listing("empty/")));
+        Assert.Equal(ArchiveTopLevel.SingleFolder, ExtractionLayout.Inspect(Listing("empty/")).Kind);
     }
 
     [Fact]
     public void SeveralTopLevelEntries_AreMixed()
-        => Assert.Equal(ArchiveTopLevel.Mixed, ExtractionLayout.Inspect(Listing("a.txt", "b.txt")));
+        => Assert.Equal(ArchiveTopLevel.Mixed, ExtractionLayout.Inspect(Listing("a.txt", "b.txt")).Kind);
 
     [Fact]
     public void FolderAndFileSideBySide_AreMixed()
-        => Assert.Equal(ArchiveTopLevel.Mixed, ExtractionLayout.Inspect(Listing("docs/", "docs/a.txt", "readme.md")));
+        => Assert.Equal(ArchiveTopLevel.Mixed, ExtractionLayout.Inspect(
+            Listing("docs/", "docs/a.txt", "readme.md")).Kind);
 
     [Fact]
     public void EmptyArchive_IsMixed()
     {
         // 没东西可摆，但也不该把文件铺在压缩包所在目录里 —— 交给一个明确的袋子最安全。
-        Assert.Equal(ArchiveTopLevel.Mixed, ExtractionLayout.Inspect(Listing()));
+        Assert.Equal(ArchiveTopLevel.Mixed, ExtractionLayout.Inspect(Listing()).Kind);
+    }
+
+    [Fact]
+    public void RootNameIsOnlySetForTheSingleFileCase()
+    {
+        Assert.Null(ExtractionLayout.Inspect(Listing("docs/a.txt")).RootName);
+        Assert.Null(ExtractionLayout.Inspect(Listing("a.txt", "b.txt")).RootName);
     }
 
     [Fact]
@@ -55,7 +69,7 @@ public class ExtractionLayoutTests
             ],
             FileCount: 2, DirectoryCount: 1, TotalSize: 0, TotalCompressedSize: 0, Comment: null);
 
-        Assert.Equal(ArchiveTopLevel.SingleFolder, ExtractionLayout.Inspect(listing));
+        Assert.Equal(ArchiveTopLevel.SingleFolder, ExtractionLayout.Inspect(listing).Kind);
     }
 
     [Fact]
@@ -64,7 +78,31 @@ public class ExtractionLayoutTests
         var archive = Path.Combine(Path.GetTempPath(), "az-layout", "photo.jpg.gz");
 
         Assert.Equal(Path.Combine(Path.GetTempPath(), "az-layout"),
-            ExtractionLayout.Destination(archive, ArchiveTopLevel.SingleFile));
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.SingleFile, "photo.jpg")));
+    }
+
+    [Fact]
+    public void SingleFileToFolderUsesTheFileNameNotTheArchiveName()
+    {
+        // 开「单个文件也解压到新建文件夹」时，文件夹叫 photo 而不是 photo.jpg.gz ——
+        // 用的是包里那个文件的名字（去掉扩展名），套上压缩包的名字会把 .gz 也带进目录名。
+        var archive = Path.Combine(Path.GetTempPath(), "az-layout", "photo.jpg.gz");
+
+        Assert.Equal(Path.Combine(Path.GetTempPath(), "az-layout", "photo"),
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.SingleFile, "photo.jpg"), singleFileToFolder: true));
+    }
+
+    [Fact]
+    public void SingleFileToFolderStillAvoidsAnExistingName()
+    {
+        var directory = Directory.CreateTempSubdirectory("az-layout-").FullName;
+        var archive = Path.Combine(directory, "report.txt.gz");
+        Directory.CreateDirectory(Path.Combine(directory, "report"));
+
+        var destination = ExtractionLayout.Destination(
+            archive, Shape(ArchiveTopLevel.SingleFile, "report.txt"), singleFileToFolder: true);
+
+        Assert.Equal(Path.Combine(directory, "report (2)"), destination);
     }
 
     [Fact]
@@ -75,7 +113,7 @@ public class ExtractionLayoutTests
         var archive = Path.Combine(Path.GetTempPath(), "az-layout", "docs.zip");
 
         Assert.Equal(Path.Combine(Path.GetTempPath(), "az-layout"),
-            ExtractionLayout.Destination(archive, ArchiveTopLevel.SingleFolder));
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.SingleFolder)));
     }
 
     [Fact]
@@ -84,7 +122,7 @@ public class ExtractionLayoutTests
         var archive = Path.Combine(Path.GetTempPath(), "az-layout", "stuff.zip");
 
         Assert.Equal(Path.Combine(Path.GetTempPath(), "az-layout", "stuff"),
-            ExtractionLayout.Destination(archive, ArchiveTopLevel.Mixed));
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.Mixed)));
     }
 
     [Fact]
@@ -92,7 +130,20 @@ public class ExtractionLayoutTests
     {
         var archive = Path.Combine(Path.GetTempPath(), "az-layout", "bundle.tar.gz");
 
-        Assert.Equal("bundle.tar", Path.GetFileName(ExtractionLayout.Destination(archive, ArchiveTopLevel.Mixed)));
+        Assert.Equal("bundle.tar", Path.GetFileName(ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.Mixed))));
+    }
+
+    [Fact]
+    public void SingleFileToFolderDoesNotAffectTheOtherTwoShapes()
+    {
+        var archive = Path.Combine(Path.GetTempPath(), "az-layout", "docs.zip");
+
+        Assert.Equal(
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.SingleFolder)),
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.SingleFolder), singleFileToFolder: true));
+        Assert.Equal(
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.Mixed)),
+            ExtractionLayout.Destination(archive, Shape(ArchiveTopLevel.Mixed), singleFileToFolder: true));
     }
 
     [Fact]
@@ -150,6 +201,8 @@ public class ExtractionLayoutTests
 
         Assert.Equal(preferred, ShellTasks.UniqueFolder(preferred));
     }
+
+    private static ArchiveShape Shape(ArchiveTopLevel kind, string? rootName = null) => new(kind, rootName);
 
     private static ArchiveEntryInfo Entry(string path)
         => new(path, Path.GetFileName(path.TrimEnd('/', '\\')), path.EndsWith('/') || path.EndsWith('\\'),

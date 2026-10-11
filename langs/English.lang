@@ -213,6 +213,15 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_LAST      = The folder used for the last new archi
 TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED     = Always output to this folder
 TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = Leaving it empty behaves like "the folder used for the last new archive".
 
+; ---- Settings: extraction page ----
+TEXT_SETTINGS_EXTRACT_TITLE             = Extraction settings
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = Auto extract: put a lone file into a new folder too
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = Off by default: an archive holding one file simply releases that file. When on, a folder named after that file is created (photo.jpg.gz becomes photo\photo.jpg), using "name (2)", "name (3)" when the name is taken.
+TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = Open the folder after extraction
+TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = Only opens once extraction actually finished; a failure or a cancel never pops open a half-filled directory.
+TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS     = Keep the progress window open when extraction finishes
+TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = Applies to "Extract files" in the main window only. The right-click and double-click paths still disappear when done, deliberately, and do not follow this setting.
+
 [MENU]
 MENUSTR_FILE                            = &File
 MENUSTR_EDIT                            = &Edit

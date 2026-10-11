@@ -65,7 +65,7 @@ public sealed class SettingsWindow : Window
             new GeneralPage(this, lang, settings, settingsPath),
             new FileAssociationPage(this, lang, settings, settingsPath),
             new ContextMenuPage(this, lang, settings, settingsPath),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_EXTRACT"),
+            new ExtractionPage(lang, settingsPath),
             new CompressionPage(this, lang, settings, settingsPath),
             new PlaceholderPage(lang, "TEXT_SETTINGS_VIEW"),
             new PlaceholderPage(lang, "TEXT_SETTINGS_SECURITY"),
@@ -881,6 +881,99 @@ public sealed class SettingsWindow : Window
         }
 
         private void Message(string text) => _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
+    }
+
+    /// <summary>
+    /// 解压页：三个开关，都只影响"东西铺在哪儿 / 窗口留不留"。
+    /// <para>
+    /// 没有放参考软件上的「一次性解压 TGZ/TBZ」「自动检测 Macintosh 代码页」「并行解压」等项 ——
+    /// 前者引擎本来就会把嵌套归档展平（不是可关的行为），中者需要引擎侧的代码页猜测，
+    /// 后者与压缩共用一个进程级线程数、放在这里会以为有两个旋钮。做不到的不摆假控件。
+    /// </para>
+    /// </summary>
+    private sealed class ExtractionPage : ISettingsPage
+    {
+        private readonly string _settingsPath;
+        private readonly CheckBox _singleFileToFolder;
+        private readonly CheckBox _openFolderAfter;
+        private readonly CheckBox _keepProgress;
+        private readonly Button _applyButton;
+
+        private ExtractionDefaults _live = ExtractionDefaults.Fallback;
+
+        public ExtractionPage(LangCatalog lang, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_EXTRACT";
+            _settingsPath = settingsPath;
+
+            _singleFileToFolder = Check(lang.Get("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER"), UpdateApplyState);
+            _openFolderAfter = Check(lang.Get("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState);
+            _keepProgress = Check(lang.Get("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS"), UpdateApplyState);
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 24, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_EXTRACT_TITLE")));
+            panel.Children.Add(_singleFileToFolder);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT")));
+            panel.Children.Add(_openFolderAfter);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT")));
+            panel.Children.Add(_keepProgress);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT")));
+            panel.Children.Add(_applyButton);
+
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _live = ExtractionDefaults.Load(AppSettings.Load(_settingsPath));
+            _singleFileToFolder.IsChecked = _live.SingleFileToFolder;
+            _openFolderAfter.IsChecked = _live.OpenFolderAfterExtract;
+            _keepProgress.IsChecked = _live.KeepProgressWindow;
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private ExtractionDefaults Selection() => new(
+            _singleFileToFolder.IsChecked == true,
+            _openFolderAfter.IsChecked == true,
+            _keepProgress.IsChecked == true);
+
+        private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
+
+        private void Apply()
+        {
+            var desired = Selection();
+            if (desired.Equals(_live))
+            {
+                return;
+            }
+
+            var settings = AppSettings.Load(_settingsPath);
+            desired.Save(settings);
+            settings.Save(_settingsPath);
+            Reload();
+        }
     }
 
     /// <summary>

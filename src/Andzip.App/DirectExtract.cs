@@ -27,7 +27,7 @@ internal static class DirectExtract
 {
     public static async Task RunAsync(
         LangCatalog lang,
-        AppSettings settings,
+        AppSettings appSettings,
         ShellTask task,
         string archivePath,
         IClassicDesktopStyleApplicationLifetime desktop)
@@ -37,13 +37,13 @@ internal static class DirectExtract
             lang,
             cts,
             "TEXT_STATUS_EXTRACTING",
-            cancelViaEsc: settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true),
+            cancelViaEsc: appSettings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true),
             standalone: true);
         progress.Show();
 
         try
         {
-            await ExtractAsync(lang, task, archivePath, progress, cts);
+            await ExtractAsync(lang, appSettings, task, archivePath, progress, cts);
         }
         catch (Exception ex)
         {
@@ -58,6 +58,7 @@ internal static class DirectExtract
 
     private static async Task ExtractAsync(
         LangCatalog lang,
+        AppSettings appSettings,
         ShellTask task,
         string archivePath,
         ProgressWindow progress,
@@ -77,7 +78,8 @@ internal static class DirectExtract
         }
 
         var destination = task == ShellTask.AutoExtract
-            ? await AutoExtractDestinationAsync(archivePath, password)
+            ? await AutoExtractDestinationAsync(
+                archivePath, password, ExtractionDefaults.Load(appSettings).SingleFileToFolder)
             : ShellTasks.ExtractDestination(archivePath, task);
 
         var settings = new ExtractionSettings(
@@ -107,11 +109,13 @@ internal static class DirectExtract
     /// 智能解压的落点：读一遍清单，看顶层是单文件、单子目录还是零散一堆。
     /// 只解析目录结构，不动数据，所以这一步在进度条上几乎不占时间。
     /// </summary>
-    private static async Task<string> AutoExtractDestinationAsync(string archivePath, string? password)
+    private static async Task<string> AutoExtractDestinationAsync(
+        string archivePath, string? password, bool singleFileToFolder)
     {
         var listing = await Task.Run(() => ArchiveReader.Read(archivePath, password));
 
-        return ExtractionLayout.Destination(archivePath, ExtractionLayout.Inspect(listing));
+        return ExtractionLayout.Destination(
+            archivePath, ExtractionLayout.Inspect(listing), singleFileToFolder);
     }
 
     /// <summary>重名询问（FR-3.7）：以进度窗口为宿主，在工作线程回调里同步等 UI 答复。</summary>

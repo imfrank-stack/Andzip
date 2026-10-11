@@ -4,13 +4,17 @@ using Andzip.Core.Settings;
 namespace Andzip.Core.Tests;
 
 /// <summary>
-/// 排除模式与「设置 → 压缩」的默认值。
+/// 「设置 → 压缩」与「设置 → 解压」的默认值，以及压缩时的排除模式。
 /// <para>
-/// 排除规则会<strong>静默少打包里的文件</strong>，所以它比一般的字符串处理更值得钉：
+/// 设置页本身是 GUI，测不了；但它读写的那份状态测得了 —— 尤其是"没有设置文件时必须等于
+/// 引入这一页之前的行为"这一条，缺省写反会让每个老用户突然改口味，而且没人会想到是设置页干的。
+/// </para>
+/// <para>
+/// 排除规则另外值得钉：它会<strong>静默少打包里的文件</strong>，
 /// 一个把 <c>x.bak.txt</c> 也吃进去的模式，用户要到解压时才发现少东西。
 /// </para>
 /// </summary>
-public class CompressionSettingsTests
+public class SettingsDefaultsTests
 {
     [Theory]
     [InlineData("report.bak", "*.bak", true)]
@@ -116,5 +120,31 @@ public class CompressionSettingsTests
         var blank = off with { ExcludePatternText = "   " };
         blank.Save(settings);
         Assert.False(settings.Has(SettingKeys.CompressExcludePatterns));
+    }
+
+    // ---------- ExtractionDefaults（设置 → 解压） ----------
+
+    [Fact]
+    public void ExtractionDefaults_RoundTripsThroughSettings()
+    {
+        var wanted = new ExtractionDefaults(
+            SingleFileToFolder: true, OpenFolderAfterExtract: false, KeepProgressWindow: true);
+
+        var settings = new AppSettings();
+        wanted.Save(settings);
+
+        Assert.Equal(wanted, ExtractionDefaults.Load(settings));
+    }
+
+    [Fact]
+    public void ExtractionDefaults_FallbackMatchesTheOldBehaviour()
+    {
+        // 同压缩页那条：没动过设置的用户必须得到引入这一页之前的行为。
+        var loaded = ExtractionDefaults.Load(new AppSettings());
+
+        Assert.Equal(ExtractionDefaults.Fallback, loaded);
+        Assert.False(loaded.SingleFileToFolder);
+        Assert.False(loaded.OpenFolderAfterExtract);
+        Assert.False(loaded.KeepProgressWindow);
     }
 }

@@ -72,6 +72,23 @@ public static class SettingKeys
         Fixed,
     }
 
+    // ------------------------------------------------------------- 解压页
+
+    /// <summary>
+    /// 智能解压遇到「包里只有一个文件」时，要不要也建一个文件夹。
+    /// 默认关：压一个 <c>photo.jpg.gz</c> 却得到 <c>photo.jpg\photo.jpg</c> 不是多数人想要的。
+    /// </summary>
+    public const string ExtractSingleFileToFolder = "extract_single_file_to_folder";
+
+    /// <summary>解压成功后用资源管理器打开目标目录。</summary>
+    public const string ExtractOpenFolderAfter = "extract_open_folder_after";
+
+    /// <summary>
+    /// 主窗口里的「解压文件」完成后保留进度窗口。
+    /// <para>只管这一条路径：右键与双击那条"跑完即消失"是更早明确定下的行为，别合并。</para>
+    /// </summary>
+    public const string ExtractKeepProgress = "extract_keep_progress_window";
+
     /// <summary>认不出来回落到 <see cref="OutputFolderMode.LastUsed"/> —— 那是改动前的行为。</summary>
     public static OutputFolderMode ParseOutputFolderMode(string? stored)
         => stored?.Trim().ToLowerInvariant() == "fixed" ? OutputFolderMode.Fixed : OutputFolderMode.LastUsed;

@@ -213,6 +213,15 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_LAST      = 上次新建时使用的目录
 TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED     = 总是输出到以下目录
 TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = 留空等同于「上次新建时使用的目录」。
 
+; ---- 设置：解压页 ----
+TEXT_SETTINGS_EXTRACT_TITLE             = 解压设置
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = 智能解压时，单个文件也放进新建的文件夹
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = 默认关闭：包里只有一个文件时直接把它解出来。勾上后会建一个以那个文件命名的文件夹（photo.jpg.gz → photo\photo.jpg），名字被占用时依次用「名称 (2)」「名称 (3)」。
+TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = 解压后打开文件夹
+TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = 只在真的解完之后打开；失败或中途取消都不会弹出一个装了一半的目录。
+TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS     = 解压完成后不关闭进度窗口
+TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = 只作用于主窗口的「解压文件」。右键与双击那条路径跑完即消失，是有意为之，不跟随这一项。
+
 [MENU]
 MENUSTR_FILE                            = 文件(&F)
 MENUSTR_EDIT                            = 编辑(&E)

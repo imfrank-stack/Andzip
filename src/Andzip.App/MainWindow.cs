@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Andzip.App.Views;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
@@ -303,7 +304,42 @@ public sealed class MainWindow : Window
             return;
         }
 
-        progress.Close();
+        var extractionDefaults = ExtractionDefaults.Load(_settings);
+
+        // 「设置 → 解压 → 解压后打开文件夹」：只在真的解完了之后开，失败与取消都不该弹出一个
+        // 装了一半的目录 —— 那比不打开更容易让人以为东西都在里面。
+        if (extractionDefaults.OpenFolderAfterExtract)
+        {
+            OpenInExplorer(destination);
+        }
+
+        if (!extractionDefaults.KeepProgressWindow)
+        {
+            progress.Close();
+        }
+    }
+
+    /// <summary>用系统资源管理器打开一个目录。打不开就算了，解压本身已经成功了。</summary>
+    private static void OpenInExplorer(string directory)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = directory,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception)
+        {
+            // 没有外壳可跳（精简系统 / 无桌面会话）时静默失败：解压的结果已经在磁盘上了，
+            // 不该因为开不了窗口就报一个"解压失败"。
+        }
     }
 
     private async Task<string?> PickArchiveAsync()
