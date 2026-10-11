@@ -2,6 +2,7 @@ using Andzip.App.Views;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Menu;
+using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -35,6 +36,7 @@ public sealed class MainWindow : Window
     private readonly Control _homeContent;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
+    private readonly Lazy<AppSettings> _settings = new(() => AppSettings.Load(AppSettings.DefaultFilePath));
 
     public MainWindow(LangCatalog lang)
     {
@@ -58,6 +60,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandCloseArchive] = CloseArchive,
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
+            [MainMenuModel.CommandSettings] = OpenSettingsDialog,
         };
 
         var root = new DockPanel();
@@ -133,6 +136,13 @@ public sealed class MainWindow : Window
     }
 
     // ---------- 命令 ----------
+
+    /// <summary>设置窗口（F5，FR-5）：模态，与参考软件一致。</summary>
+    private void OpenSettingsDialog()
+    {
+        var dialog = new SettingsWindow(_lang, _settings.Value, AppSettings.DefaultFilePath);
+        _ = dialog.ShowDialog(this);
+    }
 
     /// <summary>「新建压缩文件」对话框（FR-2，模态，与参考软件一致）。</summary>
     private void OpenNewArchiveDialog()

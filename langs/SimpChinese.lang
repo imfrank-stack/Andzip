@@ -144,6 +144,32 @@ TEXT_STATUS_SELECTED_SUMMARY            = 已选择 ${files} 个文件, ${size} 
 TEXT_ERR_OPEN_ARCHIVE_FAILED            = 打开压缩文件失败：
 TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED     = 不支持该压缩格式。
 
+; ---- 设置窗口（选项 → 设置，F5）----
+TEXT_TITLE_SETTINGS                     = 设置
+TEXT_SETTINGS_GENERAL                   = 常规
+TEXT_SETTINGS_FILE_ASSOCIATION          = 文件关联
+TEXT_SETTINGS_CONTEXT_MENU              = 上下文菜单
+TEXT_SETTINGS_EXTRACT                   = 解压
+TEXT_SETTINGS_COMPRESS                  = 压缩
+TEXT_SETTINGS_VIEW                      = 查看
+TEXT_SETTINGS_SECURITY                  = 安全
+TEXT_SETTINGS_ADVANCED                  = 高级
+TEXT_SETTINGS_LANGUAGE                  = 语言
+TEXT_BTN_RESET                          = 重置
+TEXT_BTN_APPLY                          = 立即应用
+TEXT_BTN_SELECT_ALL                     = 全选
+TEXT_BTN_DESELECT_ALL                   = 取消全选
+TEXT_SETTINGS_WINDOWS_DEFAULT_APPS      = Windows - 设置默认程序
+TEXT_SETTINGS_NOT_IMPLEMENTED           = 该设置页尚未实现，会在后续版本加入。
+TEXT_SETTINGS_ASSOC_HINT                = 勾选后 Andzip 会出现在这些扩展名的右键「打开方式」里；不会改动当前的默认程序。
+TEXT_SETTINGS_ASSOC_APPLIED             = 文件关联已更新。
+TEXT_SETTINGS_ASSOC_UNSUPPORTED         = 文件关联只能在 Windows 上设置。
+TEXT_SETTINGS_ASSOC_APPLY_FAILED        = 应用文件关联时出错：
+TEXT_GROUP_ARCHIVE                      = 压缩包文件
+TEXT_GROUP_UNIX                         = UNIX
+TEXT_GROUP_OTHER                        = 其它
+TEXT_GROUP_CD_DVD                       = CD/DVD
+
 [MENU]
 MENUSTR_FILE                            = 文件(&F)
 MENUSTR_EDIT                            = 编辑(&E)

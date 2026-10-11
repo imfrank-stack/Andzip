@@ -144,6 +144,32 @@ TEXT_STATUS_SELECTED_SUMMARY            = Selected ${files} file(s), ${size} byt
 TEXT_ERR_OPEN_ARCHIVE_FAILED            = Failed to open the archive:
 TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED     = Unsupported archive format.
 
+; ---- Settings window (Options -> Settings, F5) ----
+TEXT_TITLE_SETTINGS                     = Settings
+TEXT_SETTINGS_GENERAL                   = General
+TEXT_SETTINGS_FILE_ASSOCIATION          = File association
+TEXT_SETTINGS_CONTEXT_MENU              = Context menu
+TEXT_SETTINGS_EXTRACT                   = Extract
+TEXT_SETTINGS_COMPRESS                  = Compress
+TEXT_SETTINGS_VIEW                      = View
+TEXT_SETTINGS_SECURITY                  = Security
+TEXT_SETTINGS_ADVANCED                  = Advanced
+TEXT_SETTINGS_LANGUAGE                  = Language
+TEXT_BTN_RESET                          = Reset
+TEXT_BTN_APPLY                          = Apply
+TEXT_BTN_SELECT_ALL                     = Select all
+TEXT_BTN_DESELECT_ALL                   = Deselect all
+TEXT_SETTINGS_WINDOWS_DEFAULT_APPS      = Windows - Set default programs
+TEXT_SETTINGS_NOT_IMPLEMENTED           = This settings page is not implemented yet; it will come in a later version.
+TEXT_SETTINGS_ASSOC_HINT                = Checked formats make Andzip appear in their right-click "Open with" list; the current default program is not changed.
+TEXT_SETTINGS_ASSOC_APPLIED             = File associations updated.
+TEXT_SETTINGS_ASSOC_UNSUPPORTED         = File associations can only be set on Windows.
+TEXT_SETTINGS_ASSOC_APPLY_FAILED        = Failed to apply file associations:
+TEXT_GROUP_ARCHIVE                      = Archive files
+TEXT_GROUP_UNIX                         = UNIX
+TEXT_GROUP_OTHER                        = Other
+TEXT_GROUP_CD_DVD                       = CD/DVD
+
 [MENU]
 MENUSTR_FILE                            = &File
 MENUSTR_EDIT                            = &Edit

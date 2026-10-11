@@ -39,6 +39,9 @@ public static class MainMenuModel
     /// <summary>启动画面 / 压缩包视图切换（F6）。</summary>
     public const string CommandToggleStartScreen = "view.start";
 
+    /// <summary>设置窗口（F5）。</summary>
+    public const string CommandSettings = "options.settings";
+
     public static IReadOnlyList<MenuModel> Create() =>
     [
         new("file", "MENUSTR_FILE",
@@ -84,7 +87,7 @@ public static class MainMenuModel
 
         new("options", "MENUSTR_SETTING",
         [
-            new("options.settings", "MENUSTR_SETTING_SUB", "F5"),
+            new("options.settings", "MENUSTR_SETTING_SUB", "F5", Enabled: true, CommandId: CommandSettings),
             MenuItemModel.Separator(),
             new("options.register", "MENUSTR_REGISTER"),
             new("options.unregister", "MENUSTR_UNREGISTER"),

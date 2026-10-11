@@ -2,6 +2,47 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [0.9.1] - 2026-10-11（FR-5 设置窗口第一片：文件关联）
+
+> 版本号从 0.9.0 / Build 9 递增到 **0.9.1 / Build 10**。上面两节「未发布」的内容与本节一起构成
+> 这个版本的变更集（此前它们没有单独发版，`VersionNo.ini` 一直停在 0.9.0）。
+
+### 新增
+- **设置窗口（FR-5）**：`选项 → 设置（F5）`，`Views/SettingsWindow.cs`。左侧蓝色导航 + 右侧页面 +
+  底部「重置 / 确定」，导航顺序照参考软件（常规 / 文件关联 / 上下文菜单 / 解压 / 压缩 / 查看 /
+  安全 / 高级 / 语言）。**本片只实装「文件关联」**，其余 8 页显示占位文案而不是假装能配。
+- **文件关联候选目录**：`Andzip.Core/Archive/FileAssociationCatalog.cs`，35 项分四组
+  （压缩包文件 / UNIX / 其它 / CD-DVD）。候选集由 `Supported(引擎可读扩展名)` 过滤，
+  所以列表跟着引擎能力走：哪天引擎读不了某个格式，那一行自己消失。目录刻意排除
+  APFS / NTFS / ELF / PE(dll,sys) / VHD 这类「嗅探得出来但不是压缩包」的格式，以及
+  Compound（扩展名是 doc / xls / ppt）—— 它们仍然能打开，打开对话框与命令行走内容嗅探。
+- **Windows 文件关联登记**：`Services/FileAssociationService.cs`。写
+  `HKCU\Software\Classes\Andzip.<id>`（ProgID + DefaultIcon + `shell\open\command`），
+  并把 ProgID 挂进该扩展名的 `OpenWithProgids`。**不改扩展名键的默认值**，因此只让 Andzip
+  出现在右键「打开方式」里，不抢系统默认程序；取消勾选整棵删除，撤销干净。改完
+  `SHChangeNotify(ASSOC_CHANGED)` 让资源管理器立刻刷新。全部走 HKCU，不需要管理员。
+- **应用设置存储**：`Andzip.Core/Settings/AppSettings.cs`，扁平 `key = value` 文本，落在
+  `%APPDATA%\Andzip\settings.ini`。没用 JSON：反射式序列化在 `PublishTrimmed` 下要额外保留配置，
+  为一堆标量不值当，而且语言包与 VersionNo.ini 本来就是这套语法。跟着用户走而不是程序目录，
+  因为绿色版常被放在只读位置。
+- 语言包新增 24 个键（设置窗口导航、按钮、分组标题与提示），两种语言同步并进 `LangKeyCoverageTests`。
+
+### 变更
+- 「确定」= 有未应用改动就顺手应用再关窗，右上角 X 才是放弃改动；「重置」恢复**出厂默认勾选**
+  （ZIP / 7Z / RAR / TAR / GZ… 勾上，EXE / IMG / JAR 等不勾），不是放弃未保存改动。
+- 「立即应用」只在勾选与已保存状态不一致时可用（`Enabled` 而不是点了没反应）。
+- 参考软件关联页上的「基本选项」按钮没有跟着做：它的行为无法从截图确定，与其放一个不知道会不会
+  有用的按钮不如先不放。
+
+### 验证
+- `dotnet build Andzip.slnx` 0 警告 0 错误；`dotnet test` **209 / 209**（新增 22 条：
+  关联目录 9 条 + 设置存储 13 条）；`Andzip.Native.Tests` 69 条断言 0 失败。
+- 关联目录里有一条钉子用例：`EveryCatalogExtension_IsActuallyReadableByTheEngine` ——
+  目录写的每个扩展名都必须在引擎实际报告的可读集合里，防止将来加一行勾了却打不开的关联。
+- **界面与注册表写入未做自动化验证**（按约定 GUI 由用户手动测）。手动清单见 README 第九节
+  第 6 / 7 条：勾 LZMA → 立即应用 → 右键「打开方式」应出现 Andzip；取消 → 应消失；
+  重置 / 确定 / 重开 F5 验证持久化。
+
 ## [未发布] - 2026-10-11（FR-1 首页 + FR-4 压缩包浏览视图）
 
 > 版本号仍是 0.9.0 / Build 9。本条只动界面与 Core 的呈现层，未触碰 `native/` 内核。
