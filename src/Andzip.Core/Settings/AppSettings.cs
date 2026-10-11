@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Andzip.Core.Settings;
 
 /// <summary>
@@ -103,6 +105,15 @@ public sealed class AppSettings
             : fallback;
 
     public void SetBool(string key, bool value) => _values[key] = value ? "1" : "0";
+
+    /// <summary>
+    /// 整数值。存的不是数字（手改过、或来自更新版本）时回落到 <paramref name="fallback"/>，
+    /// 与 <see cref="SettingKeys.ParseDoubleClick"/> 同一套容错理由：设置文件不该让程序起不来。
+    /// </summary>
+    public int GetInt(string key, int fallback = 0)
+        => _values.TryGetValue(key, out var value) && int.TryParse(value, out var parsed) ? parsed : fallback;
+
+    public void SetInt(string key, int value) => _values[key] = value.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>分号分隔的字符串列表；空值表示空列表。</summary>
     public IReadOnlyList<string> GetStringList(string key)

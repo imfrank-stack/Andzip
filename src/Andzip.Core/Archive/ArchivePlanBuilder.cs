@@ -76,8 +76,8 @@ internal static class ArchivePlanBuilder
     }
 
     private static bool ShouldExclude(string fileName, ArchiveCreationSettings settings)
-        => settings.ExcludeThumbsDb
-           && fileName.Equals(ThumbsDbName, StringComparison.OrdinalIgnoreCase);
+        => (settings.ExcludeThumbsDb && fileName.Equals(ThumbsDbName, StringComparison.OrdinalIgnoreCase))
+           || FileNamePattern.MatchesAny(settings.ResolvedExcludePatterns, fileName);
 
     private static string CombineEntryPath(string prefix, string relative)
     {

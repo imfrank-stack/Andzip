@@ -80,9 +80,10 @@ TEXT_ERR_OUTPUT_NOT_SET                 = 请指定压缩文件路径。
 TEXT_ERR_GZ_SINGLE_FILE                 = GZ 格式只能压缩单个文件。
 TEXT_ERR_PASSWORD_ASCII                 = ZIP 格式的密码只支持 ASCII 字符。需要使用中文等非 ASCII 密码时，请改用 7Z 格式。
 TEXT_COMPRESSIONMETHOD_STORE            = 0-仅存储
-TEXT_COMPRESSIONMETHOD_FAST             = 1-快速压缩
-TEXT_COMPRESSIONMETHOD_NORMAL           = 2-正常压缩
-TEXT_COMPRESSIONMETHOD_MAX              = 3-极限压缩
+TEXT_COMPRESSIONMETHOD_ULTRAFAST        = 1-极速压缩
+TEXT_COMPRESSIONMETHOD_FAST             = 2-快速压缩
+TEXT_COMPRESSIONMETHOD_NORMAL           = 3-标准压缩
+TEXT_COMPRESSIONMETHOD_MAX              = 4-极限压缩
 
 ; ---- 密码输入对话框（FR-2.6）----
 TEXT_TITLE_PASSWORD_INPUT               = 输入密码
@@ -194,6 +195,23 @@ TEXT_SETTINGS_CTX_UNSUPPORTED           = 右键菜单只能在 Windows 上设�
 TEXT_SETTINGS_CTX_FAILED                = 写入右键菜单时出错：
 TEXT_BTN_SET_DEFAULT                    = 设为默认…
 TEXT_SETTINGS_DEFAULT_STILL             = 这些格式已经关联，但默认程序仍是别的软件（Windows 的默认应用保护）。点「设为默认…」，在系统设置里选 Andzip 并确认：${list}
+
+; ---- 设置：压缩页 ----
+TEXT_SETTINGS_COMPRESS_TITLE            = 压缩设置
+TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL    = 默认压缩级别
+TEXT_SETTINGS_COMPRESS_LEVEL_HINT       = 新建压缩文件时下拉框停在哪一档。前三档拼的是速度，标准档看速度与压缩率的平衡，极限档只管压得小、不计时。
+TEXT_SETTINGS_COMPRESS_NO_ROOT          = 压缩单个文件夹时不创建根目录
+TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT     = 勾上后包里直接是那个文件夹的内容，而不是文件夹本身。
+TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS   = 排除 Thumbs.db
+TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES    = 压缩时要排除的文件类型
+TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT     = 用分号隔开的文件名模式，例如 *.bak; *.tmp;。留空表示不排除。匹配的是文件名，不看所在目录。
+TEXT_SETTINGS_COMPRESS_TEST_AFTER       = 压缩后测试
+TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS    = 压缩完成后不关闭进度窗口
+TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT = 关掉时进度条跑完就自己消失；勾上则留着窗口和结果，需要看一眼体积比的时候再开。
+TEXT_SETTINGS_COMPRESS_OUTPUT_DIR       = 输出目录
+TEXT_SETTINGS_COMPRESS_OUTPUT_LAST      = 上次新建时使用的目录
+TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED     = 总是输出到以下目录
+TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = 留空等同于「上次新建时使用的目录」。
 
 [MENU]
 MENUSTR_FILE                            = 文件(&F)

@@ -79,10 +79,11 @@ TEXT_ERR_NO_INPUT                       = Add files or folders first.
 TEXT_ERR_OUTPUT_NOT_SET                 = Specify the output archive path.
 TEXT_ERR_GZ_SINGLE_FILE                 = GZ format can only compress a single file.
 TEXT_ERR_PASSWORD_ASCII                 = The ZIP format only accepts ASCII characters in the password. Use 7Z for a password with Chinese or other non-ASCII characters.
-TEXT_COMPRESSIONMETHOD_STORE            = 0-Store
-TEXT_COMPRESSIONMETHOD_FAST             = 1-Fast
-TEXT_COMPRESSIONMETHOD_NORMAL           = 2-Normal
-TEXT_COMPRESSIONMETHOD_MAX              = 3-Maximum
+TEXT_COMPRESSIONMETHOD_STORE            = 0-Store only
+TEXT_COMPRESSIONMETHOD_ULTRAFAST        = 1-Ultra fast
+TEXT_COMPRESSIONMETHOD_FAST             = 2-Fast
+TEXT_COMPRESSIONMETHOD_NORMAL           = 3-Normal
+TEXT_COMPRESSIONMETHOD_MAX              = 4-Maximum
 
 ; ---- Password input dialog (FR-2.6) ----
 TEXT_TITLE_PASSWORD_INPUT               = Enter password
@@ -194,6 +195,23 @@ TEXT_SETTINGS_CTX_UNSUPPORTED           = The context menu can only be configure
 TEXT_SETTINGS_CTX_FAILED                = Writing the context menu entries failed:
 TEXT_BTN_SET_DEFAULT                    = Set as default...
 TEXT_SETTINGS_DEFAULT_STILL             = These formats are associated, but another program is still the default (Windows default-app protection). Click "Set as default..." and pick Andzip in the system settings: ${list}
+
+; ---- Settings: compression page ----
+TEXT_SETTINGS_COMPRESS_TITLE            = Compression settings
+TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL    = Default compression level
+TEXT_SETTINGS_COMPRESS_LEVEL_HINT       = Which entry the dropdown opens on in "New archive". The first three are about speed, Normal balances speed against ratio, Maximum only cares about ratio.
+TEXT_SETTINGS_COMPRESS_NO_ROOT          = Do not create a root folder when compressing a single folder
+TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT     = When on, the archive holds the folder's contents directly instead of the folder itself.
+TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS   = Exclude Thumbs.db
+TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES    = File types to exclude when compressing
+TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT     = Semicolon-separated name patterns, e.g. *.bak; *.tmp;. Empty means nothing extra is excluded. Patterns match the file name, not its directory.
+TEXT_SETTINGS_COMPRESS_TEST_AFTER       = Test the archive after compression
+TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS    = Keep the progress window open when compression finishes
+TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT = When off the progress bar disappears as soon as it completes; when on it stays with the result. Useful for checking the ratio.
+TEXT_SETTINGS_COMPRESS_OUTPUT_DIR       = Output folder
+TEXT_SETTINGS_COMPRESS_OUTPUT_LAST      = The folder used for the last new archive
+TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED     = Always output to this folder
+TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = Leaving it empty behaves like "the folder used for the last new archive".
 
 [MENU]
 MENUSTR_FILE                            = &File

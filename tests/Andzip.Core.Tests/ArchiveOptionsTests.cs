@@ -8,12 +8,13 @@ public class ArchiveOptionsTests
     // ---------- CompressionLevelOption（FR-2.4） ----------
 
     [Fact]
-    public void CompressionLevels_MatchReferenceFourLevels()
+    public void CompressionLevels_AreFiveTiersInSpeedOrder()
     {
-        Assert.Equal(4, CompressionLevelOption.All.Count);
-        Assert.Equal([0, 1, 2, 3], CompressionLevelOption.All.Select(l => l.Id).ToArray());
+        Assert.Equal(5, CompressionLevelOption.All.Count);
+        Assert.Equal([0, 1, 2, 3, 4], CompressionLevelOption.All.Select(l => l.Id).ToArray());
+        // 越靠前越快 —— 排序本身就是"前三档拼速度"这条规则的体现。
+        Assert.Equal([0, 1, 3, 5, 9], CompressionLevelOption.All.Select(l => l.EngineLevel).ToArray());
         Assert.Equal(CompressionLevelOption.Normal, CompressionLevelOption.Default);
-        Assert.Equal(2, CompressionLevelOption.Default.Id);
     }
 
     [Fact]
@@ -21,23 +22,41 @@ public class ArchiveOptionsTests
     {
         // 引擎的级别是 0..9（-mx=），不再是 System.IO.Compression 的四档枚举。
         Assert.Equal(0, CompressionLevelOption.Store.EngineLevel);
+        Assert.Equal(1, CompressionLevelOption.UltraFast.EngineLevel);
         Assert.Equal(3, CompressionLevelOption.Fast.EngineLevel);
         Assert.Equal(5, CompressionLevelOption.Normal.EngineLevel);
         Assert.Equal(9, CompressionLevelOption.Max.EngineLevel);
     }
 
     [Fact]
+    public void CompressionLevels_PositionIsNotTheSameThingAsId()
+    {
+        // 下拉框用的是位置，设置文件里存的是 Id。今天两者相等，将来插入一档就会分叉 ——
+        // 钉住这个区别，免得有人图省事把 Id 当 SelectedIndex 用。
+        Assert.Equal(2, CompressionLevelOption.PositionOf(CompressionLevelOption.Fast));
+        Assert.Equal(-1, CompressionLevelOption.PositionOf(new CompressionLevelOption(99, "X", 5)));
+    }
+
+    [Fact]
     public void CompressionLevels_UseReferenceTextKeys()
     {
         Assert.Equal("TEXT_COMPRESSIONMETHOD_STORE", CompressionLevelOption.Store.TextKey);
+        Assert.Equal("TEXT_COMPRESSIONMETHOD_ULTRAFAST", CompressionLevelOption.UltraFast.TextKey);
         Assert.Equal("TEXT_COMPRESSIONMETHOD_FAST", CompressionLevelOption.Fast.TextKey);
         Assert.Equal("TEXT_COMPRESSIONMETHOD_NORMAL", CompressionLevelOption.Normal.TextKey);
         Assert.Equal("TEXT_COMPRESSIONMETHOD_MAX", CompressionLevelOption.Max.TextKey);
     }
 
-    [Fact]
-    public void CompressionLevel_FromId_UnknownThrows()
-        => Assert.Throws<ArgumentOutOfRangeException>(() => CompressionLevelOption.FromId(9));
+    [Theory]
+    [InlineData(9)]      // 四档时代没人写过 9，但手改过的文件什么都有
+    [InlineData(-1)]
+    [InlineData(4711)]
+    public void CompressionLevel_FromId_UnknownFallsBackInsteadOfThrowing(int id)
+    {
+        // 绿色版可能读到更新版本写下的档位号。认不出来要按最保守的默认继续工作，
+        // 而不是在启动路径上抛一个用户看不懂的异常。
+        Assert.Equal(CompressionLevelOption.Normal, CompressionLevelOption.FromId(id));
+    }
 
     // ---------- ArchiveFormatOption（FR-2.2 / 附录 D.1） ----------
 

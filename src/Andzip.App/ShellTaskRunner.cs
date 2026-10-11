@@ -28,7 +28,7 @@ internal static class ShellTaskRunner
             case ShellTask.Extract or ShellTask.AutoExtract or ShellTask.ExtractHere:
                 return DirectExtract.RunAsync(lang, settings, task, path, desktop);
             case ShellTask.CompressDialog:
-                return ShowNewArchive(lang, path, desktop);
+                return ShowNewArchive(lang, settings, path, desktop);
             default:
                 return DirectCompress.RunAsync(lang, settings, task, path, desktop);
         }
@@ -44,10 +44,15 @@ internal static class ShellTaskRunner
     /// </summary>
     private static Task ShowNewArchive(
         LangCatalog lang,
+        AppSettings settings,
         string path,
         IClassicDesktopStyleApplicationLifetime desktop)
     {
-        var window = new NewArchiveWindow(lang, path)
+        var window = new NewArchiveWindow(
+            lang,
+            CompressionDefaults.Load(settings),
+            seedPath: path,
+            lastOutputFolder: settings.GetString(SettingKeys.CompressLastOutputFolder))
         {
             ShowInTaskbar = true,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,

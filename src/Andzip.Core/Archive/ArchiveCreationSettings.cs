@@ -24,9 +24,16 @@ public sealed record ArchiveCreationSettings(
     string? EntryComment = null,
     bool EncryptHeaders = false,
     bool Solid = true,
+    IReadOnlyList<string>? ExcludePatterns = null,
     IProgress<ArchiveProgress>? Progress = null)
 {
     public ArchiveFormatOption ResolvedFormat => Format ?? ArchiveFormatOption.Default;
+
+    /// <summary>
+    /// 额外的排除模式（<c>*.bak</c> / <c>*.tmp</c> 这类），来自「设置 → 压缩 → 压缩时要排除的文件类型」。
+    /// 空列表表示只按 <see cref="ExcludeThumbsDb"/> 决定。
+    /// </summary>
+    public IReadOnlyList<string> ResolvedExcludePatterns => ExcludePatterns ?? [];
 
     /// <summary>是否设置了非空密码。</summary>
     public bool HasPassword => !string.IsNullOrEmpty(Password);
@@ -46,6 +53,33 @@ public sealed record ArchiveCreationSettings(
 
     /// <summary>条目「文件说明」（FR-2.5；写入归档注释）。</summary>
     public bool HasEntryComment => !string.IsNullOrEmpty(EntryComment);
+
+    /// <summary>
+    /// 解析设置框里那一串 <c>*.bak; *.tmp;</c>：按分号切开、去空白、去重。
+    /// <para>
+    /// 分隔符只认分号不认逗号，因为 Windows 文件名里逗号是合法的
+    /// （<c>report,final.txt</c> 是个真名字），按逗号切会把一条模式劈成两条不相干的。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> ParseExcludePatterns(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        var patterns = new List<string>();
+        foreach (var raw in text.Split(';'))
+        {
+            var pattern = raw.Trim();
+            if (pattern.Length > 0 && !patterns.Contains(pattern, StringComparer.OrdinalIgnoreCase))
+            {
+                patterns.Add(pattern);
+            }
+        }
+
+        return patterns;
+    }
 }
 
 /// <summary>

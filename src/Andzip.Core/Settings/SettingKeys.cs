@@ -28,6 +28,58 @@ public static class SettingKeys
     /// </summary>
     public const string ContextMenuExtractVerbs = "context_menu_extract_verbs";
 
+    // ------------------------------------------------------------- 压缩页
+    //
+    // 这一组是「新建压缩文件」对话框的**默认值**来源：对话框上的控件仍可逐次改，
+    // 这里只决定它每次打开时长什么样。所以它们不参与压缩本身，只在打开对话框时读一次。
+
+    /// <summary>默认压缩级别，存 <c>CompressionLevelOption.Id</c>。</summary>
+    public const string CompressLevel = "compress_level";
+
+    /// <summary>压缩单个文件夹时不创建根目录（对应 IncludeRootFolder 取反）。</summary>
+    public const string CompressNoRootFolder = "compress_no_root_folder";
+
+    public const string CompressExcludeThumbsDb = "compress_exclude_thumbs_db";
+
+    /// <summary>额外排除模式，原样存设置框里那串 <c>*.bak; *.tmp;</c>。</summary>
+    public const string CompressExcludePatterns = "compress_exclude_patterns";
+
+    public const string CompressTestAfter = "compress_test_after";
+
+    /// <summary>压缩完成后保留进度窗口（关掉时跑完即消失）。</summary>
+    public const string CompressKeepProgress = "compress_keep_progress";
+
+    /// <summary>输出目录策略：沿用上次，还是固定到一个目录。</summary>
+    public const string CompressOutputFolderMode = "compress_output_folder_mode";
+
+    /// <summary><see cref="CompressOutputFolderMode"/> 选「固定」时的那个目录。</summary>
+    public const string CompressOutputFolder = "compress_output_folder";
+
+    /// <summary>
+    /// 上一次成功新建压缩包所在的目录，由对话框在压完之后写回来。
+    /// <para>刻意不放进 <see cref="CompressionDefaults"/>：那类型是「设置 → 压缩」页编辑并整体存盘的
+    /// 一组值，而这一项是程序自己记账的结果 —— 用户在页面上看不到它，也不该被页面的「立即应用」覆盖。</para>
+    /// </summary>
+    public const string CompressLastOutputFolder = "compress_last_output_folder";
+
+    /// <summary>新建压缩文件时输出目录的两种选择。</summary>
+    public enum OutputFolderMode
+    {
+        /// <summary>上次新建时用的目录（没有则退到「文档」）。</summary>
+        LastUsed,
+
+        /// <summary>总是输出到设置里指定的那个目录。</summary>
+        Fixed,
+    }
+
+    /// <summary>认不出来回落到 <see cref="OutputFolderMode.LastUsed"/> —— 那是改动前的行为。</summary>
+    public static OutputFolderMode ParseOutputFolderMode(string? stored)
+        => stored?.Trim().ToLowerInvariant() == "fixed" ? OutputFolderMode.Fixed : OutputFolderMode.LastUsed;
+
+    /// <summary>枚举存成稳定的小写标识，理由同 <see cref="ToStorage(ArchiveDoubleClick)"/>。</summary>
+    public static string ToStorage(this OutputFolderMode mode)
+        => mode == OutputFolderMode.Fixed ? "fixed" : "last";
+
     /// <summary>枚举存成稳定的小写标识（不是数字），这样以后插入新值不会让老设置错位。</summary>
     public static string ToStorage(this ArchiveDoubleClick value)
         => value == ArchiveDoubleClick.ExtractDirectly ? "extract" : "open";

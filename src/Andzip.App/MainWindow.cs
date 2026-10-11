@@ -145,11 +145,31 @@ public sealed class MainWindow : Window
         _ = dialog.ShowDialog(this);
     }
 
-    /// <summary>「新建压缩文件」对话框（FR-2，模态，与参考软件一致）。</summary>
+    /// <summary>
+    /// 「新建压缩文件」对话框（FR-2，模态，与参考软件一致）。
+    /// <para>默认值取自「设置 → 压缩」；顺带把"上次用的输出目录"读给它、并让它压完写回来 ——
+    /// 对话框自己不知道设置存在哪、什么时候落盘。</para>
+    /// </summary>
     private void OpenNewArchiveDialog()
     {
-        var dialog = new NewArchiveWindow(_lang);
+        var dialog = new NewArchiveWindow(
+            _lang,
+            CompressionDefaults.Load(_settings),
+            lastOutputFolder: _settings.GetString(SettingKeys.CompressLastOutputFolder),
+            rememberOutputFolder: RememberOutputFolder);
         _ = dialog.ShowDialog(this);
+    }
+
+    private void RememberOutputFolder(string directory)
+    {
+        if (directory.Length == 0
+            || string.Equals(_settings.GetString(SettingKeys.CompressLastOutputFolder), directory, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _settings.SetString(SettingKeys.CompressLastOutputFolder, directory);
+        _settings.Save(AppSettings.DefaultFilePath);
     }
 
     /// <summary>打开压缩文件（Ctrl+O / 工具栏「打开」/ 文件菜单）：弹系统文件框选包。</summary>

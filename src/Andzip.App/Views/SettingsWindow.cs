@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 
 namespace Andzip.App.Views;
 
@@ -65,7 +66,7 @@ public sealed class SettingsWindow : Window
             new FileAssociationPage(this, lang, settings, settingsPath),
             new ContextMenuPage(this, lang, settings, settingsPath),
             new PlaceholderPage(lang, "TEXT_SETTINGS_EXTRACT"),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_COMPRESS"),
+            new CompressionPage(this, lang, settings, settingsPath),
             new PlaceholderPage(lang, "TEXT_SETTINGS_VIEW"),
             new PlaceholderPage(lang, "TEXT_SETTINGS_SECURITY"),
             new PlaceholderPage(lang, "TEXT_SETTINGS_ADVANCED"),
@@ -172,6 +173,14 @@ public sealed class SettingsWindow : Window
         TextWrapping = TextWrapping.Wrap,
         Margin = new Thickness(24, 4, 0, 0),
     };
+
+    /// <summary>带"改动就重新算要不要允许应用"回调的复选框。好几个页面都要这个形状。</summary>
+    private static CheckBox Check(string label, Action onToggled)
+    {
+        var box = new CheckBox { Content = label, Margin = new Thickness(0, 6, 0, 0) };
+        box.IsCheckedChanged += (_, _) => onToggled();
+        return box;
+    }
 
     /// <summary>每页对外的三件事：导航键、要呈现的控件、重新读状态 / 落盘。</summary>
     private interface ISettingsPage
@@ -872,18 +881,228 @@ public sealed class SettingsWindow : Window
         }
 
         private void Message(string text) => _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
+    }
 
-        private static CheckBox Check(string label, Action onToggled)
+    /// <summary>
+    /// 压缩页：「新建压缩文件」对话框打开时的那一套默认值。
+    /// <para>
+    /// 这一页只决定<strong>对话框长什么样</strong>，压的时候仍可以逐次改 —— 所以它不会去动
+    /// 已经排好队的任务，也不需要像文件关联那样碰注册表。落盘就是一行 <c>settings.ini</c>。
+    /// </para>
+    /// <para>
+    /// 刻意没有口令与分卷：那两项每次都不一样，记住反而危险（上次压的是加密包，
+    /// 这次压的是要发给别人的公开目录，把口令带过去是事故）。
+    /// </para>
+    /// </summary>
+    private sealed class CompressionPage : ISettingsPage
+    {
+        private readonly SettingsWindow _owner;
+        private readonly LangCatalog _lang;
+        private readonly string _settingsPath;
+        private readonly ComboBox _level;
+        private readonly CheckBox _noRootFolder;
+        private readonly CheckBox _excludeThumbs;
+        private readonly TextBox _excludePatterns;
+        private readonly CheckBox _testAfter;
+        private readonly CheckBox _keepProgress;
+        private readonly RadioButton _outputLast;
+        private readonly RadioButton _outputFixed;
+        private readonly TextBox _outputFolder;
+        private readonly Button _applyButton;
+
+        private CompressionDefaults _live = CompressionDefaults.Fallback;
+
+        public CompressionPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
         {
-            var box = new CheckBox { Content = label, Margin = new Thickness(0, 6, 0, 0) };
-            box.PropertyChanged += (_, e) =>
+            NavKey = "TEXT_SETTINGS_COMPRESS";
+            _lang = lang;
+            _owner = owner;
+            _settingsPath = settingsPath;
+
+            _level = new ComboBox
             {
-                if (e.Property == ToggleButton.IsCheckedProperty)
-                {
-                    onToggled();
-                }
+                ItemsSource = CompressionLevelOption.All
+                    .Select(o => new DisplayItem(lang.Get(o.TextKey), o))
+                    .ToList(),
+                Width = 220,
+                HorizontalAlignment = HorizontalAlignment.Left,
             };
-            return box;
+
+            _noRootFolder = Check(lang.Get("TEXT_SETTINGS_COMPRESS_NO_ROOT"), UpdateApplyState);
+            _excludeThumbs = Check(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS"), UpdateApplyState);
+            _testAfter = Check(lang.Get("TEXT_SETTINGS_COMPRESS_TEST_AFTER"), UpdateApplyState);
+            _keepProgress = Check(lang.Get("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS"), UpdateApplyState);
+
+            _excludePatterns = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            _excludePatterns.TextChanged += (_, _) => UpdateApplyState();
+
+            _outputLast = new RadioButton { Content = lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_LAST"), IsChecked = true };
+            _outputFixed = new RadioButton { Content = lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED") };
+            _outputLast.IsCheckedChanged += (_, _) => { RefreshOutputFolderEnabled(); UpdateApplyState(); };
+            _outputFixed.IsCheckedChanged += (_, _) => { RefreshOutputFolderEnabled(); UpdateApplyState(); };
+
+            _outputFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            _outputFolder.TextChanged += (_, _) => UpdateApplyState();
+
+            var pickFolder = new Button { Content = lang.Get("TEXT_BTN_BROWSE"), MinWidth = 110 };
+            pickFolder.Click += async (_, _) => await PickFolderAsync();
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 24, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_COMPRESS_TITLE")));
+            panel.Children.Add(LabeledRow(lang.Get("TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL"), _level));
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_LEVEL_HINT")));
+            panel.Children.Add(_noRootFolder);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT")));
+            panel.Children.Add(_excludeThumbs);
+            panel.Children.Add(LabeledRow(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES"), _excludePatterns));
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT")));
+            panel.Children.Add(_testAfter);
+            panel.Children.Add(_keepProgress);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT")));
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_DIR"),
+                Margin = new Thickness(0, 20, 0, 4),
+            });
+            panel.Children.Add(_outputLast);
+            panel.Children.Add(_outputFixed);
+            panel.Children.Add(LabeledRow(string.Empty, _outputFolder, pickFolder));
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT")));
+            panel.Children.Add(_applyButton);
+
+            Root = new ScrollViewer
+            {
+                Content = panel,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            };
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _live = CompressionDefaults.Load(ReadSettings());
+
+            _level.SelectedIndex = Math.Max(0, CompressionLevelOption.PositionOf(_live.Level));
+            _noRootFolder.IsChecked = !_live.IncludeRootFolder;
+            _excludeThumbs.IsChecked = _live.ExcludeThumbsDb;
+            _excludePatterns.Text = _live.ExcludePatternText;
+            _testAfter.IsChecked = _live.TestAfterCreation;
+            _keepProgress.IsChecked = _live.KeepProgressWindow;
+            _outputLast.IsChecked = _live.OutputMode == SettingKeys.OutputFolderMode.LastUsed;
+            _outputFixed.IsChecked = _live.OutputMode == SettingKeys.OutputFolderMode.Fixed;
+            _outputFolder.Text = _live.FixedOutputFolder ?? string.Empty;
+
+            RefreshOutputFolderEnabled();
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private void RefreshOutputFolderEnabled()
+        {
+            _outputFolder.IsEnabled = _outputFixed.IsChecked == true;
+            _outputFolder.Opacity = _outputFolder.IsEnabled ? 1.0 : 0.5;
+        }
+
+        private CompressionDefaults Selection() => new(
+            _level.SelectedItem is DisplayItem { Value: CompressionLevelOption level }
+                ? level : CompressionLevelOption.Default,
+            IncludeRootFolder: _noRootFolder.IsChecked != true,
+            ExcludeThumbsDb: _excludeThumbs.IsChecked == true,
+            // 存原文而不是解析结果：用户在框里打的字就是设置里存的东西，别替他改写。
+            ExcludePatternText: _excludePatterns.Text?.Trim() ?? string.Empty,
+            TestAfterCreation: _testAfter.IsChecked == true,
+            KeepProgressWindow: _keepProgress.IsChecked == true,
+            OutputMode: _outputFixed.IsChecked == true
+                ? SettingKeys.OutputFolderMode.Fixed
+                : SettingKeys.OutputFolderMode.LastUsed,
+            FixedOutputFolder: string.IsNullOrWhiteSpace(_outputFolder.Text) ? null : _outputFolder.Text.Trim());
+
+        private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
+
+        private void Apply()
+        {
+            var desired = Selection();
+            if (desired.Equals(_live))
+            {
+                return;
+            }
+
+            var settings = ReadSettings();
+            // 只覆盖这一页管的那些键；Load 出来的 Fallback 里那些"上次输出目录"之类的记账项
+            // 不在 CompressionDefaults 里，所以不会被这一页顺手抹掉。
+            desired.Save(settings);
+            settings.Save(_settingsPath);
+            Reload();
+        }
+
+        private AppSettings ReadSettings() => AppSettings.Load(_settingsPath);
+
+        private async Task PickFolderAsync()
+        {
+            var folders = await _owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = _lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED"),
+                AllowMultiple = false,
+            });
+
+            if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+            {
+                _outputFolder.Text = path;
+            }
+        }
+
+        /// <summary>左标签右控件的一行；标签给空串就是只占缩进的单独控件行。</summary>
+        private static Control LabeledRow(string label, Control control, Control? trailing = null)
+        {
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 12,
+                Margin = new Thickness(0, 14, 0, 0),
+            };
+            if (label.Length > 0)
+            {
+                row.Children.Add(new TextBlock
+                {
+                    Text = label,
+                    Width = 170,
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+            }
+            else
+            {
+                row.Children.Add(new TextBlock { Width = 170 });
+            }
+
+            row.Children.Add(control);
+            if (trailing is not null)
+            {
+                row.Children.Add(trailing);
+            }
+
+            return row;
         }
     }
 }

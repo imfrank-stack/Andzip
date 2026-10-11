@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
+using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -28,6 +29,13 @@ internal sealed record DisplayItem(string Text, object Value)
 public sealed class NewArchiveWindow : Window
 {
     private readonly LangCatalog _lang;
+
+    /// <summary>「设置 → 压缩」带来的默认值；决定打开时的初始状态，不锁住控件。</summary>
+    private readonly CompressionDefaults _defaults;
+
+    private readonly string? _lastOutputFolder;
+
+    private readonly Action<string>? _rememberOutputFolder;
     private readonly ObservableCollection<ArchiveInputItem> _inputs = [];
     private readonly ListBox _list;
     private readonly Button _deleteButton;
@@ -55,11 +63,27 @@ public sealed class NewArchiveWindow : Window
     private int _lastVolumeIndex;
     private bool _suppressVolumeChange;
 
+    /// <summary>
+    /// 「新建压缩文件」对话框（FR-2）。
+    /// </summary>
+    /// <param name="defaults">来自「设置 → 压缩」的默认值；null 表示用不带设置的那一套。
+    /// 它只决定<strong>打开时长什么样</strong>，控件本身仍可逐次改。</param>
     /// <param name="seedPath">右键「压缩到…」带进来的文件或文件夹：预先填进输入列表，
     /// 并把「文件名」预填成同名的兄弟位置。null 表示从主菜单新建，一切从空开始。</param>
-    public NewArchiveWindow(LangCatalog lang, string? seedPath = null)
+    /// <param name="lastOutputFolder">上次成功新建时用的目录，仅在输出目录策略是「沿用上次」时生效。</param>
+    /// <param name="rememberOutputFolder">压成之后把输出目录记下来；null 表示不记账。
+    /// 用回调而不是把 <c>AppSettings</c> 传进来：对话框不该知道设置存在哪里、什么时候落盘。</param>
+    public NewArchiveWindow(
+        LangCatalog lang,
+        CompressionDefaults? defaults = null,
+        string? seedPath = null,
+        string? lastOutputFolder = null,
+        Action<string>? rememberOutputFolder = null)
     {
         _lang = lang;
+        _defaults = defaults ?? CompressionDefaults.Fallback;
+        _lastOutputFolder = lastOutputFolder;
+        _rememberOutputFolder = rememberOutputFolder;
 
         Title = lang.Get("TEXT_TITLE_NEW_ARCHIVE");
         Width = 972;
@@ -118,7 +142,8 @@ public sealed class NewArchiveWindow : Window
             ItemsSource = CompressionLevelOption.All
                 .Select(o => new DisplayItem(lang.Get(o.TextKey), o))
                 .ToList(),
-            SelectedIndex = CompressionLevelOption.Default.Id,
+            // 按位置选，不按 Id 选：Id 是存进设置文件的稳定标识，将来插入新档位时两者就会错位。
+            SelectedIndex = Math.Max(0, CompressionLevelOption.PositionOf(_defaults.Level)),
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
@@ -142,7 +167,11 @@ public sealed class NewArchiveWindow : Window
         var cancelButton = new Button { Content = lang.Get("TEXT_BTN_CANCEL"), MinWidth = 96, IsCancel = true };
         cancelButton.Click += (_, _) => Close();
 
-        _testAfterCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_TEST_AFTER_COMPRESSION") };
+        _testAfterCheck = new CheckBox
+        {
+            Content = lang.Get("TEXT_CHECK_TEST_AFTER_COMPRESSION"),
+            IsChecked = _defaults.TestAfterCreation,
+        };
         _deleteSourceCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_DELETE_SOURCE") };
         _separateCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_SEPARATE_ARCHIVES") };
 
@@ -414,11 +443,28 @@ public sealed class NewArchiveWindow : Window
         grid.Children.Add(control);
     }
 
+    /// <summary>
+    /// 「文件名」框打开时的默认落点，按「设置 → 压缩 → 输出目录」决定。
+    /// <para>
+    /// 「固定目录」里填了不存在的路径时<strong>不</strong>当场创建：这个值只是填进文本框的建议，
+    /// 用户可能马上改掉；真到压的时候 <c>ArchiveCreateValidator.Prepare</c> 会建目录，
+    /// 那时失败才有意义（也会给出错误框而不是静默建一堆目录）。
+    /// </para>
+    /// </summary>
     private string DefaultOutputPath()
     {
-        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        return Path.Combine(documents, _lang.Get("TEXT_DEFAULT_ARCHIVE_NAME") + ".zip");
+        var directory = _defaults.OutputMode == SettingKeys.OutputFolderMode.Fixed
+            ? FirstDirectory(_defaults.FixedOutputFolder, _lastOutputFolder)
+            : FirstDirectory(_lastOutputFolder, _defaults.FixedOutputFolder);
+
+        directory ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+        return Path.Combine(directory, _lang.Get("TEXT_DEFAULT_ARCHIVE_NAME") + ".zip");
     }
+
+    /// <summary>第一个"非空且真的存在"的目录；都没有就返回 null。</summary>
+    private static string? FirstDirectory(params string?[] candidates)
+        => candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c) && Directory.Exists(c));
 
     private static string FormatSize(long? bytes) => bytes switch
     {
@@ -707,6 +753,11 @@ public sealed class NewArchiveWindow : Window
             output,
             level,
             Format: format,
+            // 排除规则没有对应的对话框控件，所以它完全来自「设置 → 压缩」——
+            // 用户在这里看不到勾，但包里确实不会混进 *.bak。
+            ExcludeThumbsDb: _defaults.ExcludeThumbsDb,
+            ExcludePatterns: _defaults.ParsedExcludePatterns,
+            IncludeRootFolder: _defaults.IncludeRootFolder,
             TestAfterCreation: _testAfterCheck.IsChecked == true,
             DeleteSourceAfterCreation: _deleteSourceCheck.IsChecked == true,
             SeparateArchives: _separateCheck.IsChecked == true,
@@ -738,14 +789,27 @@ public sealed class NewArchiveWindow : Window
         try
         {
             var result = await Task.Run(() => ArchiveCreator.Create(inputs, settings, cts.Token), cts.Token);
-            progress.Close();
+
+            // 记账用的是真正写出来的那个文件所在的目录，而不是文本框里原本写的路径 ——
+            // 分卷时末卷可能换了名字，但目录不会变；失败与取消都不记，否则一次拼错的路径
+            // 会污染下一次的默认值。
+            _rememberOutputFolder?.Invoke(
+                Path.GetDirectoryName(Path.GetFullPath(result.OutputPath)) ?? string.Empty);
+
             // 引擎回传的“设置被忽略”提示不能静默丢弃。
             if (result.Warnings is { Count: > 0 } warnings)
             {
                 ShowHint(string.Join(Environment.NewLine, warnings));
             }
 
-            Close();
+            // 「设置 → 压缩 → 压缩完成后不关闭进度窗口」：留着时进度窗停在 100%，
+            // 对话框也不关，用户看完自己关。它是 ShowDialog 出来的模态窗，所以先关它才回到对话框。
+            if (!_defaults.KeepProgressWindow)
+            {
+                progress.Close();
+                Close();
+            }
+
             return;
         }
         catch (OperationCanceledException)

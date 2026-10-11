@@ -2,6 +2,59 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [0.9.7] - 2026-10-12（新增：压缩级别改 5 档 + 「设置 → 压缩」页）
+
+> 版本号 0.9.6 → **0.9.7**，BuildNo 15 → **16**。
+
+### 新增
+- **压缩级别改 5 档**（FR-2.4）：`0-仅存储 / 1-极速压缩 / 2-快速压缩 / 3-标准压缩 / 4-极限压缩`，
+  对应引擎 `-mx=` 的 0 / 1 / 3 / 5 / 9。档位按速度排序，因为前三档拼的就是速度、
+  标准档看速度与压缩率的平衡、极限档只管压得小 —— 三套不同的评判标准，不是同一算法多跑几遍。
+- **设置 → 压缩页**（原来只有占位文案），六项全部真正生效：
+  - **默认压缩级别** —— 新建压缩文件时下拉框停在哪一档；右键「压缩为 ZIP / 7Z」也吃它。
+  - **压缩单个文件夹时不创建根目录** —— 对应 `IncludeRootFolder` 取反。
+  - **排除 Thumbs.db** 与 **压缩时要排除的文件类型**（`*.bak; *.tmp;` 这种写法）。
+  - **压缩后测试**、**压缩完成后不关闭进度窗口**。
+  - **输出目录**：沿用上次新建时用的目录（压成功后写回 `settings.ini`），或固定到一个目录。
+- `Core/Archive/FileNamePattern.cs`：`*` / `?` 的通配匹配，整名匹配、大小写不敏感。
+- `Core/Settings/CompressionDefaults.cs`：这一页的默认值集中一处读写，可被测试钉住
+  （对话框本身测不了，但它读进来的东西测得了）。
+- 语言包新增 16 个键，两侧各 **239 键**、键集与占位符一致。
+
+### 修复
+- **`IncludeRootFolder` 的缺省值差点被这一页改掉**：`Load` 里写成
+  `GetBool(CompressNoRootFolder, fallback: false)` 会让**没有设置文件的用户**突然多出一层根目录 ——
+  而 `ArchiveCreationSettings.IncludeRootFolder` 一直是 `false`。新写的
+  `CompressionDefaults_FallbackMatchesTheOldBehaviour` 第一次跑就把它抓出来了，
+  缺省改成 `true`（即"不建根目录"）。
+- **`CompressionDefaults` 存解析后的列表会让"读回来等于写出去"假失败**：记录级的相等比较对
+  `IReadOnlyList<string>` 走引用相等。改成存**原文**（设置页编辑的本来就是那个文本框），
+  顺带省掉一次序列化 —— `Save` 写什么，文本框里就显示什么。
+- **`CompressionLevelOption.FromId` 不再抛异常**：认不出来的档位号回落到标准档。
+  级别号会写进 `settings.ini`，而绿色版可能读到更新版本写下的值；在启动路径上抛一个
+  用户看不懂的异常不是容错。与 `ParseDoubleClick` 同一套理由，测试从"未知抛异常"改成"未知回落"。
+- **下拉框不再拿 `Id` 当 `SelectedIndex`**：两者今天相等，插入新档位就会分叉。
+  新增 `CompressionLevelOption.PositionOf` 并钉住这个区别。
+
+### 变更
+- `AppSettings` 补 `GetInt` / `SetInt`（不变文化数字，写盘用 `InvariantCulture`）。
+- `ArchiveCreationSettings` 多一个 `ExcludePatterns`；`ArchivePlanBuilder.ShouldExclude`
+  在原有 `Thumbs.db` 判断之后按它过滤。
+- 排除模式**只认分号不认逗号**：Windows 文件名里逗号合法（`report,final.txt` 是个真名字），
+  按逗号切会把一条模式劈成两条不相干的。
+- 口令与分卷**刻意不进这一页**：那两项每次都不一样，记住反而危险 ——
+  上次压的是加密包，这次压的是要发给别人的公开目录。
+- 「压缩完成后不关闭进度窗口」只作用于「新建压缩文件」对话框，**不作用于右键压缩**：
+  后者"跑完即消失"是更早明确定下的行为，两者不是一回事。
+
+### 验证
+- `dotnet build Andzip.slnx`：**0 警告 0 错误**。
+- `dotnet test`：**298 / 298**（新增 `CompressionSettingsTests` 25 条 + 改写级别相关的 5 条；
+  `ArchiveCreateZipTests` 的四档往返用例扩到五档）。
+- 语言包键集核对：两侧各 **239 键**，无缺失 / 无重复 / `${占位符}` 一致。
+- `Andzip.Native.Tests` 与打包见下方流水线结果。
+- 设置页与对话框是 GUI，**按约定由用户手动验证**：见 `docs/开发记录.md` 第九节第 20–23 条。
+
 ## [构建] - 2026-10-12（`-ExtraCodecs` 首次真编：修掉两个布局 bug，第三个待解）
 
 ### 背景
