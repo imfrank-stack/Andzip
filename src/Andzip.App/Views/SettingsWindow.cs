@@ -68,8 +68,8 @@ public sealed class SettingsWindow : Window
             new ExtractionPage(lang, settingsPath),
             new CompressionPage(this, lang, settings, settingsPath),
             new ViewPage(lang, settings, settingsPath),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_SECURITY"),
-            new PlaceholderPage(lang, "TEXT_SETTINGS_ADVANCED"),
+            new SecurityPage(this, lang, settings, settingsPath),
+            new AdvancedPage(this, lang, settings, settingsPath),
             new LanguagePage(lang, settings, settingsPath),
         ];
 
@@ -180,6 +180,30 @@ public sealed class SettingsWindow : Window
         var box = new CheckBox { Content = label, Margin = new Thickness(0, 6, 0, 0) };
         box.IsCheckedChanged += (_, _) => onToggled();
         return box;
+    }
+
+    /// <summary>左标签右控件的一行；标签给空串就是只占缩进的单独控件行。</summary>
+    private static Control LabeledRow(string label, Control control, Control? trailing = null)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Margin = new Thickness(0, 14, 0, 0),
+        };
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            Width = 170,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.Children.Add(control);
+        if (trailing is not null)
+        {
+            row.Children.Add(trailing);
+        }
+
+        return row;
     }
 
     /// <summary>每页对外的三件事：导航键、要呈现的控件、重新读状态 / 落盘。</summary>
@@ -1204,6 +1228,288 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
+    /// 高级页：标题栏、临时目录、导出设置。
+    /// <para>
+    /// 参考软件这一页上的其它项都没做，理由各自不同，写下来免得下次被当成遗漏：
+    /// 「删除时移入回收站」「允许删除已打开的压缩包」依赖一个还不存在的删除功能；
+    /// 「输出文件时预分配磁盘空间」「文件被占用时仍然压缩」是引擎侧的写入策略，
+    /// 界面这边勾不动；「退出子进程时删除临时文件」—— 本程序不留子进程，
+    /// 临时文件在 <c>SingleFileArchive.Dispose</c> 里就删了；「启动时显示开始画面」与
+    /// 「压缩/解压使用模态框」描述的正是现在的行为，做成开关等于制造两个没人会去关的选项。
+    /// </para>
+    /// </summary>
+    private sealed class AdvancedPage : ISettingsPage
+    {
+        private readonly SettingsWindow _owner;
+        private readonly LangCatalog _lang;
+        private readonly string _settingsPath;
+        private readonly CheckBox _fullPathTitle;
+        private readonly TextBox _tempFolder;
+        private readonly Button _applyButton;
+        private readonly Button _exportButton;
+
+        private (bool FullPath, string Temp) _live;
+
+        public AdvancedPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_ADVANCED";
+            _owner = owner;
+            _lang = lang;
+            _settingsPath = settingsPath;
+
+            _fullPathTitle = Check(lang.Get("TEXT_SETTINGS_TITLE_FULL_PATH"), UpdateApplyState);
+            _tempFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            _tempFolder.TextChanged += (_, _) => UpdateApplyState();
+
+            var browse = new Button { Content = lang.Get("TEXT_BTN_BROWSE_TEMP"), MinWidth = 110 };
+            browse.Click += async (_, _) => await PickFolderAsync();
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 24, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var export = new Button
+            {
+                Content = lang.Get("TEXT_BTN_EXPORT_SETTINGS"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 10, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            export.Click += async (_, _) => await ExportAsync();
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_ADVANCED_TITLE")));
+            panel.Children.Add(_fullPathTitle);
+            panel.Children.Add(LabeledRow(lang.Get("TEXT_SETTINGS_TEMP_FOLDER"), _tempFolder, browse));
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_TEMP_FOLDER_HINT")));
+            panel.Children.Add(_applyButton);
+            panel.Children.Add(export);
+            _exportButton = export;
+
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            var settings = AppSettings.Load(_settingsPath);
+            _live = (
+                settings.GetBool(SettingKeys.TitleBarFullPath, fallback: false),
+                settings.GetString(SettingKeys.TempDirectory));
+
+            _fullPathTitle.IsChecked = _live.FullPath;
+            _tempFolder.Text = _live.Temp;
+            // 导出的是磁盘上那份文件，所以它的可用性跟着文件走，不跟着未保存的改动走。
+            _exportButton.IsEnabled = File.Exists(_settingsPath);
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private (bool FullPath, string Temp) Selection()
+            => (_fullPathTitle.IsChecked == true, _tempFolder.Text?.Trim() ?? string.Empty);
+
+        private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
+
+        private void Apply()
+        {
+            var desired = Selection();
+            if (desired.Equals(_live))
+            {
+                return;
+            }
+
+            var settings = AppSettings.Load(_settingsPath);
+            settings.SetBool(SettingKeys.TitleBarFullPath, desired.FullPath);
+            settings.SetString(SettingKeys.TempDirectory, desired.Temp.Length == 0 ? null : desired.Temp);
+            settings.Save(_settingsPath);
+
+            // 立刻生效，而不是等下次启动：正在解压分卷包时用不上新目录，
+            // 但把标题栏改完要重开程序才能看到，只会让人觉得设置没保存。
+            ArchiveEngine.TempDirectory = desired.Temp;
+            Reload();
+        }
+
+        private async Task PickFolderAsync()
+        {
+            var folders = await _owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = _lang.Get("TEXT_SETTINGS_TEMP_FOLDER"),
+                AllowMultiple = false,
+            });
+
+            if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+            {
+                _tempFolder.Text = path;
+            }
+        }
+
+        /// <summary>
+        /// 把 <c>settings.ini</c> 原样复制到用户选的位置 —— 绿色版换机器时唯一要带的东西就是它
+        /// （外加注册表里那些关联，而那部分导出成文件也没法导入）。
+        /// </summary>
+        private async Task ExportAsync()
+        {
+            var suggested = Path.GetFileName(_settingsPath);
+            var target = await _owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = _lang.Get("TEXT_BTN_EXPORT_SETTINGS"),
+                SuggestedFileName = suggested,
+                DefaultExtension = "ini",
+                FileTypeChoices = [new FilePickerFileType(_lang.Get("TEXT_SETTINGS_EXPORT_FILTER")) { Patterns = ["*.ini"] }],
+            });
+
+            if (target?.TryGetLocalPath() is not { } path)
+            {
+                return;
+            }
+
+            try
+            {
+                File.Copy(_settingsPath, path, overwrite: true);
+                Message(_lang.Format("TEXT_SETTINGS_EXPORT_DONE", ("path", path)));
+            }
+            catch (Exception ex)
+            {
+                Message(_lang.Get("TEXT_SETTINGS_EXPORT_FAILED") + ex.Message);
+            }
+        }
+
+        private void Message(string text)
+            => _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
+    }
+
+    /// <summary>
+    /// 安全页：本次运行的口令记忆。
+    /// <para>页面上那句"为什么没有跨重启的口令管理器"是刻意向用户解释少做了什么，
+    /// 而不是留一个空板块让人以为还没加载出来。</para>
+    /// </summary>
+    private sealed class SecurityPage : ISettingsPage
+    {
+        private readonly SettingsWindow _owner;
+        private readonly LangCatalog _lang;
+        private readonly string _settingsPath;
+        private readonly CheckBox _remember;
+        private readonly TextBlock _remembered;
+        private readonly Button _clearButton;
+        private readonly Button _applyButton;
+
+        private bool _live;
+
+        public SecurityPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            NavKey = "TEXT_SETTINGS_SECURITY";
+            _owner = owner;
+            _lang = lang;
+            _settingsPath = settingsPath;
+
+            _remember = Check(lang.Get("TEXT_SETTINGS_REMEMBER_PASSWORDS"), UpdateApplyState);
+            _remembered = new TextBlock { Foreground = HintText, Margin = new Thickness(24, 4, 0, 0) };
+            _clearButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_FORGET_PASSWORDS"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 8, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _clearButton.Click += (_, _) => { Session.Passwords.Clear(); RefreshRemembered(); };
+
+            _applyButton = new Button
+            {
+                Content = lang.Get("TEXT_BTN_APPLY"),
+                MinWidth = 150,
+                IsEnabled = false,
+                Margin = new Thickness(0, 24, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _applyButton.Click += (_, _) => Apply();
+
+            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_SECURITY_TITLE")));
+            panel.Children.Add(_remember);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT")));
+            panel.Children.Add(_remembered);
+            panel.Children.Add(_clearButton);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_PASSWORD_MANAGER_NOTE")));
+            panel.Children.Add(_applyButton);
+
+            Root = panel;
+        }
+
+        public string NavKey { get; }
+
+        public Control Root { get; }
+
+        public void Reload()
+        {
+            _live = AppSettings.Load(_settingsPath).GetBool(SettingKeys.RememberPasswordsThisSession, fallback: true);
+            _remember.IsChecked = _live;
+            RefreshRemembered();
+            UpdateApplyState();
+        }
+
+        public void Commit()
+        {
+            if (_applyButton.IsEnabled)
+            {
+                Apply();
+            }
+        }
+
+        private void RefreshRemembered()
+        {
+            var count = Session.Passwords.Count;
+            _remembered.Text = count == 0
+                ? _lang.Get("TEXT_SETTINGS_NO_PASSWORDS")
+                : _lang.Format("TEXT_SETTINGS_PASSWORDS_REMEMBERED", ("count", count.ToString()));
+            _clearButton.IsEnabled = count > 0;
+        }
+
+        private void UpdateApplyState() => _applyButton.IsEnabled = (_remember.IsChecked == true) != _live;
+
+        private void Apply()
+        {
+            var desired = _remember.IsChecked == true;
+            if (desired == _live)
+            {
+                return;
+            }
+
+            var settings = AppSettings.Load(_settingsPath);
+            settings.SetBool(SettingKeys.RememberPasswordsThisSession, desired);
+            settings.Save(_settingsPath);
+
+            Session.Passwords.Enabled = desired;
+            if (!desired)
+            {
+                // 关掉的同时把已经记住的清掉 —— 不然"关掉"只是不再新增，
+                // 用户以为没了、其实还在内存里。
+                Session.Passwords.Clear();
+            }
+
+            RefreshRemembered();
+            Reload();
+        }
+    }
+
+    /// <summary>
     /// 压缩页：「新建压缩文件」对话框打开时的那一套默认值。
     /// <para>
     /// 这一页只决定<strong>对话框长什么样</strong>，压的时候仍可以逐次改 —— 所以它不会去动
@@ -1391,38 +1697,6 @@ public sealed class SettingsWindow : Window
             {
                 _outputFolder.Text = path;
             }
-        }
-
-        /// <summary>左标签右控件的一行；标签给空串就是只占缩进的单独控件行。</summary>
-        private static Control LabeledRow(string label, Control control, Control? trailing = null)
-        {
-            var row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 12,
-                Margin = new Thickness(0, 14, 0, 0),
-            };
-            if (label.Length > 0)
-            {
-                row.Children.Add(new TextBlock
-                {
-                    Text = label,
-                    Width = 170,
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-            }
-            else
-            {
-                row.Children.Add(new TextBlock { Width = 170 });
-            }
-
-            row.Children.Add(control);
-            if (trailing is not null)
-            {
-                row.Children.Add(trailing);
-            }
-
-            return row;
         }
     }
 }

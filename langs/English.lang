@@ -235,6 +235,24 @@ TEXT_SETTINGS_LANGUAGE_LABEL            = Interface language
 TEXT_SETTINGS_LANGUAGE_HINT             = The list comes from the language packs actually loaded (files under langs/ next to the program first, otherwise the embedded ones), so everything here is genuinely selectable.
 TEXT_SETTINGS_LANGUAGE_RESTART          = Changing language only fully applies after restarting Andzip: menu, toolbar and title text are read once when the UI is built and then fixed onto the controls.
 
+; ---- Settings: advanced page / security page ----
+TEXT_SETTINGS_ADVANCED_TITLE            = Advanced settings
+TEXT_SETTINGS_TITLE_FULL_PATH           = Show the full path in the title bar
+TEXT_SETTINGS_TEMP_FOLDER               = Temporary folder
+TEXT_SETTINGS_TEMP_FOLDER_HINT          = Only used to splice WinZip-style volumes (name.z01 + name.zip). 7z-style volumes are read straight from their siblings and never touch a temp file. Leave empty for the system temp folder.
+TEXT_BTN_BROWSE_TEMP                    = Choose folder...
+TEXT_BTN_EXPORT_SETTINGS                = Export settings...
+TEXT_SETTINGS_EXPORT_DONE               = Settings exported to: ${path}
+TEXT_SETTINGS_EXPORT_FAILED             = Exporting settings failed:
+TEXT_SETTINGS_EXPORT_FILTER             = Andzip settings file (*.ini)
+TEXT_SETTINGS_SECURITY_TITLE            = Security settings
+TEXT_SETTINGS_REMEMBER_PASSWORDS        = Remember passwords for this run
+TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT   = Once you type a password to open an encrypted archive, extracting it will not ask again. Passwords live in memory only and vanish when the process exits — they are never written to the settings file or the registry.
+TEXT_SETTINGS_PASSWORDS_REMEMBERED      = ${count} archive password(s) remembered this run
+TEXT_BTN_FORGET_PASSWORDS               = Clear remembered passwords
+TEXT_SETTINGS_NO_PASSWORDS              = No passwords remembered this run yet.
+TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = The reference program's cross-restart "password manager" is not built: doing it properly needs OS credential protection (DPAPI on Windows), which means a Windows-only dependency while this project still builds on Linux. Storing passwords in plain text in the settings file would not be a simpler version of it — it would be a trap.
+
 [MENU]
 MENUSTR_FILE                            = &File
 MENUSTR_EDIT                            = &Edit

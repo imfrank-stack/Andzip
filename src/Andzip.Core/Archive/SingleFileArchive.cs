@@ -31,7 +31,7 @@ internal sealed class SingleFileArchive : IDisposable
         }
 
         var temporary = Path.Combine(
-            Path.GetTempPath(),
+            ArchiveEngine.ResolveTempDirectory(),
             $"andzip-{Guid.NewGuid():N}{Path.GetExtension(archivePath)}");
         try
         {

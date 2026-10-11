@@ -23,6 +23,11 @@ public sealed class App : Application
             // 设置要先读：语言页存的那一项决定界面用什么语言，而语言包一旦建成就到处引用。
             var settings = AppSettings.Load(AppSettings.DefaultFilePath);
 
+            // 「设置 → 高级」里那两项是进程级的，在这里一次性接上 —— 比让每个用到它的地方
+            // 各自去读设置文件要难漏得多。
+            ArchiveEngine.TempDirectory = settings.GetString(SettingKeys.TempDirectory);
+            Session.Passwords.Enabled = settings.GetBool(SettingKeys.RememberPasswordsThisSession, fallback: true);
+
             // 语言包：程序目录 langs/ 优先（便携覆盖），否则用内嵌资源（单文件绿色版）。
             var lang = LangLoader.CreateCatalog(
                 typeof(App).Assembly, AppContext.BaseDirectory, PreferredLanguage(settings));

@@ -51,6 +51,39 @@ public static class ArchiveEngine
         set => NativeEngine.MemoryLimitMiB = value;
     }
 
+    /// <summary>
+    /// 拼接 WinZip 风格分卷时放临时文件的目录；null 或空表示系统临时目录。
+    /// <para>
+    /// 与 <see cref="NumThreads"/> 一样是进程级设置：它服务的对象（<c>SingleFileArchive</c>）
+    /// 藏在门面实现里，界面拿不到实例，只能靠这一处入口。它是"设置 → 高级"里那一项的落点。
+    /// </para>
+    /// </summary>
+    public static string? TempDirectory { get; set; }
+
+    /// <summary>
+    /// 真正要写临时文件时用的目录。指定的目录不可用（被删、没权限、压根不是目录）时
+    /// 退回系统临时目录而不是抛异常 —— 分卷拼接失败会让用户打不开一个本来能打开的包，
+    /// 而那跟临时目录设在哪儿比起来是件小事得多得多的事。
+    /// </summary>
+    public static string ResolveTempDirectory()
+    {
+        var configured = TempDirectory;
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return Path.GetTempPath();
+        }
+
+        try
+        {
+            Directory.CreateDirectory(configured);
+            return configured;
+        }
+        catch (Exception)
+        {
+            return Path.GetTempPath();
+        }
+    }
+
     /// <summary>状态栏/标题用的一行摘要。</summary>
     public static string Describe()
         => IsAvailable

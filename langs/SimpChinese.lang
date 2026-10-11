@@ -235,6 +235,24 @@ TEXT_SETTINGS_LANGUAGE_LABEL            = 界面语言
 TEXT_SETTINGS_LANGUAGE_HINT             = 列表来自实际加载到的语言包（程序目录 langs/ 优先，否则用内嵌的那几份），所以这里出现的都是真能选的。
 TEXT_SETTINGS_LANGUAGE_RESTART          = 换语言要重启 Andzip 才全面生效：菜单、工具栏与标题这些文案是在界面构造时取一次就固化到控件上的。
 
+; ---- 设置：高级页 / 安全页 ----
+TEXT_SETTINGS_ADVANCED_TITLE            = 高级设置
+TEXT_SETTINGS_TITLE_FULL_PATH           = 标题栏显示完整路径
+TEXT_SETTINGS_TEMP_FOLDER               = 临时文件夹
+TEXT_SETTINGS_TEMP_FOLDER_HINT          = 只用于拼接 WinZip 风格的分卷（name.z01 + name.zip）。7z 风格的分卷由引擎直接读兄弟卷，不落临时文件。留空表示系统临时目录。
+TEXT_BTN_BROWSE_TEMP                    = 选择目录…
+TEXT_BTN_EXPORT_SETTINGS                = 导出设置…
+TEXT_SETTINGS_EXPORT_DONE               = 设置已导出到：${path}
+TEXT_SETTINGS_EXPORT_FAILED             = 导出设置失败：
+TEXT_SETTINGS_EXPORT_FILTER             = Andzip 设置文件 (*.ini)
+TEXT_SETTINGS_SECURITY_TITLE            = 安全设置
+TEXT_SETTINGS_REMEMBER_PASSWORDS        = 本次运行中记住用过的口令
+TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT   = 打开一个加密包时输过一次，解压它就不用再输。口令只留在内存里，退出程序就消失 —— 不写进设置文件，也不写进注册表。
+TEXT_SETTINGS_PASSWORDS_REMEMBERED      = 本次运行已记住 ${count} 个包的口令
+TEXT_BTN_FORGET_PASSWORDS               = 清除已记住的口令
+TEXT_SETTINGS_NO_PASSWORDS              = 本次运行还没有记住任何口令。
+TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = 参考软件那个跨重启保存的「口令管理器」没有做：要做对得用操作系统的凭据保护（Windows 上是 DPAPI），那需要一个 Windows 专用的依赖，而这个项目还要在 Linux 上构建。把口令明文写进设置文件不是它的简化版，是一个谁都会踩的坑。
+
 [MENU]
 MENUSTR_FILE                            = 文件(&F)
 MENUSTR_EDIT                            = 编辑(&E)

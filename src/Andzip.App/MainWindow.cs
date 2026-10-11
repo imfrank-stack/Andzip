@@ -32,6 +32,13 @@ public sealed class MainWindow : Window
     /// </summary>
     private static string EngineTitle => $"{BaseTitle} — {ArchiveEngine.Describe()}";
 
+    /// <summary>
+    /// 标题里那个包名。「设置 → 高级 → 标题栏显示完整路径」决定是一整条路径还是只有文件名。
+    /// <para>集中成一个方法而不是在三处各拼一遍：三处写法一旦分叉，切视图时标题会突然变样。</para>
+    /// </summary>
+    private string ArchiveTitle(string archivePath)
+        => $"{(_titleShowsFullPath ? archivePath : Path.GetFileName(archivePath))} - {BaseTitle}";
+
     private readonly LangCatalog _lang;
     private readonly ContentControl _contentHost = new();
     private readonly Control _homeContent;
@@ -42,6 +49,9 @@ public sealed class MainWindow : Window
 
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
     private ViewDefaults _view;
+
+    /// <summary>「设置 → 高级 → 标题栏显示完整路径」。</summary>
+    private bool _titleShowsFullPath;
 
     public MainWindow(LangCatalog lang, AppSettings settings)
     {
@@ -100,6 +110,13 @@ public sealed class MainWindow : Window
     {
         _view = ViewDefaults.Load(_settings);
         _toolBar.IsVisible = _view.ShowToolBar;
+        _titleShowsFullPath = _settings.GetBool(SettingKeys.TitleBarFullPath, fallback: false);
+
+        // 标题是"当前状态"的一部分，改了设置得立刻反映出来，而不是等下次打开包。
+        if (_listing is not null)
+        {
+            Title = ArchiveTitle(_listing.ArchivePath);
+        }
     }
 
     // ---------- 视图切换 ----------
@@ -119,7 +136,7 @@ public sealed class MainWindow : Window
         _browser = new ArchiveView(_lang, listing, _view);
         _listing = listing;
         _contentHost.Content = _browser.Root;
-        Title = $"{Path.GetFileName(listing.ArchivePath)} - {BaseTitle}";
+        Title = ArchiveTitle(listing.ArchivePath);
     }
 
     /// <summary>关闭压缩文件（F4）：回到首页。</summary>
@@ -144,7 +161,7 @@ public sealed class MainWindow : Window
         if (ReferenceEquals(_contentHost.Content, _homeContent))
         {
             _contentHost.Content = _browser.Root;
-            Title = $"{Path.GetFileName(_listing.ArchivePath)} - {BaseTitle}";
+            Title = ArchiveTitle(_listing.ArchivePath);
         }
         else
         {
@@ -225,7 +242,9 @@ public sealed class MainWindow : Window
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
 
         ArchiveListing listing;
-        string? password = null;
+        // 上次为这个包输过的口令先顶上：清单要口令、解压也要，不记忆的话同一个包至少问两遍。
+        var hasCached = Session.Passwords.TryGet(archivePath, out var cached);
+        var password = hasCached ? cached : null;
         while (true)
         {
             try
@@ -235,7 +254,9 @@ public sealed class MainWindow : Window
             }
             catch (ArchiveFailureException ex) when (ex.IsPassword)
             {
-                var prompt = new PasswordWindow(_lang, initialPassword: password, requireConfirmation: false);
+                // 缓存里那个口令不对（包换了口令）：忘掉它，别再拿同一个错口令去撞第二遍。
+                Session.Passwords.Forget(archivePath);
+                var prompt = new PasswordWindow(_lang, initialPassword: null, requireConfirmation: false);
                 if (await prompt.ShowDialog<bool>(this) != true)
                 {
                     return;
@@ -255,6 +276,11 @@ public sealed class MainWindow : Window
                 _ = error.ShowDialog(this);
                 return;
             }
+        }
+
+        if (password is { Length: > 0 })
+        {
+            Session.Passwords.Remember(archivePath, password);
         }
 
         ShowArchiveView(listing);
@@ -283,7 +309,12 @@ public sealed class MainWindow : Window
         // 加密压缩包：解压前弹出「输入密码」（§3.2 对话框 #7）。
         // 探测要打开归档读头部，放到后台线程，避免卡住 UI。
         string? password = null;
-        if (await Task.Run(() => ArchiveExtractor.IsPasswordProtected(archivePath)))
+        if (Session.Passwords.TryGet(archivePath, out var remembered))
+        {
+            // 打开这个包时已经输过一次（浏览清单就要口令），解压没必要再问一遍。
+            password = remembered;
+        }
+        else if (await Task.Run(() => ArchiveExtractor.IsPasswordProtected(archivePath)))
         {
             var passwordDialog = new PasswordWindow(_lang, initialPassword: null, requireConfirmation: false);
             if (await passwordDialog.ShowDialog<bool>(this) != true)
@@ -292,6 +323,7 @@ public sealed class MainWindow : Window
             }
 
             password = passwordDialog.Password;
+            Session.Passwords.Remember(archivePath, password);
         }
 
         var cts = new CancellationTokenSource();

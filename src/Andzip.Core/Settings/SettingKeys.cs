@@ -113,6 +113,20 @@ public static class SettingKeys
     /// </summary>
     public const string Language = "language";
 
+    // ---------------------------------------------------------- 高级 / 安全页
+
+    /// <summary>标题栏显示压缩包的完整路径而不只是文件名。</summary>
+    public const string TitleBarFullPath = "title_bar_full_path";
+
+    /// <summary>
+    /// 拼接 WinZip 风格分卷（<c>name.z01 + name.zip</c>）时用的临时目录；空表示系统临时目录。
+    /// <para>只有这一处会落地临时文件 —— 7z 风格的分卷由引擎自己取兄弟卷，不经过磁盘。</para>
+    /// </summary>
+    public const string TempDirectory = "temp_directory";
+
+    /// <summary>同一次运行里记住用过的口令，不再对同一个包重复追问。</summary>
+    public const string RememberPasswordsThisSession = "remember_passwords_this_session";
+
     /// <summary>认不出来回落到 <see cref="OutputFolderMode.LastUsed"/> —— 那是改动前的行为。</summary>
     public static OutputFolderMode ParseOutputFolderMode(string? stored)
         => stored?.Trim().ToLowerInvariant() == "fixed" ? OutputFolderMode.Fixed : OutputFolderMode.LastUsed;
