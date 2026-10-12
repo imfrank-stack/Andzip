@@ -50,7 +50,7 @@ internal static class ShellTaskRunner
         var window = new NewArchiveWindow(
             lang,
             CompressionDefaults.Load(settings),
-            seedPath: path,
+            seedPaths: [path],
             lastOutputFolder: settings.GetString(SettingKeys.CompressLastOutputFolder))
         {
             ShowInTaskbar = true,

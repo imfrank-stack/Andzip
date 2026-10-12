@@ -288,6 +288,90 @@ public class UiFeatureWiringTests
 
     private static bool TextCarriesMarker(string text) => text.Contains("(&", StringComparison.Ordinal);
 
+    // ---------------------------------- 新建压缩文件：默认包名与格式列表
+
+    [AvaloniaFact]
+    public void NewArchiveDialogNamesTheOutputAfterTheSingleThingBeingCompressed()
+    {
+        // 用户选中 photo.jpg 要压，「文件名」就该是 photo.zip，而不是「新建压缩.zip」——
+        // 后者是个压完就得改名的名字。
+        var (directory, file) = SeedFile("photo.jpg");
+
+        try
+        {
+            var dialog = new NewArchiveWindow(TestLang.Chinese(), seedPaths: [file]).Shown();
+
+            Assert.Equal(Path.Combine(directory, "photo.zip"), FileNameBox(dialog).Text);
+            Assert.Contains("photo.jpg", InputRows(dialog));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void NewArchiveDialogFallsBackToTheGenericNameForSeveralInputs()
+    {
+        var directory = Directory.CreateTempSubdirectory("andzip-seed-").FullName;
+        var first = Path.Combine(directory, "a.txt");
+        var second = Path.Combine(directory, "b.txt");
+        File.WriteAllText(first, "1");
+        File.WriteAllText(second, "2");
+
+        try
+        {
+            var dialog = new NewArchiveWindow(TestLang.Chinese(), seedPaths: [first, second]).Shown();
+
+            Assert.Equal(Path.Combine(directory, "新建压缩.zip"), FileNameBox(dialog).Text);
+
+            // 两个输入都要出现在列表里（一行有好几个文本单元，所以问"在不在"而不是数行数）。
+            Assert.Contains("a.txt", InputRows(dialog));
+            Assert.Contains("b.txt", InputRows(dialog));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void NewArchiveDialogListsOnlyFormatsItCanActuallyCreate()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new NewArchiveWindow(lang, seedPaths: []).Shown();
+        var listed = ItemsOf(FormatCombo(dialog));
+
+        // 「该功能暂未实现」不该是一个能选中的选项。
+        Assert.DoesNotContain("ZIPX", listed);
+        Assert.DoesNotContain("ISO", listed);
+        Assert.DoesNotContain("EXE", listed);
+        Assert.Contains("ZIP", listed);
+        Assert.Equal(
+            [.. ArchiveFormatOption.Creatable.Select(format => format.Id)],
+            listed);
+    }
+
+    private static (string Directory, string File) SeedFile(string name)
+    {
+        var directory = Directory.CreateTempSubdirectory("andzip-seed-").FullName;
+        var file = Path.Combine(directory, name);
+        File.WriteAllText(file, "seed");
+        return (directory, file);
+    }
+
+    private static TextBox FileNameBox(Window window)
+        => VisualQuery.Of<TextBox>(window).Single(box => box.Text?.EndsWith(".zip", StringComparison.Ordinal) == true);
+
+    private static IReadOnlyList<string> InputRows(Window window)
+        => VisualQuery.Of<TextBlock>(window).Select(t => t.Text ?? string.Empty).ToList();
+
+    private static ComboBox FormatCombo(Window window)
+        => VisualQuery.Of<ComboBox>(window).Single(combo => ItemsOf(combo).Contains("ZIP"));
+
+    private static IReadOnlyList<string> ItemsOf(ItemsControl combo)
+        => [.. combo.Items.Select(item => item?.ToString() ?? string.Empty)];
+
     // ------------------------------------------------ 进度窗口：百分比与预估剩余时间
 
     [AvaloniaFact]

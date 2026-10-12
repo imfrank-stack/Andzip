@@ -47,6 +47,19 @@ public sealed record ArchiveFormatOption(
 
     public static ArchiveFormatOption Default { get; } = All[0];
 
+    /// <summary>
+    /// 「新建压缩文件」对话框能列出来的格式 —— 引擎此刻真的写得出来的那些。
+    /// <para>
+    /// <see cref="All"/> 里有五项（ZIPX / EXE / LZH / ISO / ZPAQ）是照参考软件抄来的**只读**候选，
+    /// 选中之下只能开始一句「该功能暂未实现」。用户的话是"列出来就一定要实现"，
+    /// 所以列表按 <see cref="CanCreate"/> 过滤，而不是摆着让人点。
+    /// </para>
+    /// <para>
+    /// 按运行时能力过滤而不是写死一张子表：哪天引擎能写 ISO 了，那一行自己就回来，不用改代码。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<ArchiveFormatOption> Creatable => [.. All.Where(format => format.CanCreate)];
+
     /// <summary>引擎里用于「方法 / 级别 / 加密」查询的格式名。只读项为 null。</summary>
     public string? EngineFormat => CreateFormat;
 
@@ -88,6 +101,25 @@ public sealed record ArchiveFormatOption(
 
     /// <summary>“打开”对话框的文件类型过滤器扩展名集合（引擎实际可读的扩展名）。</summary>
     public static IReadOnlyList<string> OpenableExtensions => NativeEngine.ReadableExtensions();
+
+    /// <summary>
+    /// 这个路径像不像一个"引擎读得开的包"。
+    /// <para>只看扩展名，<strong>不</strong>嗅探内容 —— 用户把东西拖到窗口上的那一刻，
+    /// 为了判断类型去开一次文件是不划算的，而且加密包连列表都要口令。
+    /// 真按内容走的是打开那条路（引擎自己会报读不了）。</para>
+    /// <para>目录永远不算：拖进来的文件夹是要压的东西，不是要看的东西。</para>
+    /// </summary>
+    public static bool IsReadablePath(string path)
+    {
+        if (path.Length == 0 || Directory.Exists(path))
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(path);
+
+        return extension.Length > 1 && OpenableExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
 
     public static ArchiveFormatOption FromId(string id)
         => All.FirstOrDefault(f => string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase))

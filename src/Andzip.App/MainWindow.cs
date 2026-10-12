@@ -103,7 +103,67 @@ public sealed class MainWindow : Window
         ShowHome();
         ApplyViewDefaults();
         RegisterShortcuts(commands);
+        AcceptFileDrops();
     }
+
+    // ---------- 拖拽 ----------
+
+    /// <summary>
+    /// 让主窗口接受从资源管理器拖进来的文件与文件夹。
+    /// <para>注册在窗口本身而不是某个子控件上：拖到菜单、工具栏、列表还是空白处都应当算，
+    /// 而 Avalonia 的拖放事件会从命中的子控件冒泡到这里。</para>
+    /// </summary>
+    private void AcceptFileDrops()
+    {
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
+        AddHandler(DragDrop.DropEvent, OnFileDrop);
+    }
+
+    private void OnFileDragOver(object? sender, DragEventArgs e)
+    {
+        // 不给 Copy 效果的话光标会变成"禁止"，用户当场就知道这一拖没有意义。
+        // 这里只问"有没有文件"，不去取路径：DragOver 在鼠标移动中反复触发，
+        // 每次都把 shell 的数据对象展开一遍不值当。
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    /// <summary>
+    /// 放下这一批路径。做什么由 <see cref="ShellTasks.RouteDroppedPaths"/> 决定 ——
+    /// 那个判断与右键共用语汇，且在 Core 里测过；这里只负责把结果接到窗口上。
+    /// </summary>
+    private async void OnFileDrop(object? sender, DragEventArgs e)
+    {
+        var paths = DroppedPaths(e.DataTransfer);
+
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        switch (ShellTasks.RouteDroppedPaths(paths))
+        {
+            case ShellTask.Open:
+                await OpenArchive(paths[0]);
+                break;
+            case ShellTask.CompressDialog:
+                OpenNewArchiveDialog(paths);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 拖放数据里的文件路径。不是文件的数据（纯文本、控件内部拖拽）一律当作没拖。
+    /// <para><see cref="IStorageItem.Path"/> 是 <see cref="Uri"/> 而不是字符串，
+    /// 本地文件要拿 <c>LocalPath</c> —— 直接 ToString 会得到 <c>file:///C:/…</c>，
+    /// 那个路径没有哪个 Win32 API 认。</para>
+    /// </summary>
+    private static IReadOnlyList<string> DroppedPaths(IDataTransfer data)
+        => data.TryGetFiles() is not { Length: > 0 } files
+            ? []
+            : [.. files.Select(item => item.Path?.LocalPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path!)];
 
     /// <summary>
     /// 把「设置 → 查看」应用到当前窗口。工具栏是这里唯一能立刻生效的一块 ——
@@ -204,11 +264,16 @@ public sealed class MainWindow : Window
     /// <para>默认值取自「设置 → 压缩」；顺带把"上次用的输出目录"读给它、并让它压完写回来 ——
     /// 对话框自己不知道设置存在哪、什么时候落盘。</para>
     /// </summary>
-    private void OpenNewArchiveDialog()
+    private void OpenNewArchiveDialog() => OpenNewArchiveDialog([]);
+
+    /// <param name="seedPaths">拖进窗口的那批路径（或右键「压缩到…」那一条）。空列表 = 从菜单新建，
+    /// 一切从空开始；一个路径以它命名，多个才叫「新建压缩」。</param>
+    private void OpenNewArchiveDialog(IReadOnlyList<string> seedPaths)
     {
         var dialog = new NewArchiveWindow(
             _lang,
             CompressionDefaults.Load(_settings),
+            seedPaths: seedPaths,
             lastOutputFolder: _settings.GetString(SettingKeys.CompressLastOutputFolder),
             rememberOutputFolder: RememberOutputFolder);
         _ = dialog.ShowDialog(this);

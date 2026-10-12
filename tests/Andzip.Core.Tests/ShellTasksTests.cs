@@ -131,4 +131,86 @@ public class ShellTasksTests
 
         Assert.Equal(preferred, ShellTasks.UniqueArchivePath(preferred));
     }
+
+    // ------------------------------------------------------- 建议包名（对话框打开时填的那个）
+
+    [Fact]
+    public void SuggestedArchivePath_NamesTheArchiveAfterASingleInput()
+    {
+        // 用户选中一个东西要压，得到的包就该叫那个东西。「新建压缩.zip」是没人读得懂的名字。
+        var file = Path.Combine(Path.GetTempPath(), "az-name", "photo.jpg");
+
+        Assert.Equal(Path.Combine(Path.GetTempPath(), "az-name", "photo.zip"),
+            ShellTasks.SuggestedArchivePath([file], ".zip", @"D:\elsewhere", "新建压缩"));
+    }
+
+    [Fact]
+    public void SuggestedArchivePath_UsesTheFallbackStemForSeveralInputs()
+    {
+        var directory = Directory.CreateTempSubdirectory("az-name-").FullName;
+        var inputs = new[] { Path.Combine(directory, "a.txt"), Path.Combine(directory, "b.txt") };
+
+        Assert.Equal(Path.Combine(directory, "新建压缩.zip"),
+            ShellTasks.SuggestedArchivePath(inputs, ".zip", @"D:\elsewhere", "新建压缩"));
+    }
+
+    [Fact]
+    public void SuggestedArchivePath_LeavesTheFallbackDirectoryWhenInputsAreScattered()
+    {
+        // 两个输入不在同一个目录下就没有"当前位置"这回事，只能退回调用方给的兜底。
+        var inputs = new[] { @"C:\one\a.txt", @"D:\two\b.txt" };
+
+        Assert.Equal(Path.Combine(@"D:\elsewhere", "新建压缩.zip"),
+            ShellTasks.SuggestedArchivePath(inputs, ".zip", @"D:\elsewhere", "新建压缩"));
+    }
+
+    [Fact]
+    public void SuggestedArchivePath_FallsBackWhenThereIsNoInputYet()
+    {
+        Assert.Equal(Path.Combine(@"D:\elsewhere", "新建压缩.7z"),
+            ShellTasks.SuggestedArchivePath([], ".7z", @"D:\elsewhere", "新建压缩"));
+    }
+
+    [Fact]
+    public void CommonParent_ReportsTheSharedDirectoryOnlyWhenThereIsOne()
+    {
+        var directory = Directory.CreateTempSubdirectory("az-parent-").FullName;
+
+        Assert.Equal(directory, ShellTasks.CommonParent(
+            [Path.Combine(directory, "a.txt"), Path.Combine(directory, "b.txt")]));
+
+        Assert.Null(ShellTasks.CommonParent([@"C:\dir\a.txt", @"C:\other\b.txt"]));
+        Assert.Null(ShellTasks.CommonParent([]));
+    }
+
+    // ---------------------------------------------------------------- 拖进来的路径
+
+    [Fact]
+    public void RouteDroppedPaths_OpensASingleArchiveLikeRightClickOpenDoes()
+    {
+        // 拖一个包进窗口，和右键「用 Andzip 打开」应当是同一条任务 —— 各写一套判断迟早分叉。
+        Assert.Equal(ShellTask.Open, ShellTasks.RouteDroppedPaths([@"C:\x\box.zip"]));
+        Assert.Equal(ShellTask.Open, ShellTasks.RouteDroppedPaths([@"C:\x\photos.7z"]));
+    }
+
+    [Fact]
+    public void RouteDroppedPaths_CompressesAnythingThatIsNotASingleArchive()
+    {
+        Assert.Equal(ShellTask.CompressDialog, ShellTasks.RouteDroppedPaths([@"C:\x\note.txt"]));
+        Assert.Equal(ShellTask.CompressDialog, ShellTasks.RouteDroppedPaths([@"C:\x\photos.zip", @"C:\y\more.zip"]));
+        Assert.Equal(ShellTask.CompressDialog, ShellTasks.RouteDroppedPaths([]));
+
+        // 文件夹长得像包也不算：那是"要压的东西"，不是"要看的东西"。
+        var directory = Directory.CreateTempSubdirectory("az-drop-");
+        try
+        {
+            var folder = Path.Combine(directory.FullName, "photos.zip");
+            Directory.CreateDirectory(folder);
+            Assert.Equal(ShellTask.CompressDialog, ShellTasks.RouteDroppedPaths([folder]));
+        }
+        finally
+        {
+            Directory.Delete(directory.FullName, recursive: true);
+        }
+    }
 }

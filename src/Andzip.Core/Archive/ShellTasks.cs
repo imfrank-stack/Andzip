@@ -93,6 +93,27 @@ public static class ShellTasks
     public static bool IsExtraction(ShellTask task)
         => task is ShellTask.Extract or ShellTask.ExtractDelete;
 
+    /// <summary>
+    /// 用户把一批路径<strong>交给窗口</strong>时（从资源管理器拖进来）应当做哪件事。
+    /// <para>
+    /// 只有一个、而且扩展名是引擎读得开的包 → <see cref="ShellTask.Open"/>（在这个窗口里浏览它）；
+    /// 其余（普通文件、文件夹、一次拖多个）→ <see cref="ShellTask.CompressDialog"/>，
+    /// 也就是把「新建压缩文件」对话框开起来、把它们填进输入列表。
+    /// </para>
+    /// <para>
+    /// 返回的是<strong>已有的</strong>任务枚举而不是新造一个：拖进来一个包和右键「用 Andzip 打开」
+    /// 本来就该是同一条路，两条路各写一套判断迟早会分叉。
+    /// </para>
+    /// <para>
+    /// 注意这<strong>不是</strong>"添加到当前打开的包里" —— 本工具不能往已有归档写成员，
+    /// 所以包已经打开时拖进来的东西同样是压成一个新包。
+    /// </para>
+    /// </summary>
+    public static ShellTask RouteDroppedPaths(IReadOnlyList<string> paths)
+        => paths.Count == 1 && ArchiveFormatOption.IsReadablePath(paths[0])
+            ? ShellTask.Open
+            : ShellTask.CompressDialog;
+
     /// <summary>所在目录。</summary>
     public static string ParentFolder(string path)
     {
@@ -127,6 +148,49 @@ public static class ShellTasks
         var stem = isDirectory ? name : Path.GetFileNameWithoutExtension(name);
 
         return Path.Combine(directory, (stem.Length == 0 ? "archive" : stem) + extension);
+    }
+
+    /// <summary>
+    /// 「新建压缩文件」对话框打开时的建议输出路径。
+    /// <para>
+    /// 只有一个输入时以<strong>那个输入</strong>命名、放在它旁边（<c>photo.jpg</c> →
+    /// 同目录的 <c>photo.zip</c>）—— 用户选中什么就想压什么，「新建压缩.zip」是个没人读得懂的名字。
+    /// 多个输入（或者还没有输入）才退回 <paramref name="fallbackStem"/>，
+    /// 目录优先取它们的共同父目录，各不相同才用调用方给的兜底目录。
+    /// </para>
+    /// </summary>
+    public static string SuggestedArchivePath(
+        IReadOnlyList<string> inputs,
+        string extension,
+        string fallbackDirectory,
+        string fallbackStem)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(extension);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallbackStem);
+
+        if (inputs.Count == 1)
+        {
+            var only = inputs[0];
+            return ArchivePathFor(only, extension, Directory.Exists(only));
+        }
+
+        var directory = CommonParent(inputs) ?? fallbackDirectory;
+        return Path.Combine(directory, fallbackStem + extension);
+    }
+
+    /// <summary>
+    /// 所有输入的共同父目录。一个输入都没有、或者它们不在同一个目录下时返回 null ——
+    /// 这时候"当前位置"根本没有唯一答案，交给调用方兜底。
+    /// </summary>
+    public static string? CommonParent(IReadOnlyList<string> inputs)
+    {
+        var parents = inputs
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(ParentFolder)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return parents.Count == 1 ? parents[0] : null;
     }
 
     /// <summary>

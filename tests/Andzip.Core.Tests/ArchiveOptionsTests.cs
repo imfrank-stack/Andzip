@@ -147,4 +147,65 @@ public class ArchiveOptionsTests
 
         Assert.Throws<FileNotFoundException>(() => ArchiveInputItem.FromPath(missing));
     }
+
+    // ---------- 创建对话框能列出来的格式 ----------
+
+    [Fact]
+    public void Creatable_FormatsAreAllCreatableAndKeepTheReferenceOrder()
+    {
+        // 用户的话是"列出来就一定要实现"。这张表就是对话框的下拉框，所以这里断言的不是数量，
+        // 而是"没有任何一项是点下去只会报暂未实现的"。
+        var creatable = ArchiveFormatOption.Creatable;
+
+        Assert.NotEmpty(creatable);
+        Assert.All(creatable, format => Assert.True(format.CanCreate, $"{format.Id} 报称可创建，引擎却写不出来"));
+
+        // 一次同时钉住"成员"与"顺序"：这张表少了项、或者换了顺序，都是界面上的可见变化。
+        Assert.Equal(
+            ArchiveFormatOption.All.Where(format => format.CanCreate).Select(format => format.Id),
+            creatable.Select(format => format.Id));
+    }
+
+    [Fact]
+    public void Creatable_ExcludesTheReadOnlyEntriesTheReferenceSoftwareLists()
+    {
+        // ZIPX / EXE / LZH / ISO / ZPAQ 是照参考软件摆进 All 的只读候选，选中之下只能开始一句
+        // 「该功能暂未实现」。它们仍然留在 All 里（扩展名归类那些用途要），
+        // 但不能再出现在创建对话框上。
+        foreach (var id in new[] { "ZIPX", "EXE", "LZH", "ISO", "ZPAQ" })
+        {
+            Assert.Equal(id, ArchiveFormatOption.FromId(id).Id);
+            Assert.False(ArchiveFormatOption.FromId(id).CanCreate);
+            Assert.DoesNotContain(ArchiveFormatOption.FromId(id), ArchiveFormatOption.Creatable);
+        }
+    }
+
+    [Fact]
+    public void IsReadablePath_RecognisesArchiveExtensionsWithoutOpeningTheFile()
+    {
+        Assert.True(ArchiveFormatOption.IsReadablePath(@"C:\x\box.zip"));
+        Assert.True(ArchiveFormatOption.IsReadablePath(@"C:\x\BOX.ZIP"));
+        Assert.False(ArchiveFormatOption.IsReadablePath(@"C:\x\note.txt"));
+        Assert.False(ArchiveFormatOption.IsReadablePath(@"C:\x\noextension"));
+    }
+
+    [Fact]
+    public void IsReadablePath_NeverCallsAFolderAnArchive()
+    {
+        var directory = Directory.CreateTempSubdirectory("az-drop-");
+
+        try
+        {
+            Assert.False(ArchiveFormatOption.IsReadablePath(directory.FullName));
+
+            // 名字长得像包也得是文件才算 —— 真拖一个叫 photos.zip 的文件夹进窗口，
+            // 那是"要压的东西"，不是"要看的东西"。
+            Directory.CreateDirectory(Path.Combine(directory.FullName, "photos.zip"));
+            Assert.False(ArchiveFormatOption.IsReadablePath(Path.Combine(directory.FullName, "photos.zip")));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
 }

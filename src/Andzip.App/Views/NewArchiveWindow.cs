@@ -68,15 +68,16 @@ public sealed class NewArchiveWindow : Window
     /// </summary>
     /// <param name="defaults">来自「设置 → 压缩」的默认值；null 表示用不带设置的那一套。
     /// 它只决定<strong>打开时长什么样</strong>，控件本身仍可逐次改。</param>
-    /// <param name="seedPath">右键「压缩到…」带进来的文件或文件夹：预先填进输入列表，
-    /// 并把「文件名」预填成同名的兄弟位置。null 表示从主菜单新建，一切从空开始。</param>
+    /// <param name="seedPaths">右键「压缩到…」或拖进主窗口的那批文件 / 文件夹：预先填进输入列表，
+    /// 并按它们决定「文件名」—— 只有一个就以它命名、放在它旁边；多个才退回「新建压缩」。
+    /// null / 空表示从主菜单新建，一切从空开始。</param>
     /// <param name="lastOutputFolder">上次成功新建时用的目录，仅在输出目录策略是「沿用上次」时生效。</param>
     /// <param name="rememberOutputFolder">压成之后把输出目录记下来；null 表示不记账。
     /// 用回调而不是把 <c>AppSettings</c> 传进来：对话框不该知道设置存在哪里、什么时候落盘。</param>
     public NewArchiveWindow(
         LangCatalog lang,
         CompressionDefaults? defaults = null,
-        string? seedPath = null,
+        IReadOnlyList<string>? seedPaths = null,
         string? lastOutputFolder = null,
         Action<string>? rememberOutputFolder = null)
     {
@@ -127,7 +128,7 @@ public sealed class NewArchiveWindow : Window
 
         _formatCombo = new ComboBox
         {
-            ItemsSource = ArchiveFormatOption.All.Select(f => new DisplayItem(f.Id, f)).ToList(),
+            ItemsSource = ArchiveFormatOption.Creatable.Select(f => new DisplayItem(f.Id, f)).ToList(),
             SelectedIndex = 0,
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -304,28 +305,33 @@ public sealed class NewArchiveWindow : Window
 
         Content = root;
 
-        if (seedPath is not null)
+        if (seedPaths is { Count: > 0 } seeds)
         {
-            SeedFrom(seedPath);
+            SeedFrom(seeds);
         }
 
         RefreshState();
     }
 
     /// <summary>
-    /// 右键「压缩到…」的预填：把选中的路径放进输入列表，输出名取同名兄弟位置。
+    /// 预填：把选中的路径放进输入列表，并按它们决定「文件名」。
     /// <para>
-    /// 走 <see cref="ShellTasks.ArchivePathFor"/> 而不是在这里再拼一遍名字 —— 文件夹名里的点
-    /// 不能当扩展名剥掉（<c>my.app</c> 要得到 <c>my.app.zip</c>），这条规则已经测过了，不该有两份。
+    /// 命名走 <see cref="ShellTasks.SuggestedArchivePath"/> 而不是在这里再拼一遍 ——
+    /// 单个输入以它命名（文件夹名里的点不能当扩展名剥掉，<c>my.app</c> 要得到
+    /// <c>my.app.zip</c>），多个才退回「新建压缩」，这条规则已经测过了，不该有两份。
     /// </para>
     /// <para>刻意<strong>不</strong>做重名避让：这里是给用户看的建议名，他自己会改；
     /// 真到落盘时 <c>ArchiveCreationSettings.Overwrite</c> 那条路径负责不悄悄覆盖。</para>
     /// </summary>
-    private void SeedFrom(string seedPath)
+    private void SeedFrom(IReadOnlyList<string> seedPaths)
     {
-        AddInput(seedPath);
-        _fileNameBox.Text = ShellTasks.ArchivePathFor(
-            seedPath, SelectedFormat().Extension, Directory.Exists(seedPath));
+        foreach (var path in seedPaths)
+        {
+            AddInput(path);
+        }
+
+        _fileNameBox.Text = ShellTasks.SuggestedArchivePath(
+            seedPaths, SelectedFormat().Extension, FallbackOutputFolder(), _lang.Label("TEXT_DEFAULT_ARCHIVE_NAME"));
     }
 
     /// <summary>展开 / 收起右侧高级设置面板（按钮文案同步为「« 高级设置」，窗口宽度相应变化）。</summary>
@@ -443,23 +449,25 @@ public sealed class NewArchiveWindow : Window
         grid.Children.Add(control);
     }
 
+    private string DefaultOutputPath()
+        => Path.Combine(FallbackOutputFolder(), _lang.Label("TEXT_DEFAULT_ARCHIVE_NAME") + _currentFormat.Extension);
+
     /// <summary>
-    /// 「文件名」框打开时的默认落点，按「设置 → 压缩 → 输出目录」决定。
+    /// 没有任何输入（或输入分散在好几个目录）时，「当前位置」的兜底：
+    /// 按「设置 → 压缩 → 输出目录」选，两处都不成立就用文档目录。
     /// <para>
     /// 「固定目录」里填了不存在的路径时<strong>不</strong>当场创建：这个值只是填进文本框的建议，
     /// 用户可能马上改掉；真到压的时候 <c>ArchiveCreateValidator.Prepare</c> 会建目录，
     /// 那时失败才有意义（也会给出错误框而不是静默建一堆目录）。
     /// </para>
     /// </summary>
-    private string DefaultOutputPath()
+    private string FallbackOutputFolder()
     {
         var directory = _defaults.OutputMode == SettingKeys.OutputFolderMode.Fixed
             ? FirstDirectory(_defaults.FixedOutputFolder, _lastOutputFolder)
             : FirstDirectory(_lastOutputFolder, _defaults.FixedOutputFolder);
 
-        directory ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-
-        return Path.Combine(directory, _lang.Label("TEXT_DEFAULT_ARCHIVE_NAME") + ".zip");
+        return directory ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
     }
 
     /// <summary>第一个"非空且真的存在"的目录；都没有就返回 null。</summary>
