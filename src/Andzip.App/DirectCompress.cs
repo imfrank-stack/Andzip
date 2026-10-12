@@ -81,8 +81,7 @@ internal static class DirectCompress
             TestAfterCreation: defaults.TestAfterCreation,
             Preallocate: defaults.PreallocateDisk,
             ShareSources: defaults.ShareSources,
-            // UI 线程构造，引擎工作线程上报的进度会自动投递回 UI 线程。
-            Progress: new Progress<ArchiveProgress>(progress.Update));
+            Progress: progress.CreateSink());
 
         ArchiveCreationResult result;
         try

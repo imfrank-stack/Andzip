@@ -36,7 +36,7 @@ Bandizip 风格的 Windows 压缩工具。**界面是 C#（.NET 10 + Avalonia）
 | 主要平台 | **Windows x64** —— 构建、测试、运行、打包都在本机验证过 |
 | 格式能力 | 引擎报告 **60 种可读 / 7 种可写**（可写：ZIP、7Z、TAR、TGZ、GZ、BZ2、XZ） |
 | 单文件绿色版 | 约 **19.5 MB**，已确认内核被真正内嵌 |
-| 测试 | 956 项断言全绿（原生 532 + Core 341 + 界面 14 + P/Invoke 外壳 69） |
+| 测试 | 959 项断言全绿（原生 532 + Core 341 + 界面 17 + P/Invoke 外壳 69） |
 | CI | GitHub Actions，Windows 跑与本地完全同一份门禁脚本 `ci.ps1` |
 | Linux / macOS | 内核能交叉编译、CI 有真机作业；**界面从未在这些平台运行过** |
 
@@ -204,6 +204,8 @@ dotnet run --project src/Andzip.Native.Tests -c Release # 控制台自检，必�
 `Andzip.App.UI.Tests` 用 Avalonia 的 headless 平台装配**真实的窗口**去断言控件在不在、可不可用、
 点下去设置有没有落盘，另外会把主窗口 / 设置页 / 修复对话框渲染成 PNG 供人眼核对。
 它是解决方案的一部分，所以 `dotnet test` 和 CI 门禁会一起跑到。
+一个必须知道的边界：**headless 平台不检查线程亲和性**，从工作线程改控件在这里不会抛 ——
+所以进度上报这类跨线程的东西，界面测试要断言"回调落在哪个线程"，而不是"有没有炸"。
 
 第二条不能省：`Andzip.Native.Tests` 是不带 xUnit 适配器的控制台程序，`dotnet test` 对它
 只会还原、不会运行。

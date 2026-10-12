@@ -350,8 +350,7 @@ public sealed class MainWindow : Window
             Password: password,
             DeleteArchiveAfterExtraction: choice.DeleteArchiveAfterExtraction,
             DuplicateResolver: ResolveDuplicate,
-            // UI 线程构造，因此引擎工作线程上报的进度会自动投递回 UI 线程。
-            Progress: new Progress<ArchiveProgress>(progress.Update));
+            Progress: progress.CreateSink());
 
         _ = progress.ShowDialog(this);
 
@@ -427,10 +426,10 @@ public sealed class MainWindow : Window
 
         string titleKey;
         string body;
+        var sink = progress.CreateSink();
         try
         {
-            await Task.Run(() => ArchiveTester.Test(
-                archivePath, password, new Progress<ArchiveProgress>(progress.Update), cts.Token), cts.Token);
+            await Task.Run(() => ArchiveTester.Test(archivePath, password, sink, cts.Token), cts.Token);
 
             titleKey = "TEXT_TITLE_TEST_PASSED";
             // 不报成员数：没打开包时是先挑文件再测的，手上没有清单，报个数就得再读一遍目录。
@@ -486,10 +485,11 @@ public sealed class MainWindow : Window
             cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
 
         ZipRepairResult result;
+        var repairSink = progress.CreateSink();
         try
         {
             result = await Task.Run(
-                () => ZipRepairer.Repair(archivePath, mode, output, new Progress<ArchiveProgress>(progress.Update), cts.Token),
+                () => ZipRepairer.Repair(archivePath, mode, output, repairSink, cts.Token),
                 cts.Token);
         }
         catch (OperationCanceledException)

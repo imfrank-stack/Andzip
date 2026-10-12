@@ -88,8 +88,7 @@ internal static class DirectExtract
             OverwritePolicy.Ask,
             Password: password,
             DuplicateResolver: fileName => AskAboutDuplicate(lang, progress, fileName),
-            // UI 线程构造，因此引擎工作线程上报的进度会自动投递回 UI 线程。
-            Progress: new Progress<ArchiveProgress>(progress.Update));
+            Progress: progress.CreateSink());
 
         try
         {

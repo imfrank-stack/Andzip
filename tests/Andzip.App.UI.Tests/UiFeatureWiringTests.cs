@@ -158,8 +158,8 @@ public class UiFeatureWiringTests
 
         Assert.Equal(3, radios.Count);
         Assert.Equal(
-            [lang.Get("TEXT_REPAIR_MODE_1"), lang.Get("TEXT_REPAIR_MODE_2"), lang.Get("TEXT_REPAIR_MODE_3")],
-            radios.Select(r => r.Content?.ToString()).ToArray());
+            new[] { "TEXT_REPAIR_MODE_1", "TEXT_REPAIR_MODE_2", "TEXT_REPAIR_MODE_3" }.Select(k => lang.Get(k)),
+            radios.Select(r => r.Content?.ToString()));
 
         Assert.True(radios[0].IsChecked);
         Assert.Equal(ZipRepairMode.RebuildCentralDirectory, dialog.Mode);

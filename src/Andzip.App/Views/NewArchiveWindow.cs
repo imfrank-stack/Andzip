@@ -774,9 +774,7 @@ public sealed class NewArchiveWindow : Window
         var cts = new CancellationTokenSource();
         var progress = new ProgressWindow(_lang, cts);
 
-        // 在 UI 线程构造 Progress<T>：它捕获当前的 SynchronizationContext，
-        // 于是引擎工作线程上报的进度会自动回到 UI 线程，Core 不需要知道 UI 的存在。
-        settings = settings with { Progress = new Progress<ArchiveProgress>(progress.Update) };
+        settings = settings with { Progress = progress.CreateSink() };
 
         // 线程数必须在打开句柄之前设置才生效。它是引擎的**进程级**设置，所以本次对话框
         // 的选择不能留在原地影响下一次压缩 —— 记下来，finally 里还原。

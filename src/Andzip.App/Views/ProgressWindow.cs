@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace Andzip.App.Views;
 
@@ -100,7 +101,7 @@ public sealed class ProgressWindow : Window
         _cancellation.Cancel();
     }
 
-    /// <summary>刷新一帧进度。只能从 UI 线程调用（<c>Progress&lt;T&gt;</c> 已保证）。</summary>
+    /// <summary>刷新一帧进度。只能从 UI 线程调用 —— 用 <see cref="CreateSink"/> 就自动满足。</summary>
     public void Update(ArchiveProgress progress)
     {
         var label = _lang.Get(_textKey);
@@ -127,5 +128,19 @@ public sealed class ProgressWindow : Window
         }
 
         _text.Text = line;
+    }
+
+    /// <summary>
+    /// 交给 Core 的进度汇。<strong>别自己 <c>new Progress&lt;T&gt;(window.Update)</c></strong>：
+    /// 那个类捕获的是"构造那一刻"的 <c>SynchronizationContext</c>，环境里没人装过上下文时它会退回
+    /// .NET 默认实现 —— 而默认实现的 <c>Post</c> 就是把回调丢进线程池，于是回调在池线程上直接改控件，
+    /// 真机抛 <c>Call from invalid thread</c> 整个进程没了（0.9.11 的「测试压缩包」闪退就是这个）。
+    /// 这里显式抓住 <c>Dispatcher.UIThread</c>，所以在哪儿构造、由哪个线程上报都无所谓。
+    /// </summary>
+    public IProgress<ArchiveProgress> CreateSink() => new DispatcherSink(this);
+
+    private sealed class DispatcherSink(ProgressWindow window) : IProgress<ArchiveProgress>
+    {
+        public void Report(ArchiveProgress value) => Dispatcher.UIThread.Post(() => window.Update(value));
     }
 }
