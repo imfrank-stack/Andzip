@@ -9,11 +9,11 @@ namespace Andzip.Core.Tests;
 public class ShellTasksTests
 {
     [Theory]
-    [InlineData("/task=extract", ShellTask.Extract)]
-    [InlineData("/task=extract-here", ShellTask.ExtractHere)]
-    [InlineData("/task=compress-zip", ShellTask.CompressZip)]
-    [InlineData("/task=compress-7z", ShellTask.CompressSevenZip)]
     [InlineData("/task=open", ShellTask.Open)]
+    [InlineData("/task=extract", ShellTask.Extract)]
+    [InlineData("/task=extract-delete", ShellTask.ExtractDelete)]
+    [InlineData("/task=compress-zip", ShellTask.CompressZip)]
+    [InlineData("/task=compress-dialog", ShellTask.CompressDialog)]
     [InlineData("/task=nonsense", ShellTask.Open)]
     public void TryParse_RecognisesEveryVerb(string switchToken, ShellTask expected)
     {
@@ -21,8 +21,19 @@ public class ShellTasksTests
         Assert.Equal(expected, task);
     }
 
+    [Theory]
+    [InlineData("/task=auto-extract")]
+    [InlineData("/task=extract-here")]
+    public void TryParse_StillAcceptsTheRetiredExtractVerbs(string switchToken)
+    {
+        // 0.9.12 把「智能解压」「解压到当前文件夹」并成了一条「解压」。动词键在写注册表时会被删掉，
+        // 但用户桌面上可能还留着指向老命令行的快捷方式 —— 认成现在这一条，比退回"打开"更合预期。
+        Assert.True(ShellTasks.TryParse(["C:\\a.7z", switchToken], out var task));
+        Assert.Equal(ShellTask.Extract, task);
+    }
+
     [Fact]
-    public void TryParse_AcceptsTheLegacyBareSwitch()
+    public void TryParse_StillAcceptsTheLegacyBareSwitch()
     {
         // v0.9.4 注册出去的命令带的是裸 /extract，不能因为换了写法就把老关联变成“只开窗口”。
         Assert.True(ShellTasks.TryParse(["C:\\a.7z", "/extract"], out var task));
@@ -47,52 +58,37 @@ public class ShellTasksTests
         }
     }
 
+    [Theory]
+    [InlineData(ShellTask.Extract, true)]
+    [InlineData(ShellTask.ExtractDelete, true)]
+    [InlineData(ShellTask.Open, false)]
+    [InlineData(ShellTask.CompressZip, false)]
+    [InlineData(ShellTask.CompressDialog, false)]
+    public void IsExtraction_CoversExactlyTheTwoExtractTasks(ShellTask task, bool expected)
+    {
+        // 分发处（ShellTaskRunner）就靠这个判断走不走 DirectExtract，
+        // 漏一条就是"右键解压点了没反应"。
+        Assert.Equal(expected, ShellTasks.IsExtraction(task));
+    }
+
     [Fact]
-    public void ExtractDestination_NestsUnderAFolderNamedAfterTheArchive()
+    public void SiblingFolder_NestsUnderAFolderNamedAfterTheArchive()
     {
         var archive = Path.Combine(Path.GetTempPath(), "az-shell", "集训队证件照.7z");
 
         Assert.Equal(Path.Combine(Path.GetTempPath(), "az-shell", "集训队证件照"),
-            ShellTasks.ExtractDestination(archive, ShellTask.Extract));
+            ShellTasks.SiblingFolder(archive));
     }
 
     [Fact]
-    public void ExtractDestination_ExtractHereUsesTheContainingFolder()
-    {
-        var archive = Path.Combine(Path.GetTempPath(), "az-shell", "photos.zip");
-
-        Assert.Equal(Path.Combine(Path.GetTempPath(), "az-shell"),
-            ShellTasks.ExtractDestination(archive, ShellTask.ExtractHere));
-    }
-
-    [Fact]
-    public void ExtractDestination_UsesOnlyTheFirstExtension()
+    public void SiblingFolder_UsesOnlyTheFirstExtension()
     {
         // .tar.gz 这类复合后缀只剥掉最后一段：目标是 "archive.tar"，不是 "archive"。
         // 与「选择解压路径」里同名文件夹那条规则保持一致，不另起一套。
         var archive = Path.Combine(Path.GetTempPath(), "archive.tar.gz");
 
-        Assert.Equal("archive.tar", Path.GetFileName(ShellTasks.ExtractDestination(archive, ShellTask.Extract)));
+        Assert.Equal("archive.tar", Path.GetFileName(ShellTasks.SiblingFolder(archive)));
     }
-
-    [Theory]
-    [InlineData(ShellTask.Open)]
-    [InlineData(ShellTask.AutoExtract)]
-    [InlineData(ShellTask.CompressZip)]
-    [InlineData(ShellTask.CompressSevenZip)]
-    [InlineData(ShellTask.CompressDialog)]
-    public void ExtractDestination_RejectsNonStaticTasks(ShellTask task)
-    {
-        // 调用方（ShellTaskRunner）用分支保证只把两个静态落点的任务送进来；AutoExtract 也拒绝，
-        // 因为它的落点要看包里装着什么，只凭路径算出来的一定是错的。
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => ShellTasks.ExtractDestination(Path.Combine(Path.GetTempPath(), "a.zip"), task));
-    }
-
-    [Fact]
-    public void ExtractDestination_RejectsEmptyPath()
-        => Assert.ThrowsAny<ArgumentException>(
-            () => ShellTasks.ExtractDestination(" ", ShellTask.Extract));
 
     [Fact]
     public void ArchivePathFor_StripsTheFileExtension()

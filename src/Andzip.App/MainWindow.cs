@@ -593,7 +593,7 @@ public sealed class MainWindow : Window
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = MnemonicText.Strip(_lang.Get("MENUSTR_OPEN")),
+            Title = _lang.Label("MENUSTR_OPEN"),
             AllowMultiple = false,
             FileTypeFilter =
             [

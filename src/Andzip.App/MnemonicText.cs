@@ -1,4 +1,5 @@
 using System.Text;
+using Andzip.Core.Lang;
 
 namespace Andzip.App;
 
@@ -12,6 +13,15 @@ namespace Andzip.App;
 /// </summary>
 internal static class MnemonicText
 {
+    /// <summary>
+    /// 取一条文案<em>用作控件文字</em>：顺手去掉 <c>(&amp;X)</c>。
+    /// <para>凡是 <c>Content</c> / <c>Header</c> / <c>Text</c> / <c>Title</c> 都走这里，
+    /// 不要直接 <c>Get</c> —— 0.9.12 之前只有菜单栏与工具栏调了 <see cref="Strip"/>，
+    /// 对话框上的按钮就把「确定(&amp;O)」原样显示给用户看了。</para>
+    /// </summary>
+    public static string Label(this LangCatalog lang, string key, string? section = null)
+        => Strip(lang.Get(key, section));
+
     /// <summary>去掉助记符标记：<c>文件(&amp;F)</c> → <c>文件(F)</c>；<c>&amp;&amp;</c> 是字面量 &amp;。</summary>
     public static string Strip(string? text)
     {

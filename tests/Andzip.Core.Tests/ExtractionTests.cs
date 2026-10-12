@@ -442,6 +442,28 @@ public class ExtractionTests : IDisposable
     }
 
     [Fact]
+    public void Extract_DeleteArchiveAfterExtraction_RemovesEveryVolume()
+    {
+        // 「解压并删除」对分卷包必须连卷一起删。只删主卷的话，留下一地的 .z01
+        // 既打不开又占地方 —— 比一个不剩更糟。
+        CreateFile("src/noise.bin", Noise(60_000));
+        var zip = PathOf("out.zip");
+        ArchiveCreator.Create([ArchiveInputItem.FromPath(PathOf("src"))], CreateSettings(zip, volumeSize: 8_192));
+
+        Assert.True(File.Exists(PathOf("out.z01")), "这条用例的前提是包真的被拆成了分卷");
+
+        ArchiveExtractor.Extract(Extraction(zip, NewDestination()) with { DeleteArchiveAfterExtraction = true });
+
+        Assert.False(File.Exists(zip));
+        Assert.False(File.Exists(PathOf("out.z01")));
+    }
+
+    /// <summary>可压缩性差的料：全同一个字符的话分卷大小再小也压不出第二卷。</summary>
+    private static string Noise(int bytes)
+        => Convert.ToBase64String(
+            [.. Enumerable.Range(0, bytes).Select(i => (byte)((i * 37 + (i * i) % 251) ^ (i >> 3)))]);
+
+    [Fact]
     public void Extract_Cancelled_Throws()
     {
         CreateFile("src/a.txt", "A");

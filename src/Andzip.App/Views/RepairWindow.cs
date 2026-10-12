@@ -38,7 +38,7 @@ public sealed class RepairWindow : Window
         _lang = lang;
         _suggestedOutput = suggestedOutput;
 
-        Title = lang.Get("TEXT_TITLE_REPAIR");
+        Title = lang.Label("TEXT_TITLE_REPAIR");
         Width = 560;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -80,7 +80,7 @@ public sealed class RepairWindow : Window
                 if (radio.IsChecked == true)
                 {
                     Mode = mode;
-                    _modeHint.Text = lang.Get(hintKey);
+                    _modeHint.Text = lang.Label(hintKey);
                 }
             };
         }
@@ -94,12 +94,12 @@ public sealed class RepairWindow : Window
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
-        var browse = new Button { Content = lang.Get("TEXT_BTN_BROWSE"), MinWidth = 96 };
+        var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 96 };
         browse.Click += async (_, _) => await PickOutputAsync();
 
         _okButton = new Button
         {
-            Content = lang.Get("TEXT_REPAIR_START"),
+            Content = lang.Label("TEXT_REPAIR_START"),
             IsDefault = true,
             MinWidth = 110,
         };
@@ -107,7 +107,7 @@ public sealed class RepairWindow : Window
 
         var cancelButton = new Button
         {
-            Content = lang.Get("TEXT_BTN_CANCEL"),
+            Content = lang.Label("TEXT_BTN_CANCEL"),
             IsCancel = true,
             MinWidth = 96,
         };
@@ -116,7 +116,7 @@ public sealed class RepairWindow : Window
         var panel = new StackPanel { Margin = new Thickness(20, 16, 20, 16) };
         panel.Children.Add(new TextBlock
         {
-            Text = lang.Get("TEXT_REPAIR_INTRO"),
+            Text = lang.Label("TEXT_REPAIR_INTRO"),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 12),
         });
@@ -130,7 +130,7 @@ public sealed class RepairWindow : Window
 
         panel.Children.Add(new TextBlock
         {
-            Text = lang.Get("TEXT_REPAIR_OUTPUT"),
+            Text = lang.Label("TEXT_REPAIR_OUTPUT"),
             Margin = new Thickness(0, 4, 0, 4),
         });
         var outputRow = new DockPanel { LastChildFill = true };
@@ -168,7 +168,7 @@ public sealed class RepairWindow : Window
 
     private RadioButton ModeRadio(string key) => new()
     {
-        Content = _lang.Get(key),
+        Content = _lang.Label(key),
         Margin = new Thickness(0, 2, 0, 4),
         GroupName = "repairmode",
     };
@@ -196,7 +196,7 @@ public sealed class RepairWindow : Window
 
         var options = new FilePickerSaveOptions
         {
-            Title = _lang.Get("TEXT_TITLE_REPAIR"),
+            Title = _lang.Label("TEXT_TITLE_REPAIR"),
             SuggestedFileName = Path.GetFileName(OutputPath),
             DefaultExtension = "zip",
             FileTypeChoices = [new FilePickerFileType("ZIP") { Patterns = ["*.zip"] }],

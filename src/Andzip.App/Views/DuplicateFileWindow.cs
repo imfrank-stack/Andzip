@@ -18,7 +18,7 @@ public sealed class DuplicateFileWindow : Window
 
     public DuplicateFileWindow(LangCatalog lang, string fileName)
     {
-        Title = lang.Get("TEXT_TITLE_ASK_DUPEFILE");
+        Title = lang.Label("TEXT_TITLE_ASK_DUPEFILE");
         Width = 480;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -28,7 +28,7 @@ public sealed class DuplicateFileWindow : Window
 
         var message = new TextBlock
         {
-            Text = lang.Get("TEXT_MSG_FILE_EXISTS"),
+            Text = lang.Label("TEXT_MSG_FILE_EXISTS"),
             TextWrapping = TextWrapping.Wrap,
         };
         var name = new TextBlock
@@ -38,11 +38,11 @@ public sealed class DuplicateFileWindow : Window
             TextWrapping = TextWrapping.Wrap,
         };
 
-        var renameButton = new Button { Content = lang.Get("TEXT_BTN_RENAME"), MinWidth = 96, IsDefault = true };
+        var renameButton = new Button { Content = lang.Label("TEXT_BTN_RENAME"), MinWidth = 96, IsDefault = true };
         renameButton.Click += (_, _) => Choose(DuplicateDecision.Rename);
-        var overwriteButton = new Button { Content = lang.Get("TEXT_BTN_OVERWRITE"), MinWidth = 96 };
+        var overwriteButton = new Button { Content = lang.Label("TEXT_BTN_OVERWRITE"), MinWidth = 96 };
         overwriteButton.Click += (_, _) => Choose(DuplicateDecision.Overwrite);
-        var skipButton = new Button { Content = lang.Get("TEXT_BTN_SKIP"), MinWidth = 96, IsCancel = true };
+        var skipButton = new Button { Content = lang.Label("TEXT_BTN_SKIP"), MinWidth = 96, IsCancel = true };
         skipButton.Click += (_, _) => Choose(DuplicateDecision.Skip);
 
         var buttons = new StackPanel

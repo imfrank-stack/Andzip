@@ -412,7 +412,10 @@ public static class ArchiveExtractor
             plan.Skipped.Count,
             [.. plan.Files.Select(file => file.DestinationPath)]);
 
-    /// <summary>解压成功后才删包；删除失败不影响解压结果（与参考行为一致）。</summary>
+    /// <summary>
+    /// 解压成功后才删包；删除失败不影响解压结果（与参考行为一致）。
+    /// <para>分卷包连卷一起删：只删主卷会留下一地 <c>.z01</c>，那比一个不剩更糟。</para>
+    /// </summary>
     private static void TryDeleteArchive(string archivePath, ExtractionResult result)
     {
         if (result.FileCount == 0 && result.DirectoryCount == 0)
@@ -420,12 +423,15 @@ public static class ArchiveExtractor
             return;
         }
 
-        try
+        foreach (var part in SplitVolumeSupport.EnumerateParts(archivePath))
         {
-            File.Delete(archivePath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
+            try
+            {
+                File.Delete(part);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 }

@@ -115,6 +115,7 @@ TEXT_ERR_COMPRESS_FAILED                = 压缩失败：
 
 ; ---- 完整性测试（FR-3.6）----
 TEXT_STATUS_TESTING                     = 正在测试...
+TEXT_PROGRESS_TIME_LEFT                 = 剩余 ${time}
 TEXT_TITLE_TEST_PASSED                  = 测试完成
 TEXT_TEST_PASSED                        = 所有成员校验通过，没有发现损坏。
 TEXT_TITLE_TEST_FAILED                  = 测试未通过
@@ -195,7 +196,7 @@ TEXT_SETTINGS_GENERAL_TITLE             = 常规设置
 TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = 双击压缩包文件时
 TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = 打开 Andzip
 TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = 直接解压
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = 这一项只改程序自己的行为，不重写注册表里的动词，所以对已关联的所有格式立刻生效。直接解压走「智能解压」那套规则，只弹进度条，完成后自动关闭。
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = 这一项只改程序自己的行为，不重写注册表里的动词，所以对已关联的所有格式立刻生效。直接解压走右键「解压」那套落点规则，只弹进度条，完成后自动关闭。
 TEXT_SETTINGS_ESC_CANCEL                = 解压过程中允许按 Esc 取消
 TEXT_SETTINGS_NOT_IMPLEMENTED           = 该设置页尚未实现，会在后续版本加入。
 TEXT_SETTINGS_ASSOC_HINT                = 勾选后双击这些扩展名会用 Andzip 打开，右键「打开方式」里也会出现 Andzip；取消勾选会还原接管前的默认程序。若某项被 Windows 的默认应用保护挡住，会提示你去系统设置里手选。
@@ -208,16 +209,16 @@ TEXT_GROUP_CD_DVD                       = CD/DVD
 
 ; ---- 右键菜单动词与上下文菜单设置页 ----
 TEXT_MENU_OPEN_WITH                     = 用 Andzip 打开
-TEXT_MENU_AUTO_EXTRACT                  = 智能解压
-TEXT_MENU_EXTRACT_HERE                  = 解压到当前文件夹
+TEXT_MENU_EXTRACT                       = 解压
+TEXT_MENU_EXTRACT_DELETE                = 解压并删除
 TEXT_MENU_COMPRESS_ZIP                  = 压缩为 ZIP
-TEXT_MENU_COMPRESS_7Z                   = 压缩为 7Z
 TEXT_MENU_COMPRESS_DIALOG               = 压缩到…（可设密码 / 分卷）
 TEXT_SETTINGS_CONTEXT_MENU_TITLE        = 上下文菜单
 TEXT_SETTINGS_CTX_NOTE                  = 右键菜单项由注册表静态动词实现，不需要管理员权限；在 Windows 11 上它们位于「显示更多选项」二级菜单里。
-TEXT_SETTINGS_CTX_AUTO_EXTRACT_HINT     = 智能解压看包里装着什么：只有一个文件就直接解压出来；所有内容都在同一个顶层文件夹里就把那个文件夹整个放出来（不会再套一层同名文件夹）；其余情况新建一个以压缩包命名的文件夹收纳，重名时依次用「名称 (2)」「名称 (3)」。
+TEXT_SETTINGS_CTX_EXTRACT_RULES         = 解压看包里装着什么：只有一个文件就直接解压出来；所有内容都在同一个顶层文件夹里就把那个文件夹整个放出来（不会再套一层同名文件夹）；其余情况新建一个以压缩包命名的文件夹收纳，重名时依次用「名称 (2)」「名称 (3)」。「解压并删除」用同一套落点规则，跑成功后把包删掉，分卷包连卷一起删。
 TEXT_SETTINGS_CTX_COMPRESS_FILES        = 为所有文件添加「压缩为」菜单项
 TEXT_SETTINGS_CTX_COMPRESS_FOLDERS      = 为文件夹添加「压缩为」菜单项
+TEXT_SETTINGS_CTX_COMPRESS_HINT         = 压缩包身上不出现这两项：右键一个 .zip 再"压缩为 ZIP"没有意义。exe 是例外 —— 它在我们眼里是自解压包，在用户眼里就是个想压小的文件。
 TEXT_SETTINGS_CTX_EXTRACT               = 为已关联的压缩包添加「解压」菜单项
 TEXT_SETTINGS_CTX_EXTRACT_HINT          = 这一项跟着文件关联走：还没关联任何格式时它暂时没有作用。双击行为不看这里，由「常规 → 双击压缩包文件时」决定。
 TEXT_SETTINGS_CTX_UNSUPPORTED           = 右键菜单只能在 Windows 上设置。
@@ -248,7 +249,7 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = 留空等同于「上次新建时使�
 
 ; ---- 设置：解压页 ----
 TEXT_SETTINGS_EXTRACT_TITLE             = 解压设置
-TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = 智能解压时，单个文件也放进新建的文件夹
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = 解压时，单个文件也放进新建的文件夹
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = 默认关闭：包里只有一个文件时直接把它解出来。勾上后会建一个以那个文件命名的文件夹（photo.jpg.gz → photo\photo.jpg），名字被占用时依次用「名称 (2)」「名称 (3)」。
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = 解压后打开文件夹
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = 只在真的解完之后打开；失败或中途取消都不会弹出一个装了一半的目录。

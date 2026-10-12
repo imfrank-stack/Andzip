@@ -4,28 +4,26 @@ namespace Andzip.Core.Archive;
 /// 右键菜单 / 双击要执行的任务。注册表里每个动词的命令行只带一个 <c>/task=…</c>，
 /// 具体做什么由这个枚举决定 —— 与「双击行为」一样，行为放在命令行里，不放在动词键是否存在上。
 /// </summary>
+/// <remarks>
+/// 0.9.12 之前这里有 <c>Extract</c>（固定套一层同名文件夹）/ <c>AutoExtract</c>（看包里的形状）/
+/// <c>ExtractHere</c>（就地铺开）三条解压，界面上叫「智能解压」与「解压到当前文件夹」。
+/// 用户的要求是"合并成一个功能，软件里不再出现智能解压"，所以只剩 <see cref="Extract"/> 一条，
+/// 落点规则沿用原来那套内容判断 —— 一整棵单子树的包得到 <c>docs\</c> 而不是 <c>docs\docs\</c>，
+/// 这本来就该是「解压」默认的样子。
+/// </remarks>
 public enum ShellTask
 {
-    /// <summary>在 Andzip 窗口里浏览压缩包内容。</summary>
+    /// <summary>在 Andzip 窗口里浏览压缩包内容。右键「用 Andzip 打开」走这条，<strong>不</strong>受双击设置影响。</summary>
     Open,
 
-    /// <summary>解压到压缩包所在目录下一个与压缩包同名的文件夹。</summary>
+    /// <summary>解压：落点按包里的形状决定（见 <see cref="ExtractionLayout"/>）。</summary>
     Extract,
 
-    /// <summary>
-    /// 智能解压：按压缩包顶层的形状决定落点（见 <see cref="ExtractionLayout"/>）。
-    /// 单文件或整棵单子树直接铺在当前目录，零散多个才新建以压缩包命名的文件夹。
-    /// </summary>
-    AutoExtract,
-
-    /// <summary>直接解压到压缩包所在目录，不套一层文件夹。</summary>
-    ExtractHere,
+    /// <summary>解压，成功后把包删掉（分卷包连卷一起删）。</summary>
+    ExtractDelete,
 
     /// <summary>压缩成同名 .zip。</summary>
     CompressZip,
-
-    /// <summary>压缩成同名 .7z。</summary>
-    CompressSevenZip,
 
     /// <summary>打开「新建压缩文件」对话框，把选中的路径预填进去，由用户点开始。</summary>
     CompressDialog,
@@ -45,10 +43,8 @@ public static class ShellTasks
     public static string Name(ShellTask task) => task switch
     {
         ShellTask.Extract => "extract",
-        ShellTask.AutoExtract => "auto-extract",
-        ShellTask.ExtractHere => "extract-here",
+        ShellTask.ExtractDelete => "extract-delete",
         ShellTask.CompressZip => "compress-zip",
-        ShellTask.CompressSevenZip => "compress-7z",
         ShellTask.CompressDialog => "compress-dialog",
         _ => "open",
     };
@@ -57,6 +53,11 @@ public static class ShellTasks
     /// 从命令行里取任务。没有任务开关时返回 false，由调用方按「双击」设置决定
     /// （那是 <see cref="Settings.SettingKeys.ShouldExtractDirectly"/> 的职责，不在这里越权）。
     /// </summary>
+    /// <remarks>
+    /// 三条老写法仍然认：<c>auto-extract</c> 与 <c>extract-here</c> 是 0.9.12 及以前的两个解压动词，
+    /// <c>compress-7z</c> 是撤掉的压缩动词。动词键在写注册表时会被删掉，但用户桌面上可能还留着
+    /// 指向老命令行的快捷方式 —— 认成现在最接近的那一条，比退回"打开"更合用户预期。
+    /// </remarks>
     public static bool TryParse(IEnumerable<string>? arguments, out ShellTask task)
     {
         task = ShellTask.Open;
@@ -68,11 +69,9 @@ public static class ShellTasks
             {
                 task = argument[SwitchPrefix.Length..].Trim().ToLowerInvariant() switch
                 {
-                    "extract" => ShellTask.Extract,
-                    "auto-extract" => ShellTask.AutoExtract,
-                    "extract-here" => ShellTask.ExtractHere,
-                    "compress-zip" => ShellTask.CompressZip,
-                    "compress-7z" => ShellTask.CompressSevenZip,
+                    "extract" or "auto-extract" or "extract-here" => ShellTask.Extract,
+                    "extract-delete" => ShellTask.ExtractDelete,
+                    "compress-zip" or "compress-7z" => ShellTask.CompressZip,
                     "compress-dialog" => ShellTask.CompressDialog,
                     _ => ShellTask.Open,
                 };
@@ -89,19 +88,10 @@ public static class ShellTasks
     }
 
     /// <summary>
-    /// 解压落点。<c>Extract</c> 到压缩包旁边的同名文件夹，<c>ExtractHere</c> 就在压缩包所在目录里铺开。
-    /// 非解压任务没有落点可言，交给调用方的分支去保证。
+    /// 这条任务要不要先问口令。<see cref="ShellTask.Open"/> 不要 —— 打开时口令在真正读内容那一刻才需要。
     /// </summary>
-    /// <remarks>
-    /// <see cref="ShellTask.AutoExtract"/> 故意不在这里：它的落点取决于<strong>包里装着什么</strong>，
-    /// 必须先读清单（可能还要口令），不能只凭路径算出来。规则在 <see cref="ExtractionLayout"/>。
-    /// </remarks>
-    public static string ExtractDestination(string archivePath, ShellTask task) => task switch
-    {
-        ShellTask.Extract => SiblingFolder(archivePath),
-        ShellTask.ExtractHere => ParentFolder(archivePath),
-        _ => throw new ArgumentOutOfRangeException(nameof(task), task, "只有 Extract / ExtractHere 有静态落点。"),
-    };
+    public static bool IsExtraction(ShellTask task)
+        => task is ShellTask.Extract or ShellTask.ExtractDelete;
 
     /// <summary>所在目录。</summary>
     public static string ParentFolder(string path)

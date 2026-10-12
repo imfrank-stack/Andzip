@@ -1,3 +1,4 @@
+using System.Threading;
 using Andzip.App.Views;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
@@ -222,6 +223,102 @@ public class UiFeatureWiringTests
 
     private static void ShowCompressPage(Window window, LangCatalog lang)
         => Clicker.Invoke(FindButton(window, lang.Get("TEXT_SETTINGS_COMPRESS")));
+
+    // ---------------------------------------- 文案：Win32 的 (&X) 助记符不能露给用户
+
+    /// <summary>
+    /// 语言包沿用参考软件的 <c>确定(&amp;O)</c> 写法，而 Avalonia 的 SimpleTheme 不解析 <c>&amp;</c>，
+    /// 于是用户真的看到「确定(&O)」。0.9.12 之前只有菜单栏与工具栏调了剥离，
+    /// 对话框上的按钮全都漏了 —— 这条断言问的是"有没有哪个窗口还带着它"，
+    /// 而不是"某个键有没有被剥"，所以将来新增窗口/按钮自动被覆盖。
+    /// </summary>
+    [AvaloniaFact]
+    public void NoDialogShowsWin32MnemonicMarkers()
+    {
+        var lang = TestLang.Chinese();
+        var archive = @"C:\somewhere\box.zip";
+
+        AssertNoMarkerLeaked(new Window[]
+        {
+            new MessageWindow(lang, lang.Get("TEXT_TITLE_TEST_PASSED"), "所有成员校验通过。"),
+            new NewArchiveWindow(lang),
+            new ExtractPathWindow(lang, archive),
+            new DuplicateFileWindow(lang, "a.txt"),
+            new VolumeSizeWindow(lang, 100),
+            new PasswordWindow(lang),
+            new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),
+            new ProgressWindow(lang, new CancellationTokenSource()),
+            new MainWindow(lang, new AppSettings()),
+        });
+    }
+
+    [AvaloniaFact]
+    public void EverySettingsPageShowsWin32FreeLabels()
+    {
+        // 设置窗口九个页面是各自单独装配的，只看默认页等于没看另外八页。
+        var lang = TestLang.Chinese();
+        var settingsPath = TempSettings();
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+            var leaked = new List<string>();
+
+            foreach (var navKey in new[]
+                     {
+                         "TEXT_SETTINGS_GENERAL", "TEXT_SETTINGS_FILE_ASSOCIATION", "TEXT_SETTINGS_CONTEXT_MENU",
+                         "TEXT_SETTINGS_COMPRESS", "TEXT_SETTINGS_EXTRACT", "TEXT_SETTINGS_VIEW",
+                         "TEXT_SETTINGS_SECURITY", "TEXT_SETTINGS_ADVANCED", "TEXT_SETTINGS_LANGUAGE",
+                     })
+            {
+                Clicker.Invoke(FindButton(window, lang.Get(navKey)));
+                leaked.AddRange(VisualQuery.VisibleTexts(window).Where(TextCarriesMarker));
+            }
+
+            Assert.Empty(leaked);
+        }
+        finally
+        {
+            TryDelete(settingsPath);
+        }
+    }
+
+    private static void AssertNoMarkerLeaked(IEnumerable<Window> windows)
+        => Assert.Empty(windows.SelectMany(window => VisualQuery.VisibleTexts(window.Shown()).Where(TextCarriesMarker)));
+
+    private static bool TextCarriesMarker(string text) => text.Contains("(&", StringComparison.Ordinal);
+
+    // ------------------------------------------------ 进度窗口：百分比与预估剩余时间
+
+    [AvaloniaFact]
+    public void ProgressWindowShowsPercentAndEstimatedTimeLeft()
+    {
+        var lang = TestLang.Chinese();
+        var timeLeft = lang.Format("TEXT_PROGRESS_TIME_LEFT", ("time", string.Empty)).Trim();
+        // 这条键没有助记符，原文与界面上的文字一致（Label 是 App 层的 internal，测试里够不着）。
+        var status = lang.Get("TEXT_STATUS_TESTING");
+        using var cts = new CancellationTokenSource();
+        var window = new ProgressWindow(lang, cts, "TEXT_STATUS_TESTING").Shown();
+
+        // 按钮模板里也有一个 TextBlock（Avalonia 用的是 AccessText，它是 TextBlock 的子类），
+        // 所以按"这一行的开头就是状态文案"来认，而不是"树里只有一个 TextBlock"。
+        string Line() => VisualQuery.Of<TextBlock>(window)
+            .Single(t => t.Text?.StartsWith(status, StringComparison.Ordinal) == true).Text!;
+
+        window.Update(new ArchiveProgress(ArchiveOperation.Test, 10, 1000, "noise.bin", 0, 1));
+
+        // 起步那几帧不报剩余时间：样本太小，速度抖一下估算就能从 2 分钟跳到 40 分钟，
+        // 一个乱跳的数字比没有数字更糟。
+        Assert.DoesNotContain(timeLeft, Line(), StringComparison.Ordinal);
+
+        window.Update(new ArchiveProgress(ArchiveOperation.Test, 500, 1000, "noise.bin", 0, 1));
+
+        Assert.Contains("50%", Line(), StringComparison.Ordinal);
+        Assert.Contains(timeLeft, Line(), StringComparison.Ordinal);
+
+        // 占位符没被替换就是没接上，界面会直接显示 "${time}"。
+        Assert.DoesNotContain("${time}", Line(), StringComparison.Ordinal);
+    }
 
     private static Button FindButton(Window window, string text)
         => VisualQuery.Of<Button>(window).SingleOrDefault(b => Equals(b.Content?.ToString(), text))

@@ -82,6 +82,11 @@ namespace Andzip.App.UiTests
         public static IReadOnlyList<Control> Titled(Control root, string title)
             => Descendants(root).Where(c => ContentText(c) == title).ToList();
 
+        /// <summary>这棵树上会显示给用户的全部文案。用来问"用户到底看得见什么"，
+        /// 而不是"某个键在不在"。</summary>
+        public static IReadOnlyList<string> VisibleTexts(Control root)
+            => [.. Descendants(root).Select(ContentText).Where(text => !string.IsNullOrEmpty(text)).Select(text => text!)];
+
         private static IEnumerable<Control> Descendants(Control control)
         {
             foreach (var child in control.GetLogicalChildren().OfType<Control>())

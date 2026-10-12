@@ -44,7 +44,7 @@ public sealed class ExtractPathWindow : Window
         _lang = lang;
         _archivePath = archivePath;
 
-        Title = lang.Get("TEXT_TITLE_EXTRACT_PATH");
+        Title = lang.Label("TEXT_TITLE_EXTRACT_PATH");
         Width = 760;
         Height = 560;
         MinWidth = 640;
@@ -66,15 +66,15 @@ public sealed class ExtractPathWindow : Window
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
-        var browseButton = new Button { Content = lang.Get("TEXT_BTN_BROWSE"), MinWidth = 110 };
+        var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
         browseButton.Click += async (_, _) => await BrowseAsync();
 
         // ---- 左侧快捷位置 + 右侧文件夹树 ----
         var quickPanel = new StackPanel { Orientation = Orientation.Vertical, Spacing = 6, Width = 150 };
-        quickPanel.Children.Add(QuickLocation(lang.Get("TEXT_QUICK_DESKTOP"), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)));
-        quickPanel.Children.Add(QuickLocation(lang.Get("TEXT_QUICK_MY_DOCUMENTS"), Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)));
-        quickPanel.Children.Add(QuickLocation(lang.Get("TEXT_QUICK_MY_PICTURES"), Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)));
-        quickPanel.Children.Add(QuickLocation(lang.Get("TEXT_QUICK_MY_COMPUTER"), Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\"));
+        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_DESKTOP"), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)));
+        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_MY_DOCUMENTS"), Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)));
+        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_MY_PICTURES"), Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)));
+        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_MY_COMPUTER"), Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\"));
 
         _tree = new TreeView
         {
@@ -115,23 +115,23 @@ public sealed class ExtractPathWindow : Window
         // ---- 解压缩: 全部 / 选定 + 新建文件夹 ----
         var allFiles = new RadioButton
         {
-            Content = lang.Get("TEXT_RADIO_ALL_FILES"),
+            Content = lang.Label("TEXT_RADIO_ALL_FILES"),
             IsChecked = true,
             GroupName = "extract-scope",
         };
         var selectedFiles = new RadioButton
         {
-            Content = lang.Get("TEXT_RADIO_SELECTED_FILES"),
+            Content = lang.Label("TEXT_RADIO_SELECTED_FILES"),
             IsEnabled = false, // 压缩包视图（M3）提供选中上下文后启用
             GroupName = "extract-scope",
         };
-        var newFolderButton = new Button { Content = lang.Get("TEXT_BTN_NEW_FOLDER"), MinWidth = 120 };
+        var newFolderButton = new Button { Content = lang.Label("TEXT_BTN_NEW_FOLDER"), MinWidth = 120 };
         newFolderButton.Click += async (_, _) => await CreateFolderAsync();
 
         var scopeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto") };
         var scopeLabel = new TextBlock
         {
-            Text = lang.Get("TEXT_SECTION_EXTRACT"),
+            Text = lang.Label("TEXT_SECTION_EXTRACT"),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 12, 0),
         };
@@ -147,17 +147,17 @@ public sealed class ExtractPathWindow : Window
         // ---- 复选项 ----
         _intoFolderCheck = new CheckBox
         {
-            Content = lang.Get("TEXT_CHECK_EXTRACT_TO_SUBFOLDER"),
+            Content = lang.Label("TEXT_CHECK_EXTRACT_TO_SUBFOLDER"),
             IsChecked = _remembered?.ExtractIntoArchiveNamedFolder ?? true,
         };
         _deleteArchiveCheck = new CheckBox
         {
-            Content = lang.Get("TEXT_CHECK_DELETE_ARCHIVE_AFTER"),
+            Content = lang.Label("TEXT_CHECK_DELETE_ARCHIVE_AFTER"),
             IsChecked = _remembered?.DeleteArchiveAfterExtraction ?? false,
         };
         _rememberCheck = new CheckBox
         {
-            Content = lang.Get("TEXT_CHECK_REMEMBER_SETTINGS"),
+            Content = lang.Label("TEXT_CHECK_REMEMBER_SETTINGS"),
             IsChecked = _remembered?.RememberSettings ?? false,
         };
 
@@ -169,9 +169,9 @@ public sealed class ExtractPathWindow : Window
         };
 
         // ---- 确定 / 取消 ----
-        var okButton = new Button { Content = lang.Get("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
         okButton.Click += (_, _) => Confirm();
-        var cancelButton = new Button { Content = lang.Get("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
         cancelButton.Click += (_, _) => Close(false);
 
         var buttons = new StackPanel
@@ -188,7 +188,7 @@ public sealed class ExtractPathWindow : Window
             Margin = new Thickness(16),
             RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto,Auto,Auto"),
         };
-        AddRow(layout, 0, BuildFieldRow(lang.Get("TEXT_LABEL_DEST_PATH"), _pathCombo, browseButton));
+        AddRow(layout, 0, BuildFieldRow(lang.Label("TEXT_LABEL_DEST_PATH"), _pathCombo, browseButton));
         AddRow(layout, 1, contentGrid);
         AddRow(layout, 2, scopeRow);
         AddRow(layout, 3, new StackPanel
@@ -330,7 +330,7 @@ public sealed class ExtractPathWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = _lang.Get("TEXT_LABEL_DEST_PATH"),
+            Title = _lang.Label("TEXT_LABEL_DEST_PATH"),
             AllowMultiple = false,
         });
 
@@ -353,14 +353,14 @@ public sealed class ExtractPathWindow : Window
 
         if (string.IsNullOrEmpty(parent))
         {
-            ShowHint(_lang.Get("TEXT_ERR_DEST_NOT_SET"));
+            ShowHint(_lang.Label("TEXT_ERR_DEST_NOT_SET"));
             return;
         }
 
         try
         {
             Directory.CreateDirectory(parent);
-            var name = _lang.Get("TEXT_NEW_FOLDER_DEFAULT");
+            var name = _lang.Label("TEXT_NEW_FOLDER_DEFAULT");
             var target = Path.Combine(parent, name);
             for (var index = 2; Directory.Exists(target); index++)
             {
@@ -383,7 +383,7 @@ public sealed class ExtractPathWindow : Window
         var destination = _pathCombo.Text?.Trim() ?? string.Empty;
         if (destination.Length == 0)
         {
-            ShowHint(_lang.Get("TEXT_ERR_DEST_NOT_SET"));
+            ShowHint(_lang.Label("TEXT_ERR_DEST_NOT_SET"));
             return;
         }
 

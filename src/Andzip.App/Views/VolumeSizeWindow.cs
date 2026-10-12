@@ -22,7 +22,7 @@ public sealed class VolumeSizeWindow : Window
     {
         _lang = lang;
 
-        Title = lang.Get("TEXT_TITLE_VOLUME_SIZE");
+        Title = lang.Label("TEXT_TITLE_VOLUME_SIZE");
         Width = 400;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -42,9 +42,9 @@ public sealed class VolumeSizeWindow : Window
             IsVisible = false,
         };
 
-        var okButton = new Button { Content = lang.Get("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
         okButton.Click += (_, _) => Confirm();
-        var cancelButton = new Button { Content = lang.Get("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
         cancelButton.Click += (_, _) => Close(false);
 
         var buttons = new StackPanel
@@ -66,7 +66,7 @@ public sealed class VolumeSizeWindow : Window
 
         var label = new TextBlock
         {
-            Text = lang.Get("TEXT_LABEL_VOLUME_SIZE"),
+            Text = lang.Label("TEXT_LABEL_VOLUME_SIZE"),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 14, 0),
         };
@@ -94,7 +94,7 @@ public sealed class VolumeSizeWindow : Window
     {
         if (!int.TryParse(_sizeBox.Text?.Trim(), out var sizeMb) || sizeMb < 1 || sizeMb > MaxSizeMb)
         {
-            _hint.Text = _lang.Get("TEXT_ERR_VOLUME_SIZE_INVALID");
+            _hint.Text = _lang.Label("TEXT_ERR_VOLUME_SIZE_INVALID");
             _hint.IsVisible = true;
             return;
         }

@@ -160,7 +160,7 @@ internal sealed class FileAssociationService
     /// <para><see cref="ShowExtractVerbs"/> 对应「设置 → 上下文菜单 → 解压菜单项」：
     /// 关掉之后 ProgID 里只留 open 动词，双击仍然按「常规 → 双击」设置走，不受影响。</para>
     /// </summary>
-    internal sealed record ExtractionVerbLabels(string Open, string AutoExtract, string ExtractHere)
+    internal sealed record ExtractionVerbLabels(string Open, string Extract, string ExtractDelete)
     {
         public bool ShowExtractVerbs { get; init; } = true;
     }
@@ -172,8 +172,12 @@ internal sealed class FileAssociationService
     /// 「把这个文件交给 Andzip 做某件事」，怎么做由参数说清楚，不靠某个动词键是否存在。
     /// </para>
     /// <para>
-    /// <c>shell\open\command</c> 永远不带开关 —— 双击的行为由「常规 → 双击」设置决定，
-    /// 那样改设置不用重写所有 ProgID。
+    /// <strong>双击与右键「打开」是两条键，这是刻意的</strong>。<c>shell\open</c> 是双击要执行的
+    /// 那条（<c>shell</c> 的默认值就是它），它<strong>不</strong>带开关，于是"双击干什么"仍然由
+    /// 「常规 → 双击打开压缩文件时」决定，改设置不用重写所有 ProgID；它带
+    /// <c>ProgrammaticAccessOnly</c>，所以不出现在菜单上。菜单里那条「用 Andzip 打开」是
+    /// <c>shell\andzip-open</c>，命令行写死 <c>/task=open</c> —— 名字承诺什么就干什么，
+    /// 不受双击设置影响（0.9.12 之前两者是同一条，勾了"直接解压"的用户点「打开」得到的是解压）。
     /// </para>
     /// </summary>
     private static void WriteCommands(RegistryKey progId, string executablePath, ExtractionVerbLabels labels)
@@ -181,17 +185,22 @@ internal sealed class FileAssociationService
         using var shell = progId.CreateSubKey("shell")!;
         shell.SetValue(string.Empty, "open");
 
-        WriteVerb(shell, "open", labels.Open, executablePath, Quote(executablePath) + " \"%1\"");
-        WriteVerb(shell, "auto-extract", labels.AutoExtract, executablePath,
-            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.AutoExtract),
+        WriteVerb(shell, "open", labels.Open, executablePath, Quote(executablePath) + " \"%1\"", hidden: true);
+        WriteVerb(shell, "andzip-open", labels.Open, executablePath,
+            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Open));
+        WriteVerb(shell, "extract", labels.Extract, executablePath,
+            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Extract),
             enabled: labels.ShowExtractVerbs);
-        WriteVerb(shell, "extract-here", labels.ExtractHere, executablePath,
-            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.ExtractHere),
+        WriteVerb(shell, "extract-delete", labels.ExtractDelete, executablePath,
+            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.ExtractDelete),
             enabled: labels.ShowExtractVerbs);
 
-        // v0.9.5 的那条 shell\extract（固定套一层同名文件夹）被「智能解压」取代了。
-        // 必须显式删掉：只写新键的话菜单上会同时留着两项，用户分不清点哪个。
-        shell.DeleteSubKeyTree("extract", throwOnMissingSubKey: false);
+        // 退役的动词键必须显式删掉：只写新键的话菜单上会同时留着旧的，用户分不清点哪个。
+        // auto-extract / extract-here 是 0.9.12 及以前那两条解压，已被单条 extract 取代。
+        foreach (var retired in new[] { "auto-extract", "extract-here" })
+        {
+            shell.DeleteSubKeyTree(retired, throwOnMissingSubKey: false);
+        }
 
         progId.CreateSubKey("DefaultIcon")!.SetValue(string.Empty, executablePath + ",0");
     }
@@ -202,7 +211,8 @@ internal sealed class FileAssociationService
         string label,
         string executablePath,
         string command,
-        bool enabled = true)
+        bool enabled = true,
+        bool hidden = false)
     {
         // 关掉的一项要真的删掉，不是留着键改文字 —— 菜单上少一项才是用户点的意思。
         if (!enabled)
@@ -215,6 +225,17 @@ internal sealed class FileAssociationService
         // 键的默认值就是菜单文字；Icon 让条目旁边带上程序图标而不是空白。
         verb.SetValue(string.Empty, label);
         verb.SetValue("Icon", executablePath + ",0");
+        if (hidden)
+        {
+            // 只被程序（双击、打开方式）调用，不进右键菜单。本机实测过：加上这个值之后
+            // Shell.Application 枚举 box.zip 的动词表里就没有这一项了，去掉又回来。
+            verb.SetValue("ProgrammaticAccessOnly", string.Empty);
+        }
+        else
+        {
+            verb.DeleteValue("ProgrammaticAccessOnly", throwOnMissingValue: false);
+        }
+
         verb.CreateSubKey("command")!.SetValue(string.Empty, command);
     }
 

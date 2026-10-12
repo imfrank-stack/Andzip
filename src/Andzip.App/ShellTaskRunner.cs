@@ -23,15 +23,14 @@ internal static class ShellTaskRunner
         string path,
         IClassicDesktopStyleApplicationLifetime desktop)
     {
-        switch (task)
+        if (ShellTasks.IsExtraction(task))
         {
-            case ShellTask.Extract or ShellTask.AutoExtract or ShellTask.ExtractHere:
-                return DirectExtract.RunAsync(lang, settings, task, path, desktop);
-            case ShellTask.CompressDialog:
-                return ShowNewArchive(lang, settings, path, desktop);
-            default:
-                return DirectCompress.RunAsync(lang, settings, task, path, desktop);
+            return DirectExtract.RunAsync(lang, settings, task, path, desktop);
         }
+
+        return task == ShellTask.CompressDialog
+            ? ShowNewArchive(lang, settings, path, desktop)
+            : DirectCompress.RunAsync(lang, settings, task, path, desktop);
     }
 
     /// <summary>

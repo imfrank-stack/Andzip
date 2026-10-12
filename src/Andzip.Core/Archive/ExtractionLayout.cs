@@ -1,7 +1,7 @@
 namespace Andzip.Core.Archive;
 
 /// <summary>
-/// 压缩包<strong>顶层</strong>的形状。「智能解压」按它决定内容铺在哪儿 ——
+/// 压缩包<strong>顶层</strong>的形状。「解压」按它决定内容铺在哪儿 ——
 /// 分成三种不是为了分类好看，而是用户能直接感知的三种预期：单文件包想直接拿到那个文件、
 /// 整棵目录树想直接拿到那个目录、零散一堆才需要一个袋子把它们装起来。
 /// </summary>
@@ -29,7 +29,7 @@ public enum ArchiveTopLevel
 public readonly record struct ArchiveShape(ArchiveTopLevel Kind, string? RootName);
 
 /// <summary>
-/// 智能解压的落点判定。
+/// 解压的落点判定。
 /// <para>
 /// <see cref="Inspect"/> 只看清单的顶层，不碰数据；<see cref="Destination"/> 把它翻译成目录。
 /// </para>

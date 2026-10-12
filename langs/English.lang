@@ -115,6 +115,7 @@ TEXT_ERR_COMPRESS_FAILED                = Compression failed:
 
 ; ---- Integrity test (FR-3.6) ----
 TEXT_STATUS_TESTING                     = Testing...
+TEXT_PROGRESS_TIME_LEFT                 = ${time} left
 TEXT_TITLE_TEST_PASSED                  = Test complete
 TEXT_TEST_PASSED                        = Every member verified; nothing is damaged.
 TEXT_TITLE_TEST_FAILED                  = Test failed
@@ -196,7 +197,7 @@ TEXT_SETTINGS_GENERAL_TITLE             = General settings
 TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = When double-clicking an archive
 TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = Open Andzip
 TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = Extract directly
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This only changes what the program itself does; it does not rewrite registry verbs, so it takes effect at once for every associated format. "Extract directly" follows the same auto-extract rules as the right-click entry, shows only the progress bar, and closes when it finishes.
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This only changes what the program itself does; it does not rewrite registry verbs, so it takes effect at once for every associated format. "Extract directly" follows the same destination rules as the right-click Extract entry, shows only the progress bar, and closes when it finishes.
 TEXT_SETTINGS_ESC_CANCEL                = Allow cancelling extraction with Esc
 TEXT_SETTINGS_NOT_IMPLEMENTED           = This settings page is not implemented yet; it will come in a later version.
 TEXT_SETTINGS_ASSOC_HINT                = Checking a format makes Andzip open it on double-click and appear in its right-click "Open with" list. Unchecking restores the previous default program. Formats guarded by the Windows default-app protection are reported so you can pick Andzip in system settings.
@@ -209,16 +210,16 @@ TEXT_GROUP_CD_DVD                       = CD/DVD
 
 ; ---- Context-menu verbs and the context-menu settings page ----
 TEXT_MENU_OPEN_WITH                     = Open with Andzip
-TEXT_MENU_AUTO_EXTRACT                  = Auto extract
-TEXT_MENU_EXTRACT_HERE                  = Extract to current folder
+TEXT_MENU_EXTRACT                       = Extract
+TEXT_MENU_EXTRACT_DELETE                = Extract and delete
 TEXT_MENU_COMPRESS_ZIP                  = Compress as ZIP
-TEXT_MENU_COMPRESS_7Z                   = Compress as 7Z
 TEXT_MENU_COMPRESS_DIALOG               = Compress to... (password / volumes)
 TEXT_SETTINGS_CONTEXT_MENU_TITLE        = Context menu
 TEXT_SETTINGS_CTX_NOTE                  = Menu entries are static registry verbs and need no administrator rights; on Windows 11 they live under "Show more options".
-TEXT_SETTINGS_CTX_AUTO_EXTRACT_HINT     = Auto extract looks at what the archive holds: a lone file comes out as-is; everything under one top-level folder releases that whole folder without wrapping it in a second copy of itself; anything else goes into a new folder named after the archive, using "name (2)", "name (3)" when that name is taken.
+TEXT_SETTINGS_CTX_EXTRACT_RULES         = Extract looks at what the archive holds: a lone file comes out as-is; everything under one top-level folder releases that whole folder without wrapping it in a second copy of itself; anything else goes into a new folder named after the archive, using "name (2)", "name (3)" when that name is taken. "Extract and delete" uses the same rules and removes the archive once the extraction succeeded, volumes included.
 TEXT_SETTINGS_CTX_COMPRESS_FILES        = Add "Compress as" entries for all files
 TEXT_SETTINGS_CTX_COMPRESS_FOLDERS      = Add "Compress as" entries for folders
+TEXT_SETTINGS_CTX_COMPRESS_HINT         = Neither entry appears on an archive: right-clicking a .zip and offering to "Compress as ZIP" is pointless. exe is the exception — to us it is a self-extracting archive, to the user it is a file they may want smaller.
 TEXT_SETTINGS_CTX_EXTRACT               = Add "Extract" entries for associated archives
 TEXT_SETTINGS_CTX_EXTRACT_HINT          = This one follows the file associations: with nothing associated yet it has nothing to act on. Double-click behaviour is not decided here — see "General → On double-clicking an archive".
 TEXT_SETTINGS_CTX_UNSUPPORTED           = The context menu can only be configured on Windows.
@@ -249,7 +250,7 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = Leaving it empty behaves like "the fo
 
 ; ---- Settings: extraction page ----
 TEXT_SETTINGS_EXTRACT_TITLE             = Extraction settings
-TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = Auto extract: put a lone file into a new folder too
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = When extracting, put a lone file into a new folder too
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = Off by default: an archive holding one file simply releases that file. When on, a folder named after that file is created (photo.jpg.gz becomes photo\photo.jpg), using "name (2)", "name (3)" when the name is taken.
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = Open the folder after extraction
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = Only opens once extraction actually finished; a failure or a cancel never pops open a half-filled directory.

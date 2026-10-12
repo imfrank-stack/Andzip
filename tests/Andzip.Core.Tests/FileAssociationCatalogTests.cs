@@ -86,4 +86,56 @@ public class FileAssociationCatalogTests
         Assert.Null(FileAssociationCatalog.Find("nope"));
     }
 
+    [Theory]
+    [InlineData("zip")]
+    [InlineData("7z")]
+    [InlineData("rar")]
+    [InlineData("iso")]
+    public void CompressionSuppression_CoversTheArchiveExtensions(string extension)
+    {
+        Assert.Contains(extension, FileAssociationCatalog.CompressionSuppressedExtensions, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CompressionSuppression_NeverCoversExe()
+    {
+        // exe 在我们眼里是自解压包，在用户眼里就是"想压小一点的安装文件"。
+        // 把它一起屏蔽掉，等于把一条常用命令从用户手里拿走。
+        Assert.DoesNotContain("exe", FileAssociationCatalog.CompressionSuppressedExtensions, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CompressionSuppressionQuery_IsTheFormExplorerParses()
+    {
+        // 这个形状是在本机实测出来的：往 HKCU\Software\Classes\*\shell\Andzip.compress-zip 写
+        // 这样一条 AppliesTo，box.zip 的右键菜单里就没有「压缩为 ZIP」，note.txt 上还在。
+        // 写法一旦改动（漏掉 NOT、漏掉点号），动词要么不生效要么对所有文件都消失。
+        var query = FileAssociationCatalog.CompressionSuppressionQuery();
+
+        Assert.StartsWith("NOT (System.FileExtension:=.", query, StringComparison.Ordinal);
+        Assert.EndsWith(")", query, StringComparison.Ordinal);
+        Assert.Contains(" OR ", query, StringComparison.Ordinal);
+        Assert.Equal(
+            FileAssociationCatalog.CompressionSuppressedExtensions.Count,
+            query.Split(" OR ", StringSplitOptions.None).Length);
+    }
+
+    [Fact]
+    public void CompressionSuppressionQuery_ListsEverySuppressedExtensionExactlyOnce()
+    {
+        var query = FileAssociationCatalog.CompressionSuppressionQuery();
+        var named = query
+            .Split(" OR ", StringSplitOptions.None)
+            .Select(term => term
+                .Replace("NOT (", "", StringComparison.Ordinal)
+                .Replace("System.FileExtension:=", "", StringComparison.Ordinal)
+                .Trim('(', ')', ' ', '.'))
+            .ToList();
+
+        Assert.Equal(named.Count, named.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(
+            [.. FileAssociationCatalog.CompressionSuppressedExtensions.OrderBy(e => e, StringComparer.Ordinal)],
+            named.OrderBy(e => e, StringComparer.Ordinal));
+    }
+
 }

@@ -96,9 +96,9 @@ internal sealed class ArchiveView : IDisposable
         _current = _root;
         _columns = BuildColumns(lang);
 
-        _listToggle = ViewBar.Toggle(ViewIcon.List, lang.Get("TEXT_VIEW_DETAILS"), () => SetIconView(false));
-        _iconToggle = ViewBar.Toggle(ViewIcon.Grid, lang.Get("TEXT_VIEW_ICONS"), () => SetIconView(true));
-        _locateButton = ViewBar.Toggle(ViewIcon.Folder, lang.Get("TEXT_OPEN_ARCHIVE_LOCATION"), () => RevealArchive());
+        _listToggle = ViewBar.Toggle(ViewIcon.List, lang.Label("TEXT_VIEW_DETAILS"), () => SetIconView(false));
+        _iconToggle = ViewBar.Toggle(ViewIcon.Grid, lang.Label("TEXT_VIEW_ICONS"), () => SetIconView(true));
+        _locateButton = ViewBar.Toggle(ViewIcon.Folder, lang.Label("TEXT_OPEN_ARCHIVE_LOCATION"), () => RevealArchive());
 
         // 图标视图要在建树之前定下来：Render() 会按它生成详情区内容。
         _iconView = _view.IconViewByDefault;
@@ -704,19 +704,19 @@ internal sealed class ArchiveView : IDisposable
 
     private static ColumnSpec[] BuildColumns(LangCatalog lang) =>
     [
-        new(lang.Get("TEXT_COLUMN_NAME"), e => e.Name, (a, b) => string.CompareOrdinal(a.Name, b.Name)),
-        new(lang.Get("TEXT_COLUMN_COMPRESSED_SIZE"), e => e.IsDirectory ? string.Empty : e.CompressedSize.ToString("N0"), Number(e => e.CompressedSize)),
-        new(lang.Get("TEXT_COLUMN_ORIGINAL_SIZE"), e => e.IsDirectory ? string.Empty : e.Size.ToString("N0"), Number(e => e.Size)),
-        new(lang.Get("TEXT_COLUMN_TYPE"), e => TypeText(lang, e), (a, b) => string.CompareOrdinal(TypeText(lang, a), TypeText(lang, b))),
-        new(lang.Get("TEXT_COLUMN_MODIFIED"), e => e.Modified?.ToString("yyyy/M/d H:mm") ?? string.Empty,
+        new(lang.Label("TEXT_COLUMN_NAME"), e => e.Name, (a, b) => string.CompareOrdinal(a.Name, b.Name)),
+        new(lang.Label("TEXT_COLUMN_COMPRESSED_SIZE"), e => e.IsDirectory ? string.Empty : e.CompressedSize.ToString("N0"), Number(e => e.CompressedSize)),
+        new(lang.Label("TEXT_COLUMN_ORIGINAL_SIZE"), e => e.IsDirectory ? string.Empty : e.Size.ToString("N0"), Number(e => e.Size)),
+        new(lang.Label("TEXT_COLUMN_TYPE"), e => TypeText(lang, e), (a, b) => string.CompareOrdinal(TypeText(lang, a), TypeText(lang, b))),
+        new(lang.Label("TEXT_COLUMN_MODIFIED"), e => e.Modified?.ToString("yyyy/M/d H:mm") ?? string.Empty,
             (a, b) => DateTime.Compare(a.Modified ?? default, b.Modified ?? default)),
-        new(lang.Get("TEXT_LABEL_COMPRESSION_METHOD"), e => e.Method ?? string.Empty,
+        new(lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), e => e.Method ?? string.Empty,
             (a, b) => string.CompareOrdinal(a.Method ?? string.Empty, b.Method ?? string.Empty)),
-        new(lang.Get("TEXT_LABEL_ENCRYPTION_METHOD"), e => e.IsEncrypted ? lang.Get("TEXT_ENCRYPTED_FLAG") : string.Empty, null),
-        new(lang.Get("TEXT_COLUMN_CRC"), e => e.Crc?.ToString("x8") ?? string.Empty, null),
-        new(lang.Get("TEXT_COLUMN_ATTRIBUTES"), AttributeText, null),
-        new(lang.Get("TEXT_COLUMN_COMMENT"), e => e.Comment ?? string.Empty, null),
-        new(lang.Get("TEXT_COLUMN_EXTRA"), e => ExtraText(lang, e), null),
+        new(lang.Label("TEXT_LABEL_ENCRYPTION_METHOD"), e => e.IsEncrypted ? lang.Label("TEXT_ENCRYPTED_FLAG") : string.Empty, null),
+        new(lang.Label("TEXT_COLUMN_CRC"), e => e.Crc?.ToString("x8") ?? string.Empty, null),
+        new(lang.Label("TEXT_COLUMN_ATTRIBUTES"), AttributeText, null),
+        new(lang.Label("TEXT_COLUMN_COMMENT"), e => e.Comment ?? string.Empty, null),
+        new(lang.Label("TEXT_COLUMN_EXTRA"), e => ExtraText(lang, e), null),
         new(string.Empty, _ => string.Empty, null),
     ];
 
@@ -728,12 +728,12 @@ internal sealed class ArchiveView : IDisposable
     {
         if (entry.IsDirectory)
         {
-            return lang.Get("TEXT_TYPE_FOLDER");
+            return lang.Label("TEXT_TYPE_FOLDER");
         }
 
         var extension = Path.GetExtension(entry.Name);
         return string.IsNullOrEmpty(extension)
-            ? lang.Get("TEXT_TYPE_FILE")
+            ? lang.Label("TEXT_TYPE_FILE")
             : lang.Format("TEXT_TYPE_FILE_EXT", ("ext", extension.TrimStart('.').ToUpperInvariant()));
     }
 
@@ -765,12 +765,12 @@ internal sealed class ArchiveView : IDisposable
     private static string ExtraText(LangCatalog lang, ArchiveEntryInfo entry)
     {
         var os = entry.PosixMode != 0
-            ? lang.Get("TEXT_EXTRA_OS_UNIX")
+            ? lang.Label("TEXT_EXTRA_OS_UNIX")
             : entry.Attributes is not null
-                ? lang.Get("TEXT_EXTRA_OS_WINDOWS")
+                ? lang.Label("TEXT_EXTRA_OS_WINDOWS")
                 : null;
 
-        var unicode = entry.Name.Any(c => c > 0x7F) ? lang.Get("TEXT_EXTRA_UTF8") : null;
+        var unicode = entry.Name.Any(c => c > 0x7F) ? lang.Label("TEXT_EXTRA_UTF8") : null;
         return string.Join(", ", new[] { os, unicode }.Where(s => !string.IsNullOrEmpty(s)));
     }
 

@@ -37,7 +37,7 @@ public sealed class SettingsWindow : Window
 
     public SettingsWindow(LangCatalog lang, AppSettings settings, string settingsPath)
     {
-        Title = lang.Get("TEXT_TITLE_SETTINGS");
+        Title = lang.Label("TEXT_TITLE_SETTINGS");
         Width = 1000;
         Height = 660;
         MinWidth = 720;
@@ -77,7 +77,7 @@ public sealed class SettingsWindow : Window
         for (var i = 0; i < navKeys.Length; i++)
         {
             var index = i;
-            var button = NavButton(lang.Get(navKeys[i]), () => ShowPage(index));
+            var button = NavButton(lang.Label(navKeys[i]), () => ShowPage(index));
             _navButtons[navKeys[i]] = button;
             nav.Children.Add(button);
         }
@@ -96,9 +96,9 @@ public sealed class SettingsWindow : Window
         body.Children.Add(navPane);
         body.Children.Add(contentPane);
 
-        var resetButton = new Button { Content = lang.Get("TEXT_BTN_RESET"), MinWidth = 120 };
+        var resetButton = new Button { Content = lang.Label("TEXT_BTN_RESET"), MinWidth = 120 };
         resetButton.Click += (_, _) => _currentPage?.Reload();
-        var okButton = new Button { Content = lang.Get("TEXT_BTN_OK"), MinWidth = 120, IsDefault = true };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), MinWidth = 120, IsDefault = true };
         okButton.Click += (_, _) => AcceptAndClose();
 
         var footer = new StackPanel
@@ -227,10 +227,10 @@ public sealed class SettingsWindow : Window
             NavKey = navKey;
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20), Spacing = 14 };
-            panel.Children.Add(SectionTitle(lang.Get(navKey)));
+            panel.Children.Add(SectionTitle(lang.Label(navKey)));
             panel.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_NOT_IMPLEMENTED"),
+                Text = lang.Label("TEXT_SETTINGS_NOT_IMPLEMENTED"),
                 Foreground = HintText,
                 TextWrapping = TextWrapping.Wrap,
             });
@@ -274,12 +274,12 @@ public sealed class SettingsWindow : Window
             {
                 Width = 260,
                 HorizontalAlignment = HorizontalAlignment.Left,
-                ItemsSource = new[] { lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_OPEN"), lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT") },
+                ItemsSource = new[] { lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_OPEN"), lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT") },
             };
 
             _escCancel = new CheckBox
             {
-                Content = lang.Get("TEXT_SETTINGS_ESC_CANCEL"),
+                Content = lang.Label("TEXT_SETTINGS_ESC_CANCEL"),
                 Margin = new Thickness(0, 20, 0, 0),
             };
 
@@ -291,18 +291,18 @@ public sealed class SettingsWindow : Window
             };
             doubleClickRow.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"),
+                Text = lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"),
                 Width = 170,
                 VerticalAlignment = VerticalAlignment.Center,
             });
             doubleClickRow.Children.Add(_doubleClick);
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_GENERAL_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_GENERAL_TITLE")));
             panel.Children.Add(doubleClickRow);
             panel.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_HINT"),
+                Text = lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_HINT"),
                 Foreground = HintText,
                 Margin = new Thickness(182, 6, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
@@ -386,13 +386,13 @@ public sealed class SettingsWindow : Window
             }
 
             var titleRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-            var title = SectionTitle(lang.Get("TEXT_SETTINGS_FILE_ASSOCIATION"));
+            var title = SectionTitle(lang.Label("TEXT_SETTINGS_FILE_ASSOCIATION"));
             Grid.SetColumn(title, 0);
             titleRow.Children.Add(title);
 
             var defaultAppsLink = new Button
             {
-                Content = lang.Get("TEXT_SETTINGS_WINDOWS_DEFAULT_APPS"),
+                Content = lang.Label("TEXT_SETTINGS_WINDOWS_DEFAULT_APPS"),
                 Foreground = LinkBlue,
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
@@ -406,7 +406,7 @@ public sealed class SettingsWindow : Window
             var list = new StackPanel { Spacing = 6, Margin = new Thickness(0, 10, 0, 0) };
             list.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_ASSOC_HINT"),
+                Text = lang.Label("TEXT_SETTINGS_ASSOC_HINT"),
                 Foreground = HintText,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 8),
@@ -421,7 +421,7 @@ public sealed class SettingsWindow : Window
             };
             _setDefaultButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_SET_DEFAULT"),
+                Content = lang.Label("TEXT_BTN_SET_DEFAULT"),
                 MinWidth = 120,
                 Margin = new Thickness(10, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
@@ -442,7 +442,7 @@ public sealed class SettingsWindow : Window
 
             foreach (var group in _groups)
             {
-                list.Children.Add(GroupHeader(lang.Get(group.TextKey)));
+                list.Children.Add(GroupHeader(lang.Label(group.TextKey)));
                 var items = new WrapPanel { Margin = new Thickness(4, 2, 0, 6) };
                 foreach (var association in group.Items)
                 {
@@ -467,14 +467,14 @@ public sealed class SettingsWindow : Window
                 list.Children.Add(items);
             }
 
-            var selectAll = new Button { Content = lang.Get("TEXT_BTN_SELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) };
+            var selectAll = new Button { Content = lang.Label("TEXT_BTN_SELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) };
             selectAll.Click += (_, _) => SetAll(true);
-            var deselectAll = new Button { Content = lang.Get("TEXT_BTN_DESELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) };
+            var deselectAll = new Button { Content = lang.Label("TEXT_BTN_DESELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) };
             deselectAll.Click += (_, _) => SetAll(false);
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -604,14 +604,14 @@ public sealed class SettingsWindow : Window
 
             if (!OperatingSystem.IsWindows())
             {
-                Message(_lang.Get("TEXT_TITLE_SETTINGS"), _lang.Get("TEXT_SETTINGS_ASSOC_UNSUPPORTED"));
+                Message(_lang.Label("TEXT_TITLE_SETTINGS"), _lang.Label("TEXT_SETTINGS_ASSOC_UNSUPPORTED"));
                 return;
             }
 
             var executable = Environment.ProcessPath;
             if (string.IsNullOrEmpty(executable))
             {
-                Message(_lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
+                Message(_lang.Label("TEXT_TITLE_ERROR"), _lang.Label("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
                 return;
             }
 
@@ -661,7 +661,7 @@ public sealed class SettingsWindow : Window
             }
             catch (Exception ex)
             {
-                Message(_lang.Get("TEXT_TITLE_ERROR"), _lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + ex.Message);
+                Message(_lang.Label("TEXT_TITLE_ERROR"), _lang.Label("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + ex.Message);
                 return;
             }
 
@@ -777,13 +777,13 @@ public sealed class SettingsWindow : Window
             _settings = settings;
             _settingsPath = settingsPath;
 
-            _forFiles = Check(lang.Get("TEXT_SETTINGS_CTX_COMPRESS_FILES"), UpdateApplyState);
-            _forFolders = Check(lang.Get("TEXT_SETTINGS_CTX_COMPRESS_FOLDERS"), UpdateApplyState);
-            _forExtract = Check(lang.Get("TEXT_SETTINGS_CTX_EXTRACT"), UpdateApplyState);
+            _forFiles = Check(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_FILES"), UpdateApplyState);
+            _forFolders = Check(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_FOLDERS"), UpdateApplyState);
+            _forExtract = Check(lang.Label("TEXT_SETTINGS_CTX_EXTRACT"), UpdateApplyState);
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 22, 0, 0),
@@ -791,19 +791,20 @@ public sealed class SettingsWindow : Window
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_CONTEXT_MENU_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_CONTEXT_MENU_TITLE")));
             panel.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_CTX_NOTE"),
+                Text = lang.Label("TEXT_SETTINGS_CTX_NOTE"),
                 Foreground = HintText,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 12, 0, 16),
             });
             panel.Children.Add(_forFiles);
             panel.Children.Add(_forFolders);
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_HINT")));
             panel.Children.Add(_forExtract);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_CTX_AUTO_EXTRACT_HINT")));
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_CTX_EXTRACT_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_CTX_EXTRACT_RULES")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_CTX_EXTRACT_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -858,14 +859,14 @@ public sealed class SettingsWindow : Window
 
             if (!OperatingSystem.IsWindows())
             {
-                Message(_lang.Get("TEXT_SETTINGS_CTX_UNSUPPORTED"));
+                Message(_lang.Label("TEXT_SETTINGS_CTX_UNSUPPORTED"));
                 return;
             }
 
             var executable = Environment.ProcessPath;
             if (string.IsNullOrEmpty(executable))
             {
-                Message(_lang.Get("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
+                Message(_lang.Label("TEXT_SETTINGS_ASSOC_APPLY_FAILED") + "process path unavailable");
                 return;
             }
 
@@ -897,14 +898,14 @@ public sealed class SettingsWindow : Window
             }
             catch (Exception ex)
             {
-                Message(_lang.Get("TEXT_SETTINGS_CTX_FAILED") + ex.Message);
+                Message(_lang.Label("TEXT_SETTINGS_CTX_FAILED") + ex.Message);
                 return;
             }
 
             Reload();
         }
 
-        private void Message(string text) => _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
+        private void Message(string text) => _ = new MessageWindow(_lang, _lang.Label("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
     }
 
     /// <summary>
@@ -930,13 +931,13 @@ public sealed class SettingsWindow : Window
             NavKey = "TEXT_SETTINGS_EXTRACT";
             _settingsPath = settingsPath;
 
-            _singleFileToFolder = Check(lang.Get("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER"), UpdateApplyState);
-            _openFolderAfter = Check(lang.Get("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState);
-            _keepProgress = Check(lang.Get("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS"), UpdateApplyState);
+            _singleFileToFolder = Check(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER"), UpdateApplyState);
+            _openFolderAfter = Check(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState);
+            _keepProgress = Check(lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS"), UpdateApplyState);
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
@@ -945,13 +946,13 @@ public sealed class SettingsWindow : Window
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_EXTRACT_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_EXTRACT_TITLE")));
             panel.Children.Add(_singleFileToFolder);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT")));
             panel.Children.Add(_openFolderAfter);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT")));
             panel.Children.Add(_keepProgress);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1025,15 +1026,15 @@ public sealed class SettingsWindow : Window
             NavKey = "TEXT_SETTINGS_VIEW";
             _settingsPath = settingsPath;
 
-            _toolBar = Check(lang.Get("TEXT_SETTINGS_VIEW_TOOLBAR"), UpdateApplyState);
-            _statusBar = Check(lang.Get("TEXT_SETTINGS_VIEW_STATUS"), UpdateApplyState);
-            _tree = Check(lang.Get("TEXT_SETTINGS_VIEW_TREE"), UpdateApplyState);
-            _iconDefault = Check(lang.Get("TEXT_SETTINGS_VIEW_ICON_DEFAULT"), UpdateApplyState);
-            _autoExpand = Check(lang.Get("TEXT_SETTINGS_VIEW_AUTO_EXPAND"), UpdateApplyState);
+            _toolBar = Check(lang.Label("TEXT_SETTINGS_VIEW_TOOLBAR"), UpdateApplyState);
+            _statusBar = Check(lang.Label("TEXT_SETTINGS_VIEW_STATUS"), UpdateApplyState);
+            _tree = Check(lang.Label("TEXT_SETTINGS_VIEW_TREE"), UpdateApplyState);
+            _iconDefault = Check(lang.Label("TEXT_SETTINGS_VIEW_ICON_DEFAULT"), UpdateApplyState);
+            _autoExpand = Check(lang.Label("TEXT_SETTINGS_VIEW_AUTO_EXPAND"), UpdateApplyState);
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
@@ -1042,13 +1043,13 @@ public sealed class SettingsWindow : Window
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_VIEW_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_VIEW_TITLE")));
             panel.Children.Add(_toolBar);
             panel.Children.Add(_statusBar);
             panel.Children.Add(_tree);
             panel.Children.Add(_iconDefault);
             panel.Children.Add(_autoExpand);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_VIEW_APPLY_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_VIEW_APPLY_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1142,7 +1143,7 @@ public sealed class SettingsWindow : Window
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 20, 0, 0),
@@ -1158,17 +1159,17 @@ public sealed class SettingsWindow : Window
             };
             row.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_LANGUAGE_LABEL"),
+                Text = lang.Label("TEXT_SETTINGS_LANGUAGE_LABEL"),
                 Width = 170,
                 VerticalAlignment = VerticalAlignment.Center,
             });
             row.Children.Add(_language);
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_LANGUAGE_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_LANGUAGE_TITLE")));
             panel.Children.Add(row);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_LANGUAGE_HINT")));
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_LANGUAGE_RESTART")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_LANGUAGE_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_LANGUAGE_RESTART")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1257,16 +1258,16 @@ public sealed class SettingsWindow : Window
             _lang = lang;
             _settingsPath = settingsPath;
 
-            _fullPathTitle = Check(lang.Get("TEXT_SETTINGS_TITLE_FULL_PATH"), UpdateApplyState);
+            _fullPathTitle = Check(lang.Label("TEXT_SETTINGS_TITLE_FULL_PATH"), UpdateApplyState);
             _tempFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
             _tempFolder.TextChanged += (_, _) => UpdateApplyState();
 
-            var browse = new Button { Content = lang.Get("TEXT_BTN_BROWSE_TEMP"), MinWidth = 110 };
+            var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE_TEMP"), MinWidth = 110 };
             browse.Click += async (_, _) => await PickFolderAsync();
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
@@ -1276,7 +1277,7 @@ public sealed class SettingsWindow : Window
 
             var export = new Button
             {
-                Content = lang.Get("TEXT_BTN_EXPORT_SETTINGS"),
+                Content = lang.Label("TEXT_BTN_EXPORT_SETTINGS"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 10, 0, 0),
@@ -1285,10 +1286,10 @@ public sealed class SettingsWindow : Window
             export.Click += async (_, _) => await ExportAsync();
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_ADVANCED_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_ADVANCED_TITLE")));
             panel.Children.Add(_fullPathTitle);
-            panel.Children.Add(LabeledRow(lang.Get("TEXT_SETTINGS_TEMP_FOLDER"), _tempFolder, browse));
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_TEMP_FOLDER_HINT")));
+            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_TEMP_FOLDER"), _tempFolder, browse));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_TEMP_FOLDER_HINT")));
             panel.Children.Add(_applyButton);
             panel.Children.Add(export);
             _exportButton = export;
@@ -1350,7 +1351,7 @@ public sealed class SettingsWindow : Window
         {
             var folders = await _owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = _lang.Get("TEXT_SETTINGS_TEMP_FOLDER"),
+                Title = _lang.Label("TEXT_SETTINGS_TEMP_FOLDER"),
                 AllowMultiple = false,
             });
 
@@ -1369,10 +1370,10 @@ public sealed class SettingsWindow : Window
             var suggested = Path.GetFileName(_settingsPath);
             var target = await _owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = _lang.Get("TEXT_BTN_EXPORT_SETTINGS"),
+                Title = _lang.Label("TEXT_BTN_EXPORT_SETTINGS"),
                 SuggestedFileName = suggested,
                 DefaultExtension = "ini",
-                FileTypeChoices = [new FilePickerFileType(_lang.Get("TEXT_SETTINGS_EXPORT_FILTER")) { Patterns = ["*.ini"] }],
+                FileTypeChoices = [new FilePickerFileType(_lang.Label("TEXT_SETTINGS_EXPORT_FILTER")) { Patterns = ["*.ini"] }],
             });
 
             if (target?.TryGetLocalPath() is not { } path)
@@ -1387,12 +1388,12 @@ public sealed class SettingsWindow : Window
             }
             catch (Exception ex)
             {
-                Message(_lang.Get("TEXT_SETTINGS_EXPORT_FAILED") + ex.Message);
+                Message(_lang.Label("TEXT_SETTINGS_EXPORT_FAILED") + ex.Message);
             }
         }
 
         private void Message(string text)
-            => _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
+            => _ = new MessageWindow(_lang, _lang.Label("TEXT_TITLE_SETTINGS"), text).ShowDialog(_owner);
     }
 
     /// <summary>
@@ -1419,11 +1420,11 @@ public sealed class SettingsWindow : Window
             _lang = lang;
             _settingsPath = settingsPath;
 
-            _remember = Check(lang.Get("TEXT_SETTINGS_REMEMBER_PASSWORDS"), UpdateApplyState);
+            _remember = Check(lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS"), UpdateApplyState);
             _remembered = new TextBlock { Foreground = HintText, Margin = new Thickness(24, 4, 0, 0) };
             _clearButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_FORGET_PASSWORDS"),
+                Content = lang.Label("TEXT_BTN_FORGET_PASSWORDS"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 8, 0, 0),
@@ -1433,7 +1434,7 @@ public sealed class SettingsWindow : Window
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
@@ -1442,12 +1443,12 @@ public sealed class SettingsWindow : Window
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_SECURITY_TITLE")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_SECURITY_TITLE")));
             panel.Children.Add(_remember);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT")));
             panel.Children.Add(_remembered);
             panel.Children.Add(_clearButton);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_PASSWORD_MANAGER_NOTE")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_PASSWORD_MANAGER_NOTE")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1477,7 +1478,7 @@ public sealed class SettingsWindow : Window
         {
             var count = Session.Passwords.Count;
             _remembered.Text = count == 0
-                ? _lang.Get("TEXT_SETTINGS_NO_PASSWORDS")
+                ? _lang.Label("TEXT_SETTINGS_NO_PASSWORDS")
                 : _lang.Format("TEXT_SETTINGS_PASSWORDS_REMEMBERED", ("count", count.ToString()));
             _clearButton.IsEnabled = count > 0;
         }
@@ -1550,36 +1551,36 @@ public sealed class SettingsWindow : Window
             _level = new ComboBox
             {
                 ItemsSource = CompressionLevelOption.All
-                    .Select(o => new DisplayItem(lang.Get(o.TextKey), o))
+                    .Select(o => new DisplayItem(lang.Label(o.TextKey), o))
                     .ToList(),
                 Width = 220,
                 HorizontalAlignment = HorizontalAlignment.Left,
             };
 
-            _noRootFolder = Check(lang.Get("TEXT_SETTINGS_COMPRESS_NO_ROOT"), UpdateApplyState);
-            _excludeThumbs = Check(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS"), UpdateApplyState);
-            _testAfter = Check(lang.Get("TEXT_SETTINGS_COMPRESS_TEST_AFTER"), UpdateApplyState);
-            _keepProgress = Check(lang.Get("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS"), UpdateApplyState);
-            _preallocate = Check(lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC"), UpdateApplyState);
-            _shareSources = Check(lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES"), UpdateApplyState);
+            _noRootFolder = Check(lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT"), UpdateApplyState);
+            _excludeThumbs = Check(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS"), UpdateApplyState);
+            _testAfter = Check(lang.Label("TEXT_SETTINGS_COMPRESS_TEST_AFTER"), UpdateApplyState);
+            _keepProgress = Check(lang.Label("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS"), UpdateApplyState);
+            _preallocate = Check(lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC"), UpdateApplyState);
+            _shareSources = Check(lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES"), UpdateApplyState);
 
             _excludePatterns = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
             _excludePatterns.TextChanged += (_, _) => UpdateApplyState();
 
-            _outputLast = new RadioButton { Content = lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_LAST"), IsChecked = true };
-            _outputFixed = new RadioButton { Content = lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED") };
+            _outputLast = new RadioButton { Content = lang.Label("TEXT_SETTINGS_COMPRESS_OUTPUT_LAST"), IsChecked = true };
+            _outputFixed = new RadioButton { Content = lang.Label("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED") };
             _outputLast.IsCheckedChanged += (_, _) => { RefreshOutputFolderEnabled(); UpdateApplyState(); };
             _outputFixed.IsCheckedChanged += (_, _) => { RefreshOutputFolderEnabled(); UpdateApplyState(); };
 
             _outputFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
             _outputFolder.TextChanged += (_, _) => UpdateApplyState();
 
-            var pickFolder = new Button { Content = lang.Get("TEXT_BTN_BROWSE"), MinWidth = 110 };
+            var pickFolder = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
             pickFolder.Click += async (_, _) => await PickFolderAsync();
 
             _applyButton = new Button
             {
-                Content = lang.Get("TEXT_BTN_APPLY"),
+                Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
@@ -1588,31 +1589,31 @@ public sealed class SettingsWindow : Window
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
-            panel.Children.Add(SectionTitle(lang.Get("TEXT_SETTINGS_COMPRESS_TITLE")));
-            panel.Children.Add(LabeledRow(lang.Get("TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL"), _level));
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_LEVEL_HINT")));
+            panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_COMPRESS_TITLE")));
+            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL"), _level));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_LEVEL_HINT")));
             panel.Children.Add(_noRootFolder);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT")));
             panel.Children.Add(_excludeThumbs);
-            panel.Children.Add(LabeledRow(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES"), _excludePatterns));
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT")));
+            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES"), _excludePatterns));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT")));
             panel.Children.Add(_testAfter);
             panel.Children.Add(_keepProgress);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT")));
             panel.Children.Add(_preallocate);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC_HINT")));
             panel.Children.Add(_shareSources);
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT")));
 
             panel.Children.Add(new TextBlock
             {
-                Text = lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_DIR"),
+                Text = lang.Label("TEXT_SETTINGS_COMPRESS_OUTPUT_DIR"),
                 Margin = new Thickness(0, 20, 0, 4),
             });
             panel.Children.Add(_outputLast);
             panel.Children.Add(_outputFixed);
             panel.Children.Add(LabeledRow(string.Empty, _outputFolder, pickFolder));
-            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = new ScrollViewer
@@ -1701,7 +1702,7 @@ public sealed class SettingsWindow : Window
         {
             var folders = await _owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = _lang.Get("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED"),
+                Title = _lang.Label("TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED"),
                 AllowMultiple = false,
             });
 

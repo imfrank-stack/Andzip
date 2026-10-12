@@ -108,6 +108,38 @@ public static class FileAssociationCatalog
     public static FileAssociation? Find(string id)
         => All.SelectMany(g => g.Items).FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
 
+    /// <summary>
+    /// 右键「压缩为 …」应当对哪些扩展名隐身 —— 也就是本表认为"这是个压缩包"的那些后缀。
+    /// <para>
+    /// 对压缩包提供压缩是个没有意义的动作（把 zip 再压成 zip 几乎不省空间，还多套一层），
+    /// 用户的话是"右键压缩包还能压缩这种蠢事"。所以这些后缀上只留 打开 / 解压 / 解压并删除。
+    /// </para>
+    /// <para>
+    /// <strong><c>exe</c> 是刻意排除的</strong>：它对 Andzip 是 SFX 自解压包，对用户就是一个
+    /// "我想把这个安装包压小一点"的普通文件。把压缩项从 exe 身上摘掉是帮倒忙。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> CompressionSuppressedExtensions { get; } =
+        [.. All.SelectMany(g => g.Items)
+            .Where(item => item.Id != "exe")
+            .SelectMany(item => item.Extensions)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(e => e, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// 注册表动词的 <c>AppliesTo</c> 查询串：让资源管理器在压缩包上隐藏「压缩为 …」。
+    /// <para>
+    /// 结构是 <c>NOT (System.FileExtension:=.zip OR System.FileExtension:=.7z …)</c>。
+    /// 这不是我猜的写法：在本机往 <c>HKCU\Software\Classes\*\shell\Andzip.compress-zip</c>
+    /// 手写这个值之后，<c>Shell.Application</c> 枚举 <c>box.zip</c> 的动词表里「压缩为 ZIP」消失，
+    /// 而 <c>note.txt</c> 上还在 —— 多扩展名的 OR 形式同样生效。
+    /// </para>
+    /// </summary>
+    public static string CompressionSuppressionQuery()
+        => "NOT (" + string.Join(
+            " OR ",
+            CompressionSuppressedExtensions.Select(e => "System.FileExtension:=." + e)) + ")";
+
     private static string NormaliseExtension(string extension)
         => extension.TrimStart('.').ToLowerInvariant();
 }

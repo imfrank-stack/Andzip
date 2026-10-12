@@ -11,7 +11,9 @@ public sealed class MessageWindow : Window
 {
     public MessageWindow(LangCatalog lang, string title, string message)
     {
-        Title = title;
+        // 标题与正文由调用方从语言包取好传进来，拿到的是原文（可能带 (&X)），
+        // 所以在这个对话框的边界上统一剥一次，而不是要求每个调用点记得剥。
+        Title = MnemonicText.Strip(title);
         Width = 460;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -21,13 +23,13 @@ public sealed class MessageWindow : Window
 
         var text = new TextBlock
         {
-            Text = message,
+            Text = MnemonicText.Strip(message),
             TextWrapping = TextWrapping.Wrap,
         };
 
         var okButton = new Button
         {
-            Content = lang.Get("TEXT_BTN_OK"),
+            Content = lang.Label("TEXT_BTN_OK"),
             IsDefault = true,
             IsCancel = true,
             MinWidth = 96,

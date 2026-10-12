@@ -85,7 +85,7 @@ public sealed class NewArchiveWindow : Window
         _lastOutputFolder = lastOutputFolder;
         _rememberOutputFolder = rememberOutputFolder;
 
-        Title = lang.Get("TEXT_TITLE_NEW_ARCHIVE");
+        Title = lang.Label("TEXT_TITLE_NEW_ARCHIVE");
         Width = 972;
         Height = 710;
         MinWidth = 760;
@@ -95,13 +95,13 @@ public sealed class NewArchiveWindow : Window
         FontSize = 14;
 
         // ---- 列表与按钮 ----
-        _deleteButton = new Button { Content = lang.Get("TEXT_BTN_DELETE"), IsEnabled = false, MinWidth = 96 };
+        _deleteButton = new Button { Content = lang.Label("TEXT_BTN_DELETE"), IsEnabled = false, MinWidth = 96 };
         _deleteButton.Click += (_, _) => RemoveSelected();
 
-        var addButton = new Button { Content = lang.Get("TEXT_BTN_ADD"), MinWidth = 96 };
-        var addFilesItem = new MenuItem { Header = lang.Get("TEXT_MENU_ADD_FILES") };
+        var addButton = new Button { Content = lang.Label("TEXT_BTN_ADD"), MinWidth = 96 };
+        var addFilesItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FILES") };
         addFilesItem.Click += async (_, _) => await AddFilesAsync();
-        var addFolderItem = new MenuItem { Header = lang.Get("TEXT_MENU_ADD_FOLDER") };
+        var addFolderItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FOLDER") };
         addFolderItem.Click += async (_, _) => await AddFolderAsync();
         var addFlyout = new MenuFlyout();
         addFlyout.Items.Add(addFilesItem);
@@ -122,7 +122,7 @@ public sealed class NewArchiveWindow : Window
         _fileNameBox = new TextBox { Text = DefaultOutputPath(), VerticalAlignment = VerticalAlignment.Center };
         _fileNameBox.TextChanged += (_, _) => RefreshState();
 
-        var browseButton = new Button { Content = lang.Get("TEXT_BTN_BROWSE"), MinWidth = 110 };
+        var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
         browseButton.Click += async (_, _) => await BrowseAsync();
 
         _formatCombo = new ComboBox
@@ -134,13 +134,13 @@ public sealed class NewArchiveWindow : Window
         };
         _formatCombo.SelectionChanged += (_, _) => OnFormatChanged();
 
-        _passwordButton = new Button { Content = lang.Get("TEXT_BTN_SET_PASSWORD"), MinWidth = 150 };
+        _passwordButton = new Button { Content = lang.Label("TEXT_BTN_SET_PASSWORD"), MinWidth = 150 };
         _passwordButton.Click += async (_, _) => await SetPasswordAsync();
 
         _levelCombo = new ComboBox
         {
             ItemsSource = CompressionLevelOption.All
-                .Select(o => new DisplayItem(lang.Get(o.TextKey), o))
+                .Select(o => new DisplayItem(lang.Label(o.TextKey), o))
                 .ToList(),
             // 按位置选，不按 Id 选：Id 是存进设置文件的稳定标识，将来插入新档位时两者就会错位。
             SelectedIndex = Math.Max(0, CompressionLevelOption.PositionOf(_defaults.Level)),
@@ -151,7 +151,7 @@ public sealed class NewArchiveWindow : Window
         _volumeCombo = new ComboBox
         {
             ItemsSource = VolumeOption.All
-                .Select(o => new DisplayItem(lang.Get(o.TextKey), o))
+                .Select(o => new DisplayItem(lang.Label(o.TextKey), o))
                 .ToList(),
             SelectedIndex = 0,
             Width = 170,
@@ -161,19 +161,19 @@ public sealed class NewArchiveWindow : Window
 
         _hint = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#C42B1C")), TextWrapping = TextWrapping.Wrap, IsVisible = false };
 
-        _startButton = new Button { Content = lang.Get("TEXT_BTN_START"), MinWidth = 96, IsDefault = true };
+        _startButton = new Button { Content = lang.Label("TEXT_BTN_START"), MinWidth = 96, IsDefault = true };
         _startButton.Click += async (_, _) => await StartAsync();
 
-        var cancelButton = new Button { Content = lang.Get("TEXT_BTN_CANCEL"), MinWidth = 96, IsCancel = true };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), MinWidth = 96, IsCancel = true };
         cancelButton.Click += (_, _) => Close();
 
         _testAfterCheck = new CheckBox
         {
-            Content = lang.Get("TEXT_CHECK_TEST_AFTER_COMPRESSION"),
+            Content = lang.Label("TEXT_CHECK_TEST_AFTER_COMPRESSION"),
             IsChecked = _defaults.TestAfterCreation,
         };
-        _deleteSourceCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_DELETE_SOURCE") };
-        _separateCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_SEPARATE_ARCHIVES") };
+        _deleteSourceCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_DELETE_SOURCE") };
+        _separateCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_SEPARATE_ARCHIVES") };
 
         // ---- 高级设置面板（FR-2.5，右侧展开）----
         // 方法列表随格式变化（引擎按格式决定可写方法），所以初始化为默认格式的那一组，
@@ -189,7 +189,7 @@ public sealed class NewArchiveWindow : Window
         _encryptionCombo = new ComboBox
         {
             ItemsSource = EncryptionMethodOption.All
-                .Select(o => new DisplayItem(lang.Get(o.TextKey), o))
+                .Select(o => new DisplayItem(lang.Label(o.TextKey), o))
                 .ToList(),
             SelectedIndex = EncryptionMethodOption.Default.Id,
             Width = 170,
@@ -201,7 +201,7 @@ public sealed class NewArchiveWindow : Window
         {
             ItemsSource = new List<DisplayItem>
             {
-                new(lang.Get("TEXT_THREADS_AUTO"), 0u),
+                new(lang.Label("TEXT_THREADS_AUTO"), 0u),
                 new("1", 1u),
                 new("2", 2u),
                 new("4", 4u),
@@ -213,8 +213,8 @@ public sealed class NewArchiveWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left,
         };
 
-        _symlinkCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_STORE_SYMLINKS"), IsEnabled = false };
-        _fileCommentCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_FILE_COMMENT") };
+        _symlinkCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_STORE_SYMLINKS"), IsEnabled = false };
+        _fileCommentCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_FILE_COMMENT") };
         _commentBox = new TextBox
         {
             AcceptsReturn = true,
@@ -227,7 +227,7 @@ public sealed class NewArchiveWindow : Window
 
         _advancedButton = new Button
         {
-            Content = lang.Get("TEXT_BTN_ADVANCED_SETTINGS"),
+            Content = lang.Label("TEXT_BTN_ADVANCED_SETTINGS"),
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
@@ -246,10 +246,10 @@ public sealed class NewArchiveWindow : Window
                 Spacing = 10,
                 Children =
                 {
-                    SectionTitle(lang.Get("TEXT_ADVANCED_TITLE_ZIP")),
-                    BuildFieldRow(lang.Get("TEXT_LABEL_COMPRESSION_METHOD"), _methodCombo),
-                    BuildFieldRow(lang.Get("TEXT_LABEL_ENCRYPTION_METHOD"), _encryptionCombo),
-                    BuildFieldRow(lang.Get("TEXT_LABEL_CPU_THREADS"), _threadsCombo),
+                    SectionTitle(lang.Label("TEXT_ADVANCED_TITLE_ZIP")),
+                    BuildFieldRow(lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), _methodCombo),
+                    BuildFieldRow(lang.Label("TEXT_LABEL_ENCRYPTION_METHOD"), _encryptionCombo),
+                    BuildFieldRow(lang.Label("TEXT_LABEL_CPU_THREADS"), _threadsCombo),
                     _symlinkCheck,
                     _fileCommentCheck,
                     _commentBox,
@@ -257,7 +257,7 @@ public sealed class NewArchiveWindow : Window
             },
         };
 
-        var moreOptionsCheck = new CheckBox { Content = lang.Get("TEXT_CHECK_MORE_OPTIONS") };
+        var moreOptionsCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_MORE_OPTIONS") };
         var moreOptionsPanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
@@ -265,8 +265,8 @@ public sealed class NewArchiveWindow : Window
             IsVisible = false,
             Children =
             {
-                BuildFieldRow(lang.Get("TEXT_LABEL_VOLUME"), _volumeCombo),
-                BuildFieldRow(lang.Get("TEXT_LABEL_COMPRESSION_LEVEL"), _levelCombo),
+                BuildFieldRow(lang.Label("TEXT_LABEL_VOLUME"), _volumeCombo),
+                BuildFieldRow(lang.Label("TEXT_LABEL_COMPRESSION_LEVEL"), _levelCombo),
                 _advancedButton,
                 BuildOptionChecks(),
             },
@@ -283,14 +283,14 @@ public sealed class NewArchiveWindow : Window
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
         };
 
-        AddRow(grid, 0, SectionTitle(lang.Get("TEXT_SECTION_ADD_FILES")), 3);
+        AddRow(grid, 0, SectionTitle(lang.Label("TEXT_SECTION_ADD_FILES")), 3);
         AddRow(grid, 1, BuildColumnHeader(), 3);
         AddRow(grid, 2, _list, 3);
         AddRow(grid, 3, RightAligned(addButton, _deleteButton), 3);
         AddRow(grid, 4, new Border { BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = new SolidColorBrush(Color.Parse("#E0E0E0")), Margin = new Thickness(0, 10, 0, 10) }, 3);
-        AddRow(grid, 5, SectionTitle(lang.Get("TEXT_SECTION_ARCHIVE_SETTINGS")), 3);
-        AddRow(grid, 6, BuildFieldRow(lang.Get("TEXT_LABEL_FILE_NAME"), _fileNameBox, browseButton));
-        AddRow(grid, 7, BuildFieldRow(lang.Get("TEXT_LABEL_FORMAT"), _formatCombo, _passwordButton));
+        AddRow(grid, 5, SectionTitle(lang.Label("TEXT_SECTION_ARCHIVE_SETTINGS")), 3);
+        AddRow(grid, 6, BuildFieldRow(lang.Label("TEXT_LABEL_FILE_NAME"), _fileNameBox, browseButton));
+        AddRow(grid, 7, BuildFieldRow(lang.Label("TEXT_LABEL_FORMAT"), _formatCombo, _passwordButton));
         AddRow(grid, 8, moreOptionsPanel, 3);
         AddRow(grid, 9, _hint, 3);
         AddRow(grid, 10, BuildBottomRow(moreOptionsCheck, cancelButton), 3);
@@ -332,7 +332,7 @@ public sealed class NewArchiveWindow : Window
     private void SetAdvancedPanelVisible(bool visible)
     {
         _advancedPanel.IsVisible = visible;
-        _advancedButton.Content = _lang.Get(visible ? "TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE" : "TEXT_BTN_ADVANCED_SETTINGS");
+        _advancedButton.Content = _lang.Label(visible ? "TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE" : "TEXT_BTN_ADVANCED_SETTINGS");
         Width = visible ? 1292 : 972;
     }
 
@@ -347,9 +347,9 @@ public sealed class NewArchiveWindow : Window
     private Control BuildColumnHeader()
     {
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,120,280") };
-        var name = new TextBlock { Text = _lang.Get("TEXT_COLUMN_NAME"), HorizontalAlignment = HorizontalAlignment.Left };
-        var size = new TextBlock { Text = _lang.Get("TEXT_COLUMN_SIZE"), HorizontalAlignment = HorizontalAlignment.Left };
-        var path = new TextBlock { Text = _lang.Get("TEXT_COLUMN_FILE_PATH"), HorizontalAlignment = HorizontalAlignment.Left };
+        var name = new TextBlock { Text = _lang.Label("TEXT_COLUMN_NAME"), HorizontalAlignment = HorizontalAlignment.Left };
+        var size = new TextBlock { Text = _lang.Label("TEXT_COLUMN_SIZE"), HorizontalAlignment = HorizontalAlignment.Left };
+        var path = new TextBlock { Text = _lang.Label("TEXT_COLUMN_FILE_PATH"), HorizontalAlignment = HorizontalAlignment.Left };
         Grid.SetColumn(name, 0);
         Grid.SetColumn(size, 1);
         Grid.SetColumn(path, 2);
@@ -459,7 +459,7 @@ public sealed class NewArchiveWindow : Window
 
         directory ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-        return Path.Combine(directory, _lang.Get("TEXT_DEFAULT_ARCHIVE_NAME") + ".zip");
+        return Path.Combine(directory, _lang.Label("TEXT_DEFAULT_ARCHIVE_NAME") + ".zip");
     }
 
     /// <summary>第一个"非空且真的存在"的目录；都没有就返回 null。</summary>
@@ -478,7 +478,7 @@ public sealed class NewArchiveWindow : Window
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = _lang.Get("TEXT_MENU_ADD_FILES"),
+            Title = _lang.Label("TEXT_MENU_ADD_FILES"),
             AllowMultiple = true,
         });
 
@@ -496,7 +496,7 @@ public sealed class NewArchiveWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = _lang.Get("TEXT_MENU_ADD_FOLDER"),
+            Title = _lang.Label("TEXT_MENU_ADD_FOLDER"),
             AllowMultiple = true,
         });
 
@@ -545,7 +545,7 @@ public sealed class NewArchiveWindow : Window
         var format = SelectedFormat();
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = _lang.Get("TEXT_LABEL_FILE_NAME"),
+            Title = _lang.Label("TEXT_LABEL_FILE_NAME"),
             SuggestedFileName = Path.GetFileName(_fileNameBox.Text ?? string.Empty),
             DefaultExtension = format.Extension.TrimStart('.'),
             FileTypeChoices = [new FilePickerFileType(format.Id) { Patterns = ["*" + format.Extension] }],
@@ -573,7 +573,7 @@ public sealed class NewArchiveWindow : Window
         =>
         [
             .. format.Methods.Select(o => new DisplayItem(
-                o.TextKey is { } key ? _lang.Get(key) : o.DisplayName, o)),
+                o.TextKey is { } key ? _lang.Label(key) : o.DisplayName, o)),
         ];
 
     /// <summary>换格式后重建方法列表；保持用户已选的方法（如果新格式也支持）。</summary>
@@ -651,7 +651,7 @@ public sealed class NewArchiveWindow : Window
     {
         var items = (List<DisplayItem>)_volumeCombo.ItemsSource!;
         var index = _volumeCombo.SelectedIndex;
-        items[index] = items[index] with { Text = $"{_lang.Get("TEXT_VOLUME_CUSTOM")} ({sizeMb} MB)" };
+        items[index] = items[index] with { Text = $"{_lang.Label("TEXT_VOLUME_CUSTOM")} ({sizeMb} MB)" };
 
         _suppressVolumeChange = true;
         _volumeCombo.ItemsSource = null;
@@ -702,7 +702,7 @@ public sealed class NewArchiveWindow : Window
 
         if (!format.CanCreate)
         {
-            ShowHint(_lang.Get("TEXT_STATUS_NOT_IMPLEMENTED"));
+            ShowHint(_lang.Label("TEXT_STATUS_NOT_IMPLEMENTED"));
         }
         else
         {
@@ -728,20 +728,20 @@ public sealed class NewArchiveWindow : Window
         var format = SelectedFormat();
         if (_inputs.Count == 0)
         {
-            ShowHint(_lang.Get("TEXT_ERR_NO_INPUT"));
+            ShowHint(_lang.Label("TEXT_ERR_NO_INPUT"));
             return;
         }
 
         if (!format.CanCreate)
         {
-            ShowHint(_lang.Get("TEXT_STATUS_NOT_IMPLEMENTED"));
+            ShowHint(_lang.Label("TEXT_STATUS_NOT_IMPLEMENTED"));
             return;
         }
 
         var output = _fileNameBox.Text?.Trim() ?? string.Empty;
         if (output.Length == 0)
         {
-            ShowHint(_lang.Get("TEXT_ERR_OUTPUT_NOT_SET"));
+            ShowHint(_lang.Label("TEXT_ERR_OUTPUT_NOT_SET"));
             return;
         }
 
@@ -822,9 +822,9 @@ public sealed class NewArchiveWindow : Window
             progress.Close();
             ShowHint(ex.Reason switch
             {
-                ArchiveConstraintReason.GzRequiresSingleFile => _lang.Get("TEXT_ERR_GZ_SINGLE_FILE"),
-                ArchiveConstraintReason.NonAsciiPasswordNotSupported => _lang.Get("TEXT_ERR_PASSWORD_ASCII"),
-                _ => _lang.Get("TEXT_STATUS_NOT_IMPLEMENTED"),
+                ArchiveConstraintReason.GzRequiresSingleFile => _lang.Label("TEXT_ERR_GZ_SINGLE_FILE"),
+                ArchiveConstraintReason.NonAsciiPasswordNotSupported => _lang.Label("TEXT_ERR_PASSWORD_ASCII"),
+                _ => _lang.Label("TEXT_STATUS_NOT_IMPLEMENTED"),
             });
             return;
         }
@@ -838,7 +838,7 @@ public sealed class NewArchiveWindow : Window
         catch (Exception ex)
         {
             progress.Close();
-            ShowHint(ex is EmptyArchiveInputException ? _lang.Get("TEXT_ERR_NO_INPUT") : ex.Message);
+            ShowHint(ex is EmptyArchiveInputException ? _lang.Label("TEXT_ERR_NO_INPUT") : ex.Message);
             return;
         }
         finally

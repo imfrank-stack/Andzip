@@ -104,7 +104,6 @@ internal static class DirectCompress
 
     private static string FormatId(ShellTask task) => task switch
     {
-        ShellTask.CompressSevenZip => "7Z",
         ShellTask.CompressZip => "ZIP",
         _ => throw new ArgumentOutOfRangeException(nameof(task), task, "只有压缩任务会走到这里。"),
     };

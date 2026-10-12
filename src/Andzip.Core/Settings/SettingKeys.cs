@@ -82,7 +82,7 @@ public static class SettingKeys
     // ------------------------------------------------------------- 解压页
 
     /// <summary>
-    /// 智能解压遇到「包里只有一个文件」时，要不要也建一个文件夹。
+    /// 解压遇到「包里只有一个文件」时，要不要也建一个文件夹。
     /// 默认关：压一个 <c>photo.jpg.gz</c> 却得到 <c>photo.jpg\photo.jpg</c> 不是多数人想要的。
     /// </summary>
     public const string ExtractSingleFileToFolder = "extract_single_file_to_folder";

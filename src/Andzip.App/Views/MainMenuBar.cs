@@ -20,7 +20,7 @@ internal static class MainMenuBar
 
         foreach (var top in MainMenuModel.Create())
         {
-            var topItem = new MenuItem { Header = MnemonicText.Strip(lang.Get(top.TextKey)) };
+            var topItem = new MenuItem { Header = lang.Label(top.TextKey) };
 
             foreach (var item in top.Items)
             {
@@ -32,7 +32,7 @@ internal static class MainMenuBar
 
                 var menuItem = new MenuItem
                 {
-                    Header = MnemonicText.Strip(lang.Get(item.TextKey)),
+                    Header = lang.Label(item.TextKey),
                     IsEnabled = item.Enabled,
                     InputGesture = GestureConverter.ToGesture(item.Gesture),
                 };

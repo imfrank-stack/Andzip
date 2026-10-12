@@ -10,12 +10,11 @@ namespace Andzip.App.Views;
 
 /// <summary>
 /// 主工具栏（FR-1 首页顶部的蓝色带）：图标 + 文字的大按钮，与参考软件同构。
-/// <para>
-/// 「打开」「解压」带下拉箭头：主按钮执行默认动作，箭头弹出同组命令。用两个按钮拼成一组
-/// 而不是 <c>SplitButton</c>，是因为 SimpleTheme 的 SplitButton 模板自带边框与内边距，
-/// 放在蓝色带上会露出一块与背景不符的底色。
-/// </para>
-/// <para>尚未接入命令的按钮（添加 / 删除 / 测试 / 扫描 / 语言）保持禁用态，不假装可用。</para>
+/// <para>「打开」「解压」右侧原来各挂着一个下拉箭头（主按钮 + 小箭头两个按钮拼一组，
+/// 没用 <c>SplitButton</c> 是因为 SimpleTheme 的模板自带底色，在蓝色带上会露出一块），
+/// 0.9.12 删掉了：箭头里「最近的文件」根本没有这个功能，永远灰着，而「解压」里那一条
+/// 与主按钮是同一条命令 —— 两个箭头点开都看不出差别，用户的评价是"似乎没有作用"。</para>
+/// <para>尚未接入命令的按钮（添加 / 删除 / 扫描）保持禁用态，不假装可用。</para>
 /// </summary>
 internal static class MainToolBar
 {
@@ -32,24 +31,15 @@ internal static class MainToolBar
             VerticalAlignment = VerticalAlignment.Bottom,
         };
 
-        items.Children.Add(CreateGroup(
-            lang.Get("TEXT_TOOLBAR_OPEN"),
-            ToolBarIcon.Open,
-            actions.OpenArchive,
-            () => Flyout(lang, (lang.Get("MENUSTR_OPEN"), actions.OpenArchive), (lang.Get("MENUSTR_RECENT"), null))));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), ToolBarIcon.Open, actions.OpenArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_EXTRACT"), ToolBarIcon.Extract, actions.ExtractArchive));
 
-        items.Children.Add(CreateGroup(
-            lang.Get("TEXT_TOOLBAR_EXTRACT"),
-            ToolBarIcon.Extract,
-            actions.ExtractArchive,
-            () => Flyout(lang, (lang.Get("MENUSTR_EXTRACT_FILE"), actions.ExtractArchive))));
-
-        items.Children.Add(CreateButton(lang.Get("TEXT_TOOLBAR_NEW"), ToolBarIcon.New, actions.NewArchive));
-        items.Children.Add(CreateButton(lang.Get("TEXT_TOOLBAR_ADD"), ToolBarIcon.Add, actions.AddFiles));
-        items.Children.Add(CreateButton(lang.Get("TEXT_TOOLBAR_DELETE"), ToolBarIcon.Delete, actions.DeleteFiles));
-        items.Children.Add(CreateButton(lang.Get("TEXT_TOOLBAR_TEST"), ToolBarIcon.Test, actions.TestArchive));
-        items.Children.Add(CreateButton(lang.Get("TEXT_TOOLBAR_SCAN"), ToolBarIcon.Scan, actions.ScanArchive));
-        items.Children.Add(CreateButton(lang.Get("TEXT_TOOLBAR_VIEW"), ToolBarIcon.View, actions.ToggleViewStyle));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_NEW"), ToolBarIcon.New, actions.NewArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_ADD"), ToolBarIcon.Add, actions.AddFiles));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_DELETE"), ToolBarIcon.Delete, actions.DeleteFiles));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_TEST"), ToolBarIcon.Test, actions.TestArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_SCAN"), ToolBarIcon.Scan, actions.ScanArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_VIEW"), ToolBarIcon.View, actions.ToggleViewStyle));
 
         // 当前语言：切换语言尚未实现，所以这里只是一个展示用的禁用按钮。
         items.Children.Add(CreateButton(
@@ -60,59 +50,7 @@ internal static class MainToolBar
         return new Border { MinHeight = 96, Child = items };
     }
 
-    private static MenuFlyout Flyout(LangCatalog lang, params (string Text, Action? Run)[] items)
-    {
-        var flyout = new MenuFlyout();
-        foreach (var (text, run) in items)
-        {
-            var item = new MenuItem { Header = MnemonicText.Strip(text), IsEnabled = run is not null };
-            if (run is not null)
-            {
-                item.Click += (_, _) => run();
-            }
-
-            flyout.Items.Add(item);
-        }
-
-        return flyout;
-    }
-
-    /// <summary>主按钮 + 右侧小箭头的组合（参考软件的「打开 / 解压」样式）。</summary>
-    private static Control CreateGroup(string text, string icon, Action? run, Func<MenuFlyout> flyout)
-    {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1 };
-        panel.Children.Add(CreateButton(text, icon, run, narrow: true));
-
-        var arrow = new Button
-        {
-            Content = new Path
-            {
-                Data = Geometry.Parse("M0,0 L5,5.5 L10,0"),
-                Stroke = run is null ? Dimmed : Normal,
-                StrokeThickness = 1.5,
-                Width = 10,
-                Height = 6,
-                Stretch = Stretch.None,
-            },
-            Padding = new Thickness(3),
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            IsEnabled = run is not null,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 0, 14),
-        };
-        ToolTip.SetTip(arrow, text);
-
-        if (run is not null)
-        {
-            arrow.Click += (_, _) => flyout().ShowAt(arrow);
-        }
-
-        panel.Children.Add(arrow);
-        return panel;
-    }
-
-    private static Button CreateButton(string text, string icon, Action? run, bool narrow = false)
+    private static Button CreateButton(string text, string icon, Action? run)
     {
         var content = new StackPanel
         {
@@ -136,7 +74,7 @@ internal static class MainToolBar
             Content = content,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(narrow ? 10 : 13, 5, narrow ? 8 : 13, 5),
+            Padding = new Thickness(13, 5, 13, 5),
             MinWidth = 66,
             IsEnabled = run is not null,
         };

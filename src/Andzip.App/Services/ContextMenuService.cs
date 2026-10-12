@@ -34,8 +34,13 @@ internal sealed class ContextMenuService
 
     private const string ClassesRoot = @"Software\Classes\";
 
-    /// <summary>一个要装的压缩动词：注册表键名后缀 + 命令行开关 + 菜单文字。</summary>
-    public sealed record CompressionVerb(string Key, string Switch, string Label);
+    /// <summary>
+    /// 一个要装的压缩动词：注册表键名后缀 + 命令行开关 + 菜单文字。
+    /// <para><paramref name="AppliesTo"/> 是给资源管理器的过滤条件，写进动词键的 <c>AppliesTo</c> 值，
+    /// 不匹配的文件类型上这一项就不出现 —— 我们靠它把「压缩为 …」从压缩包身上摘掉。
+    /// 只在"所有文件"这个范围写，文件夹范围不写（文件夹没有扩展名，本来也不该被过滤掉）。</para>
+    /// </summary>
+    public sealed record CompressionVerb(string Key, string Switch, string Label, string? AppliesTo = null);
 
     /// <summary>
     /// 按两个开关写压缩动词。可重复调用（幂等）：每次都先把我们的键清空再写，
@@ -55,7 +60,7 @@ internal sealed class ContextMenuService
             }
 
             using var shell = Registry.CurrentUser.CreateSubKey(ClassesRoot + scope + @"\shell");
-            WriteVerbs(shell, verbs, executablePath);
+            WriteVerbs(shell, verbs, executablePath, filterByExtension: scope == FilesScope);
         }
     }
 
@@ -82,7 +87,7 @@ internal sealed class ContextMenuService
             using var shell = Registry.CurrentUser.OpenSubKey(ClassesRoot + scope + @"\shell", writable: true);
             if (shell is not null)
             {
-                WriteVerbs(shell, verbs, executablePath);
+                WriteVerbs(shell, verbs, executablePath, filterByExtension: scope == FilesScope);
                 touched++;
             }
         }
@@ -90,13 +95,40 @@ internal sealed class ContextMenuService
         return touched;
     }
 
-    private static void WriteVerbs(RegistryKey shell, IReadOnlyList<CompressionVerb> verbs, string executablePath)
+    private static void WriteVerbs(
+        RegistryKey shell,
+        IReadOnlyList<CompressionVerb> verbs,
+        string executablePath,
+        bool filterByExtension)
     {
+        var keep = new HashSet<string>(verbs.Select(verb => VerbPrefix + verb.Key), StringComparer.OrdinalIgnoreCase);
+
+        // 先清掉我们自己的、这次不再提供的键。Install() 会先整体 Remove()，所以这一步只为
+        // 启动自愈而存在：那条路不能整体清（用户可能只勾了文件夹范围），但退役的动词
+        // （0.9.12 撤掉的「压缩为 7Z」）必须消失，否则菜单上是新旧两条并存。
+        foreach (var name in shell.GetSubKeyNames())
+        {
+            if (name.StartsWith(VerbPrefix, StringComparison.OrdinalIgnoreCase) && !keep.Contains(name))
+            {
+                shell.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
+            }
+        }
+
         foreach (var verb in verbs)
         {
             using var key = shell.CreateSubKey(VerbPrefix + verb.Key);
             key.SetValue(string.Empty, verb.Label);
             key.SetValue("Icon", executablePath + ",0");
+            if (filterByExtension && verb.AppliesTo is { Length: > 0 } filter)
+            {
+                key.SetValue("AppliesTo", filter, RegistryValueKind.String);
+            }
+            else
+            {
+                // 关掉过滤要真的删掉：留着上一次写的值，这一版就还是隐身状态。
+                key.DeleteValue("AppliesTo", throwOnMissingValue: false);
+            }
+
             // %1 必须带引号：路径里有空格时不带引号会被拆成两个参数。
             key.CreateSubKey("command")!
                 .SetValue(string.Empty, "\"" + executablePath + "\" \"%1\" " + verb.Switch);

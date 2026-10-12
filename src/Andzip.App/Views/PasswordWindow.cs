@@ -27,7 +27,7 @@ public sealed class PasswordWindow : Window
         _lang = lang;
         _requireConfirmation = requireConfirmation;
 
-        Title = lang.Get("TEXT_TITLE_PASSWORD_INPUT");
+        Title = lang.Label("TEXT_TITLE_PASSWORD_INPUT");
         Width = 430;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -56,9 +56,9 @@ public sealed class PasswordWindow : Window
             IsVisible = false,
         };
 
-        var okButton = new Button { Content = lang.Get("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
         okButton.Click += (_, _) => Confirm();
-        var cancelButton = new Button { Content = lang.Get("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
         cancelButton.Click += (_, _) => Close(false);
 
         var buttons = new StackPanel
@@ -79,10 +79,10 @@ public sealed class PasswordWindow : Window
         };
 
         var row = 0;
-        AddRow(grid, row++, BuildLabel(lang.Get("TEXT_LABEL_PASSWORD")), _passwordBox);
+        AddRow(grid, row++, BuildLabel(lang.Label("TEXT_LABEL_PASSWORD")), _passwordBox);
         if (_confirmBox is not null)
         {
-            AddRow(grid, row++, BuildLabel(lang.Get("TEXT_LABEL_PASSWORD_CONFIRM")), _confirmBox);
+            AddRow(grid, row++, BuildLabel(lang.Label("TEXT_LABEL_PASSWORD_CONFIRM")), _confirmBox);
         }
 
         Grid.SetRow(_hint, row++);
@@ -124,7 +124,7 @@ public sealed class PasswordWindow : Window
             // 输入模式（解压加密包）：密码必填
             if (password.Length == 0)
             {
-                _hint.Text = _lang.Get("TEXT_ERR_PASSWORD_EMPTY");
+                _hint.Text = _lang.Label("TEXT_ERR_PASSWORD_EMPTY");
                 _hint.IsVisible = true;
                 return;
             }
@@ -138,7 +138,7 @@ public sealed class PasswordWindow : Window
 
         if (password.Length > 0 && !string.Equals(password, confirm, StringComparison.Ordinal))
         {
-            _hint.Text = _lang.Get("TEXT_ERR_PASSWORD_MISMATCH");
+            _hint.Text = _lang.Label("TEXT_ERR_PASSWORD_MISMATCH");
             _hint.IsVisible = true;
             return;
         }

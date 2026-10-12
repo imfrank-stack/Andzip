@@ -41,8 +41,8 @@ internal static class HomeView
         body.Children.Add(right);
 
         var bar = ViewBar.Create(
-            ViewBar.Toggle(ViewIcon.List, lang.Get("TEXT_VIEW_DETAILS"), null),
-            ViewBar.Toggle(ViewIcon.Grid, lang.Get("TEXT_VIEW_ICONS"), null));
+            ViewBar.Toggle(ViewIcon.List, lang.Label("TEXT_VIEW_DETAILS"), null),
+            ViewBar.Toggle(ViewIcon.Grid, lang.Label("TEXT_VIEW_ICONS"), null));
 
         var panel = new DockPanel();
         DockPanel.SetDock(bar, Dock.Bottom);
