@@ -176,6 +176,12 @@ TEXT_STATUS_ARCHIVE_SUMMARY             = Files: ${files}, Folders: ${folders}, 
 TEXT_STATUS_SELECTED_SUMMARY            = Selected ${files} file(s), ${size} bytes (compressed: ${compressed} bytes, ${percent}%)
 TEXT_ERR_OPEN_ARCHIVE_FAILED            = Failed to open the archive:
 TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED     = Unsupported archive format.
+TEXT_CONFIRM_DELETE_ARCHIVE             = Move this archive to the Recycle Bin?
+TEXT_CONFIRM_PERM_DELETE_ARCHIVE        = Permanently delete this archive? It will not go to the Recycle Bin and cannot be recovered.
+TEXT_ERR_DELETE_FAILED                  = Delete failed:
+TEXT_SAVE_AS_SUCCEEDED                  = Saved as: ${path}
+TEXT_ERR_SAVE_AS_SAME_PATH              = The destination is the archive itself, so nothing was changed.
+TEXT_ERR_SAVE_AS_FAILED                 = Save as failed:
 
 ; ---- Settings window (Options -> Settings, F5) ----
 TEXT_TITLE_SETTINGS                     = Settings

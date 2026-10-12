@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Settings;
@@ -678,27 +677,13 @@ internal sealed class ArchiveView : IDisposable
 
     // ---------- 打开压缩文件位置 ----------
 
-    /// <summary>在系统文件管理器里定位压缩包（底部栏的第三个按钮）。</summary>
-    private void RevealArchive()
-    {
-        var (file, argument) = OperatingSystem.IsWindows()
-            ? ("explorer.exe", "/select," + _listing.ArchivePath)
-            : OperatingSystem.IsMacOS()
-                ? ("open", _listing.ArchivePath)
-                : ("xdg-open", Path.GetDirectoryName(_listing.ArchivePath) ?? _listing.ArchivePath);
-
-        try
-        {
-            // 路径来自文件选择框，可能含空格与引号，所以走 ArgumentList 而不是拼命令串。
-            var startInfo = new ProcessStartInfo { FileName = file, UseShellExecute = true };
-            startInfo.ArgumentList.Add(argument);
-            Process.Start(startInfo);
-        }
-        catch (Exception)
-        {
-            // 没有可用的文件管理器（精简系统 / 无桌面会话）时静默失败即可。
-        }
-    }
+    /// <summary>
+    /// 在系统文件管理器里定位压缩包（底部栏的第三个按钮）。
+    /// 实现挪到 <see cref="Services.ArchiveReveal"/>，与「文件 → 打开压缩文件位置」共用一份 ——
+    /// 顺带修掉那里的一处写法问题（<c>/select,</c> 与路径被当成一个参数交给 explorer，
+    /// 它认不出来，结果是"打开了目录但没选中文件"）。
+    /// </summary>
+    private void RevealArchive() => Services.ArchiveReveal.Reveal(_listing.ArchivePath);
 
     // ---------- 列与文案 ----------
 

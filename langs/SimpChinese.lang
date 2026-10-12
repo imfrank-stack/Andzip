@@ -175,6 +175,12 @@ TEXT_STATUS_ARCHIVE_SUMMARY             = 文件: ${files}, 文件夹: ${folders
 TEXT_STATUS_SELECTED_SUMMARY            = 已选择 ${files} 个文件, ${size} 字节 (压缩后大小: ${compressed} 字节, ${percent}%)
 TEXT_ERR_OPEN_ARCHIVE_FAILED            = 打开压缩文件失败：
 TEXT_ERR_OPEN_ARCHIVE_NOT_SUPPORTED     = 不支持该压缩格式。
+TEXT_CONFIRM_DELETE_ARCHIVE             = 要把这个压缩包移到回收站吗？
+TEXT_CONFIRM_PERM_DELETE_ARCHIVE        = 要永久删除这个压缩包吗？它不会进回收站，删掉就找不回来了。
+TEXT_ERR_DELETE_FAILED                  = 删除失败：
+TEXT_SAVE_AS_SUCCEEDED                  = 已另存为：${path}
+TEXT_ERR_SAVE_AS_SAME_PATH              = 另存为的目标和原包是同一个文件，没有做任何改动。
+TEXT_ERR_SAVE_AS_FAILED                 = 另存为失败：
 
 ; ---- 设置窗口（选项 → 设置，F5）----
 TEXT_TITLE_SETTINGS                     = 设置

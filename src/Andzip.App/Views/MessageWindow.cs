@@ -6,10 +6,24 @@ using Avalonia.Media;
 
 namespace Andzip.App.Views;
 
-/// <summary>简单消息框（错误 / 提示）：标题 + 正文 + 确定。</summary>
+/// <summary>
+/// 简单消息框（错误 / 提示）：标题 + 正文 + 确定。
+/// <para>带 <c>cancelKey</c> 时它是两钮确认框 —— 删包这类不可撤销的动作必须用这个形式，
+/// 只有一个「确定」的框等于没有给退路。</para>
+/// </summary>
 public sealed class MessageWindow : Window
 {
     public MessageWindow(LangCatalog lang, string title, string message)
+        : this(lang, title, message, "TEXT_BTN_OK", cancelKey: null)
+    {
+    }
+
+    /// <summary>
+    /// <c>cancelKey</c> 为 null 是单钮提示框，给了就是两钮确认框。
+    /// <para>internal 而不是 private：这一层的"哪个按钮回 true"是删除类操作唯一的安全网，
+    /// 得能在测试里真的按一次按钮看到结果，而不只是相信 <see cref="ConfirmAsync"/> 传对了参数。</para>
+    /// </summary>
+    internal MessageWindow(LangCatalog lang, string title, string message, string okKey, string? cancelKey)
     {
         // 标题与正文由调用方从语言包取好传进来，拿到的是原文（可能带 (&X)），
         // 所以在这个对话框的边界上统一剥一次，而不是要求每个调用点记得剥。
@@ -29,19 +43,53 @@ public sealed class MessageWindow : Window
 
         var okButton = new Button
         {
-            Content = lang.Label("TEXT_BTN_OK"),
+            Content = lang.Label(okKey),
             IsDefault = true,
-            IsCancel = true,
+            // 只有单钮框才让 Esc 也算确认；两钮框里 Esc 必须是"取消"。
+            IsCancel = cancelKey is null,
             MinWidth = 96,
             HorizontalAlignment = HorizontalAlignment.Right,
         };
-        okButton.Click += (_, _) => Close();
+        okButton.Click += (_, _) => Close(true);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        buttons.Children.Add(okButton);
+
+        if (cancelKey is not null)
+        {
+            var cancelButton = new Button
+            {
+                Content = lang.Label(cancelKey),
+                IsCancel = true,
+                MinWidth = 96,
+            };
+            cancelButton.Click += (_, _) => Close(false);
+            buttons.Children.Add(cancelButton);
+        }
 
         Content = new StackPanel
         {
             Margin = new Thickness(18),
             Spacing = 16,
-            Children = { text, okButton },
+            Children = { text, buttons },
         };
     }
+
+    /// <summary>
+    /// 两钮确认框：确定 → true，取消或关掉窗口 → false。
+    /// <para>默认按钮是"取消"那一侧的风险由调用方承担 —— 所以 <c>okKey</c> 要传一个
+    /// 说清楚后果的词（「删除」而不是「确定」）。</para>
+    /// </summary>
+    public static Task<bool> ConfirmAsync(
+        Window owner,
+        LangCatalog lang,
+        string title,
+        string message,
+        string okKey)
+        => new MessageWindow(lang, title, message, okKey, "TEXT_BTN_CANCEL").ShowDialog<bool>(owner);
 }

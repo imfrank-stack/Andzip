@@ -45,6 +45,9 @@ internal static class MainMenuBar
                     Header = lang.Label(item.TextKey),
                     IsEnabled = item.Enabled,
                     InputGesture = GestureConverter.ToGesture(item.Gesture),
+                    // Tag 存 CommandId，好让窗口在切换视图时按命令找到这一项置灰 / 点亮
+                    // （「删除压缩文件」在首页上不该能点）。
+                    Tag = item.CommandId,
                 };
 
                 if (item.CommandId is not null && commands.TryGetValue(item.CommandId, out var action))

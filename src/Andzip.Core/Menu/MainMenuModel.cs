@@ -43,6 +43,18 @@ public static class MainMenuModel
     /// <summary>修复损坏的 ZIP（三种模式由用户选；只写副本，绝不动原包）。</summary>
     public const string CommandRepairArchive = "tools.repair";
 
+    /// <summary>把当前打开的压缩包另存一份到别处（<strong>复制</strong>，不重压）。</summary>
+    public const string CommandSaveArchiveAs = "file.saveas";
+
+    /// <summary>把当前压缩包移到回收站（还能反悔）。</summary>
+    public const string CommandDeleteArchive = "file.delete";
+
+    /// <summary>直接删掉当前压缩包，不经过回收站。</summary>
+    public const string CommandPermanentDeleteArchive = "file.permanentdelete";
+
+    /// <summary>在资源管理器里打开当前压缩包所在目录并选中它。</summary>
+    public const string CommandOpenArchiveFolder = "file.openfolder";
+
     /// <summary>启动画面 / 压缩包视图切换（F6）。</summary>
     public const string CommandToggleStartScreen = "view.start";
 
@@ -56,6 +68,19 @@ public static class MainMenuModel
     /// </summary>
     public const string CommandRecentFiles = "file.recent";
 
+    /// <summary>
+    /// 只有"正开着某个压缩包"才能用的命令。模型里给 <c>Enabled: true</c>（表示这些是实装过的，
+    /// 不是占位），窗口按当前视图把不符合条件的那几条真的置灰 ——
+    /// 首页上摆一条能点、点了什么也没有的「删除压缩文件」比灰着更糟。
+    /// </summary>
+    public static IReadOnlyList<string> ArchiveOnlyCommands { get; } =
+    [
+        CommandSaveArchiveAs,
+        CommandDeleteArchive,
+        CommandPermanentDeleteArchive,
+        CommandOpenArchiveFolder,
+    ];
+
     public static IReadOnlyList<MenuModel> Create() =>
     [
         new("file", "MENUSTR_FILE",
@@ -65,11 +90,11 @@ public static class MainMenuModel
             MenuItemModel.Separator(),
             new("file.new", "MENUSTR_CREATE_ARCHIVE", "Ctrl+N", Enabled: true, CommandId: CommandNewArchive),
             new("file.close", "MENUSTR_CLOSE_FILE", "F4", Enabled: true, CommandId: CommandCloseArchive),
-            new("file.saveas", "MENUSTR_SAVE_AS_ARCHIVE"),
+            new("file.saveas", "MENUSTR_SAVE_AS_ARCHIVE", Enabled: true, CommandId: CommandSaveArchiveAs),
             MenuItemModel.Separator(),
-            new("file.delete", "MENUSTR_DELETE_ARCHIVE", "Ctrl+Del"),
-            new("file.permanentdelete", "MENUSTR_PERM_DELETE_ARCHIVE", "Shift+Ctrl+Del"),
-            new("file.openfolder", "MENUSTR_OPEN_ARCHIVE_FOLDER"),
+            new("file.delete", "MENUSTR_DELETE_ARCHIVE", "Ctrl+Del", Enabled: true, CommandId: CommandDeleteArchive),
+            new("file.permanentdelete", "MENUSTR_PERM_DELETE_ARCHIVE", "Shift+Ctrl+Del", Enabled: true, CommandId: CommandPermanentDeleteArchive),
+            new("file.openfolder", "MENUSTR_OPEN_ARCHIVE_FOLDER", Enabled: true, CommandId: CommandOpenArchiveFolder),
             MenuItemModel.Separator(),
             new("file.test", "MENUSTR_TEST_ARCHIVE", "Ctrl+T", Enabled: true, CommandId: CommandTestArchive),
             new("file.scan", "MENUSTR_SCAN_ARCHIVE", "Ctrl+I"),

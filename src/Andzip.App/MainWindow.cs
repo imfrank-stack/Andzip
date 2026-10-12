@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Andzip.App.Services;
 using Andzip.App.Views;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
@@ -43,6 +44,9 @@ public sealed class MainWindow : Window
     private readonly ContentControl _contentHost = new();
     private readonly Control _homeContent;
     private readonly Control _toolBar;
+
+    /// <summary>菜单条。留着是为了按命令找到某几项、在没有包可操作时把它们置灰。</summary>
+    private readonly Menu _menuBar;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
     private readonly AppSettings _settings;
@@ -78,16 +82,20 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
             [MainMenuModel.CommandTestArchive] = TestArchiveAsync,
             [MainMenuModel.CommandRepairArchive] = RepairArchiveAsync,
+            [MainMenuModel.CommandSaveArchiveAs] = SaveArchiveAsAsync,
+            [MainMenuModel.CommandDeleteArchive] = DeleteArchiveToRecycleBin,
+            [MainMenuModel.CommandPermanentDeleteArchive] = PermanentlyDeleteArchive,
+            [MainMenuModel.CommandOpenArchiveFolder] = OpenArchiveFolder,
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
         };
 
         var root = new DockPanel();
 
-        var menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
+        _menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles));
-        DockPanel.SetDock(menuBar, Dock.Top);
-        root.Children.Add(menuBar);
+        DockPanel.SetDock(_menuBar, Dock.Top);
+        root.Children.Add(_menuBar);
 
         // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
         _toolBar = MainToolBar.Create(_lang, new MainToolBarActions(
@@ -192,6 +200,7 @@ public sealed class MainWindow : Window
         _listing = null;
         _contentHost.Content = _homeContent;
         Title = EngineTitle;
+        SetArchiveOnlyCommandsEnabled(false);
     }
 
     private void ShowArchiveView(ArchiveListing listing)
@@ -201,7 +210,155 @@ public sealed class MainWindow : Window
         _listing = listing;
         _contentHost.Content = _browser.Root;
         Title = ArchiveTitle(listing.ArchivePath);
+        SetArchiveOnlyCommandsEnabled(true);
     }
+
+    // ---------- 文件 → 另存为 / 删除 / 永久删除 / 打开位置 ----------
+
+    /// <summary>
+    /// 按命令把"只有开着压缩包才能用"的那几项点亮或置灰。
+    /// <para>用 <c>Tag</c>（<see cref="MainMenuBar"/> 建的时候写进 CommandId）而不是另存一份
+    /// 控件引用：菜单结构改了不用回来改这张表，也不会漏掉新加的一项。</para>
+    /// </summary>
+    private void SetArchiveOnlyCommandsEnabled(bool enabled)
+    {
+        foreach (var item in WalkItems(_menuBar))
+        {
+            if (item.Tag is string command && MainMenuModel.ArchiveOnlyCommands.Contains(command))
+            {
+                item.IsEnabled = enabled;
+            }
+        }
+    }
+
+    private static IEnumerable<MenuItem> WalkItems(ItemsControl parent)
+    {
+        foreach (var child in parent.Items.OfType<MenuItem>())
+        {
+            yield return child;
+
+            foreach (var nested in WalkItems(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 另存为：把当前这个包<strong>原样复制</strong>一份到新名字。
+    /// <para>不重压 —— 重压要重新选格式、级别、口令，那是「新建压缩文件」的活；
+    /// 而且原包里引擎写不出来的东西（非常规方法、注释）重压一次就丢了。</para>
+    /// </summary>
+    private async void SaveArchiveAsAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var choice = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = _lang.Label("MENUSTR_SAVE_AS_ARCHIVE"),
+            SuggestedFileName = Path.GetFileName(listing.ArchivePath),
+            DefaultExtension = Path.GetExtension(listing.ArchivePath).TrimStart('.'),
+        });
+
+        var target = choice?.TryGetLocalPath();
+        if (string.IsNullOrEmpty(target))
+        {
+            return;
+        }
+
+        if (string.Equals(Path.GetFullPath(target), listing.ArchivePath, StringComparison.OrdinalIgnoreCase))
+        {
+            await new MessageWindow(_lang, _lang.Get("MENUSTR_SAVE_AS_ARCHIVE"), _lang.Get("TEXT_ERR_SAVE_AS_SAME_PATH"))
+                .ShowDialog(this);
+            return;
+        }
+
+        try
+        {
+            File.Copy(listing.ArchivePath, target, overwrite: true);
+            await ShowMessageAsync("MENUSTR_SAVE_AS_ARCHIVE", _lang.Format("TEXT_SAVE_AS_SUCCEEDED", ("path", target)));
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("MENUSTR_SAVE_AS_ARCHIVE", _lang.Get("TEXT_ERR_SAVE_AS_FAILED") + ex.Message);
+        }
+    }
+
+    /// <summary>删除压缩文件：移到回收站，还能反悔。</summary>
+    private async void DeleteArchiveToRecycleBin() => await DeleteArchiveAsync(permanent: false);
+
+    /// <summary>永久删除压缩文件：直接删，不经过回收站。</summary>
+    private async void PermanentlyDeleteArchive() => await DeleteArchiveAsync(permanent: true);
+
+    /// <summary>
+    /// 删掉当前打开的包。两条路径的差别只在"能不能反悔"，所以确认文案也要把这件事说明白 ——
+    /// 尤其是永久删除那条，它连一次反悔的机会都不给。
+    /// <para>顺序要紧：<strong>先关视图再删</strong>。图标视图可能还开着包文件的句柄在读条目，
+    /// 那时删会失败，而且失败原因（文件占用）跟用户的操作看起来毫无关系。</para>
+    /// </summary>
+    private async Task DeleteArchiveAsync(bool permanent)
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var path = listing.ArchivePath;
+        var confirmed = await MessageWindow.ConfirmAsync(
+            this,
+            _lang,
+            _lang.Get(permanent ? "MENUSTR_PERM_DELETE_ARCHIVE" : "MENUSTR_DELETE_ARCHIVE"),
+            _lang.Get(permanent ? "TEXT_CONFIRM_PERM_DELETE_ARCHIVE" : "TEXT_CONFIRM_DELETE_ARCHIVE")
+                + Environment.NewLine + Path.GetFileName(path),
+            "TEXT_BTN_DELETE");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        CloseArchive();
+
+        try
+        {
+            if (permanent)
+            {
+                File.Delete(path);
+            }
+            else if (OperatingSystem.IsWindows())
+            {
+                RecycleBin.Delete(path);
+            }
+            else
+            {
+                // 没有回收站可去。这里不悄悄退化成永久删除 —— 那是把"还能反悔"的承诺
+                // 在用户不知情的情况下换掉，比报错严重。
+                await ShowMessageAsync("MENUSTR_DELETE_ARCHIVE", _lang.Get("TEXT_ERR_DELETE_FAILED") + "recycle bin");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync(
+                permanent ? "MENUSTR_PERM_DELETE_ARCHIVE" : "MENUSTR_DELETE_ARCHIVE",
+                _lang.Get("TEXT_ERR_DELETE_FAILED") + ex.Message);
+        }
+    }
+
+    /// <summary>在资源管理器里打开这个包所在的位置并选中它。</summary>
+    private void OpenArchiveFolder()
+    {
+        if (_listing is { } listing)
+        {
+            ArchiveReveal.Reveal(listing.ArchivePath);
+        }
+    }
+
+    private Task ShowMessageAsync(string titleKey, string message)
+        => new MessageWindow(_lang, _lang.Get(titleKey), message).ShowDialog(this);
 
     /// <summary>关闭压缩文件（F4）：回到首页。</summary>
     private void CloseArchive()

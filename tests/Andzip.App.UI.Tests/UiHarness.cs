@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
+using Avalonia.Threading;
 
 // 块式命名空间而不是 file-scoped：assembly 特性和 file-scoped namespace 放一起，
 // 编译器会把这行当成顶级语句（CS8956/CS8937），报的还不是真正的原因。
@@ -134,6 +135,56 @@ namespace Andzip.App.UiTests
         }
     }
 
+    /// <summary>
+    /// 在 UI 线程上等一个<strong>会回到 UI 线程</strong>的异步方法。
+    /// AvaloniaFact 的测试体本身就跑在 Dispatcher 线程上，所以 <c>task.Wait()</c> 会把
+    /// await 之后的续体一起堵在队列外面 —— 死锁到超时，而现象长得像"功能压根没生效"。
+    /// 这里反过来反复 <c>RunJobs</c>，给续体机会跑完。
+    /// </summary>
+    internal static class UiWait
+    {
+        public static void Until(Task task, string what, int timeoutMilliseconds = 10_000)
+        {
+            var deadline = Environment.TickCount64 + timeoutMilliseconds;
+
+            while (!task.IsCompleted && Environment.TickCount64 < deadline)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(5);
+            }
+
+            if (!task.IsCompleted)
+            {
+                throw new TimeoutException($"{what}没在 {timeoutMilliseconds} 毫秒内跑完（多半是 UI 线程被自己等死了）。");
+            }
+
+            if (task.IsFaulted)
+            {
+                throw new AggregateException($"{what}失败了。", task.Exception!);
+            }
+        }
+
+        /// <summary>同上，但要拿回结果 —— 对话框的 ShowDialog&lt;bool&gt; 属于"点了哪个按钮"这类事实。</summary>
+        public static T Until<T>(Task<T> task, string what, int timeoutMilliseconds = 10_000)
+        {
+            Until((Task)task, what, timeoutMilliseconds);
+            return task.Result;
+        }
+
+        /// <summary>什么都不等，只让 Dispatcher 把队列里的活儿干一会儿。
+        /// 窗口是异步呈现的：刚 ShowDialog 之后马上去找按钮，控件树还没建起来。</summary>
+        public static void Pump(int milliseconds = 50)
+        {
+            var deadline = Environment.TickCount64 + milliseconds;
+
+            while (Environment.TickCount64 < deadline)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(5);
+            }
+        }
+    }
+
     /// <summary>点击一个按钮。走事件层而不是指针层：这些处理程序本来就挂在 Click 上。
     /// 两点代价要写清楚：一是禁用态也会被点燃，所以这里先断言 IsEnabled；二是<strong>它不会
     /// 改变控件自己的状态</strong> —— Avalonia 的 Button.OnClick 由指针管线调用，RaiseEvent 只触发
@@ -144,6 +195,17 @@ namespace Andzip.App.UiTests
         {
             Assert.True(button.IsEnabled, $"「{button.Content}」这时应该是不可点的");
             button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        }
+
+        /// <summary>
+        /// 点菜单项。走 <c>RaiseEvent</c> 而不是 <c>MenuItem.Click</c> 的内部实现：
+        /// 我们要触发的是挂在 <c>Click</c> 上的处理器，而菜单项没有"按下弹起"那套状态要维护
+        /// （那正是 <see cref="Invoke(Button)"/> 对 RadioButton 不管用的原因，这里没这个问题）。
+        /// </summary>
+        public static void Invoke(MenuItem item)
+        {
+            Assert.True(item.IsEnabled, $"「{item.Header}」这时应该是不可点的");
+            item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
         }
     }
 }

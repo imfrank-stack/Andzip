@@ -450,6 +450,74 @@ public class UiFeatureWiringTests
     private static IReadOnlyList<string> ItemsOf(ItemsControl combo)
         => [.. combo.Items.Select(item => item?.ToString() ?? string.Empty)];
 
+    // ------------------------------ 文件 → 另存为 / 删除 / 永久删除 / 打开位置
+
+    /// <summary>
+    /// 这四项都需要"正开着某个压缩包"。首页上它们必须<strong>是灰的</strong> ——
+    /// 一条能点、点了什么也不发生的「删除压缩文件」比灰着危险得多。
+    /// <para>认 CommandId 而不是标题：标题被助记符剥离过、换语言就变，而"这一项能不能点"
+    /// 本来就是由命令 id 决定的。菜单里的 <c>Tag</c> 就是那个 id，置灰走的也是它。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ArchiveOnlyMenuItemsAreGreyedUntilAnArchiveIsOpen()
+    {
+        var lang = TestLang.Chinese();
+        var directory = Directory.CreateTempSubdirectory("andzip-menu-archive-");
+
+        try
+        {
+            var archive = CreatePlainArchive(directory.FullName, "box");
+            var window = new MainWindow(lang, new AppSettings()).Shown();
+            var menu = Assert.Single(VisualQuery.Of<Menu>(window));
+            var onlyWhenOpen = MainMenuModel.ArchiveOnlyCommands;
+
+            foreach (var command in onlyWhenOpen)
+            {
+                Assert.False(Item(menu, command).IsEnabled, $"首页上 {command} 不该可用");
+            }
+
+            UiWait.Until(window.OpenArchive(archive), "打开压缩包");
+
+            foreach (var command in onlyWhenOpen)
+            {
+                Assert.True(Item(menu, command).IsEnabled, $"开着包时 {command} 应当可用");
+            }
+
+            // 关掉包之后要回到灰的 —— 置灰的逻辑只在切换视图时跑一次的话，这里就会漏掉。
+            // 走菜单项本身而不是直接调方法：那才是用户点的那一下。
+            Clicker.Invoke(Item(menu, MainMenuModel.CommandCloseArchive));
+
+            foreach (var command in onlyWhenOpen)
+            {
+                Assert.False(Item(menu, command).IsEnabled, $"关掉包之后 {command} 又该是灰的");
+            }
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static string CreatePlainArchive(string root, string stem)
+    {
+        var source = Path.Combine(root, stem + "-src");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, "a.txt"), "hello");
+
+        var archive = Path.Combine(root, stem + ".zip");
+        ArchiveCreator.Create(
+            [ArchiveInputItem.FromPath(source)],
+            new ArchiveCreationSettings(archive, CompressionLevelOption.Store, Format: ArchiveFormatOption.FromId("ZIP")));
+        return archive;
+    }
+
+    private static MenuItem Item(Menu menu, string commandId)
+    {
+        var matches = MenuWalk.All(menu).Where(item => Equals(item.Tag as string, commandId)).ToList();
+        Assert.True(matches.Count == 1, $"菜单里 {commandId} 应该恰好一项，实际 {matches.Count} 项");
+        return matches[0];
+    }
+
     // ------------------------------------------------ 进度窗口：百分比与预估剩余时间
 
     [AvaloniaFact]
@@ -457,8 +525,8 @@ public class UiFeatureWiringTests
     {
         var lang = TestLang.Chinese();
         var timeLeft = lang.Format("TEXT_PROGRESS_TIME_LEFT", ("time", string.Empty)).Trim();
-        // 这条键没有助记符，原文与界面上的文字一致（Label 是 App 层的 internal，测试里够不着）。
-        var status = lang.Get("TEXT_STATUS_TESTING");
+        // 拿"去掉助记符之后"的那一份来比 —— 这才是窗口上真的显示的文字。
+        var status = lang.Label("TEXT_STATUS_TESTING");
         using var cts = new CancellationTokenSource();
         var window = new ProgressWindow(lang, cts, "TEXT_STATUS_TESTING").Shown();
 
