@@ -2,8 +2,9 @@
 #
 # Off by default (ANDZIP_EXTRA_CODECS). When enabled this adds encoders and
 # decoders that stock 7-Zip does not ship: Zstandard, LZ4, LZ5, Lizard and
-# Brotli, plus the multithreaded wrappers from zstdmt. Decoding Zstd works
-# either way -- third_party/7zip/C/ZstdDec.c is part of the engine.
+# Brotli, plus the multithreaded wrappers from zstdmt. Stock 7-Zip already reads
+# Zstd but cannot write it; the fork's encoder/decoder pair is added alongside it,
+# see AZ_GLUE_SOURCES below.
 #
 # Layout note: the libraries live under third_party/codecs/, but their 7-Zip
 # wrappers were vendored straight into third_party/7zip/CPP/7zip/{Compress,Archive}
@@ -29,6 +30,27 @@ function(az_add_extra_codecs target)
   set(ZSTDMT "${AZ_7ZIP_ROOT}/C/zstdmt")
   set(COMPR  "${AZ_7ZIP_ROOT}/CPP/7zip/Compress")
   set(ARCH   "${AZ_7ZIP_ROOT}/CPP/7zip/Archive")
+
+  # ------------------------------------------------------- Zstandard/ shim
+  #
+  # LZ5 and Lizard came from NanaZip, whose 7-Zip glue reaches zstd headers through
+  # the *upstream* layout: `#include <Zstandard/common/mem.h>`. Our zstd came from
+  # the 7-Zip-zstd fork, which flattens common/ and compress/ into C/zstd/.
+  #
+  # Generate forwarding headers into the build tree instead of copying the real ones
+  # (two copies of mem.h would drift) and instead of symlinking (needs privileges
+  # on many Windows setups). The target is an absolute path on purpose: a bare
+  # `#include "mem.h"` from inside the shim would find *itself* first and recurse.
+  set(ZSTD_SHIM_ROOT "${CMAKE_CURRENT_BINARY_DIR}/codec-include")
+  set(ZSTD_SHIM "${ZSTD_SHIM_ROOT}/Zstandard")
+  foreach(_entry
+      common/bitstream.h common/compiler.h common/debug.h
+      common/mem.h common/zstd_deps.h compress/hist.h)
+    get_filename_component(_flat "${_entry}" NAME)
+    get_filename_component(_dir "${ZSTD_SHIM}/${_entry}" DIRECTORY)
+    file(MAKE_DIRECTORY "${_dir}")
+    file(WRITE "${ZSTD_SHIM}/${_entry}" "#include \"${ZSTD}/${_flat}\"\n")
+  endforeach()
 
   # ------------------------------------------------------------------ zstd
   # third_party/7zip/C/zstd/zstd_internal.h does `#include "../hashes/xxhash.h"`.
@@ -75,17 +97,18 @@ function(az_add_extra_codecs target)
 
   # ------------------------------------------- 7-Zip wrappers for the above
   #
-  # Zstd is deliberately NOT in this list. Its 7-Zip glue (ZstdEncoder /
-  # ZstdRegister / the fork's ZstdHandler) ships in cankao/7-Zip-zstd-master.zip,
-  # which is no longer on disk, and the copy in NanaZip lives one layer too high
-  # to drop in: NanaZip.Core/Extensions/ZSCodecs/ZstdEncoder.hpp is
-  # `namespace NanaZip::Core::Extensions`, not `NCompress::NZstd`, so it cannot
-  # register as an engine codec. Zstandard therefore stays decode-only, served by
-  # the stock third_party/7zip/C/ZstdDec.c -- exactly as before this option.
-  # The zstd *library* is still compiled below because zstdmt/ hosts the shared
-  # multithreaded wrappers (lz4-mt / lz5-mt / lizard-mt / brotli-mt) that the
-  # four codecs here do depend on.
+  # Zstd is a pair, not a single file: stock 7-Zip already ships a decode-only
+  # NCompress::NZstd coder that Archive/Zip and Archive/ZstdHandler use, and the
+  # fork's NCompress::NZSTD cannot replace it (the build dies on C2039). Both live
+  # side by side; vendor-sources.ps1 places the fork's as ZstdFork* so the file
+  # names do not collide either. Only the fork pair is listed here -- the stock
+  # decoder is already part of the engine source list.
+  #
+  # The zstd *library* is compiled below because these wrappers call it, and
+  # because zstdmt/ hosts the shared multithreaded wrappers (lz4-mt / lz5-mt /
+  # lizard-mt / brotli-mt) that the four codecs here depend on.
   set(AZ_GLUE_SOURCES
+    "${COMPR}/ZstdForkDecoder.cpp" "${COMPR}/ZstdForkEncoder.cpp" "${COMPR}/ZstdForkRegister.cpp"
     "${COMPR}/Lz4Decoder.cpp"    "${COMPR}/Lz4Encoder.cpp"    "${COMPR}/Lz4Register.cpp"
     "${COMPR}/Lz5Decoder.cpp"    "${COMPR}/Lz5Encoder.cpp"    "${COMPR}/Lz5Register.cpp"
     "${COMPR}/LizardDecoder.cpp" "${COMPR}/LizardEncoder.cpp" "${COMPR}/LizardRegister.cpp"
@@ -126,6 +149,7 @@ function(az_add_extra_codecs target)
   )
 
   target_include_directories(${target} PRIVATE
+    "${ZSTD_SHIM_ROOT}"
     "${ZSTD}"
     "${ZSTDMT}"
     "${CODECS}/lz4"

@@ -176,6 +176,31 @@ public class LangKeyCoverageTests
         "TEXT_BTN_SET_DEFAULT",
         "TEXT_SETTINGS_DEFAULT_STILL",
         "TEXT_ERR_COMPRESS_FAILED",
+
+        // 完整性检测与修复：都是"跑完要给一句话"的操作，漏一个键就是界面上一串键名。
+        "TEXT_STATUS_TESTING",
+        "TEXT_TITLE_TEST_PASSED",
+        "TEXT_TEST_PASSED",
+        "TEXT_TITLE_TEST_FAILED",
+        "TEXT_TEST_NOT_VERIFIED",
+        "TEXT_TITLE_REPAIR",
+        "TEXT_REPAIR_INTRO",
+        "TEXT_REPAIR_MODE_1",
+        "TEXT_REPAIR_MODE_1_HINT",
+        "TEXT_REPAIR_MODE_2",
+        "TEXT_REPAIR_MODE_2_HINT",
+        "TEXT_REPAIR_MODE_3",
+        "TEXT_REPAIR_MODE_3_HINT",
+        "TEXT_REPAIR_SOURCE",
+        "TEXT_REPAIR_OUTPUT",
+        "TEXT_REPAIR_START",
+        "TEXT_STATUS_REPAIRING",
+        "TEXT_ERR_REPAIR_FAILED",
+        "TEXT_TITLE_REPAIR_RESULT",
+        "TEXT_REPAIR_RESULT",
+        "TEXT_REPAIR_NOTHING",
+        "TEXT_REPAIR_RECOVERED",
+        "TEXT_REPAIR_SKIPPED",
     ];
 
     [Theory]

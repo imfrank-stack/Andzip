@@ -758,6 +758,8 @@ public sealed class NewArchiveWindow : Window
             ExcludeThumbsDb: _defaults.ExcludeThumbsDb,
             ExcludePatterns: _defaults.ParsedExcludePatterns,
             IncludeRootFolder: _defaults.IncludeRootFolder,
+            Preallocate: _defaults.PreallocateDisk,
+            ShareSources: _defaults.ShareSources,
             TestAfterCreation: _testAfterCheck.IsChecked == true,
             DeleteSourceAfterCreation: _deleteSourceCheck.IsChecked == true,
             SeparateArchives: _separateCheck.IsChecked == true,

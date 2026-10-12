@@ -165,9 +165,38 @@ namespace NCoderPropID
     // kSearchLog,         // VT_UI4 The minimum slog is 1 and the maximum is 26
     // kTargetLen,         // VT_UI4 The minimum tlen is 0 and the maximum is 999.
     */
+    /* ANDZIP LOCAL PATCH -- applied by native/scripts/vendor-sources.ps1 -ExtraCodecs.
+       Property IDs the extra-codec wrappers read. kLdmSearchLength is the fork's
+       name for what stock spells kLdmMinMatchLength; both are dead here, our API
+       only ever sends kLevel and kNumThreads. */
+    kStrategy,          // VT_UI4 1=ZSTD_fast .. 8=ZSTD_btultra
+    kFast,              // VT_UI4 1..64, the zstd --fast levels
+    kLong,              // VT_UI4 10..31, the zstd --long window log
+    kWindowLog,         // VT_UI4 10..31
+    kHashLog,           // VT_UI4 6..26
+    kChainLog,          // VT_UI4 6..28
+    kSearchLog,         // VT_UI4 1..26
+    kMinMatch,          // VT_UI4 3..7
+    kTargetLen,         // VT_UI4 0..999
+    kOverlapLog,        // VT_UI4 0..9 (default 6)
+    kLdmHashLog,        // VT_UI4 6..26 (default 20)
+    kLdmSearchLength,   // VT_UI4 4..4096 (default 64)
+    kLdmBucketSizeLog,  // VT_UI4 0..8 (default 3)
+    kLdmHashRateLog,    // VT_UI4 (default wlog - ldmhlog)
+    kAdvMax,            // VT_BOOL zstd --max
     k_NUM_DEFINED
   };
 }
+
+/* ANDZIP LOCAL PATCH -- zstd level encodings (see ZstdEncoder.cpp / ZstdDecoder.cpp).
+   32: the fast levels are sent as 1..64 and stored as level + 32.
+   255: "as strong as zstd goes", the fork's stand-in for --max.
+*/
+#define Z7_ZSTD_FAST_LEV_INC  32
+#define Z7_ZSTD_ULTIMATE_LEV  255
+#ifndef Z7_ZSTD_ADVMAX_ALLOWED
+#define Z7_ZSTD_ADVMAX_ALLOWED 0
+#endif
 
 #define Z7_IFACEM_ICompressSetCoderPropertiesOpt(x) \
   x(SetCoderPropertiesOpt(const PROPID *propIDs, const PROPVARIANT *props, UInt32 numProps))

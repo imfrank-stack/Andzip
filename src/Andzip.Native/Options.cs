@@ -58,6 +58,15 @@ public sealed record CreateOptions
     public string? Comment { get; init; }
     /// <summary>Newline-separated "name=value" passthrough, e.g. "mf=bt4\nfb=273".</summary>
     public string? ExtraProperties { get; init; }
+    /// <summary>Reserve the output file's clusters before writing (see the native note:
+    /// the reservation is the uncompressed total, an upper bound, released on failure to
+    /// fit rather than by failing the write). No effect when writing to memory.</summary>
+    public bool Preallocate { get; init; }
+    /// <summary>Open members sharing write/delete, so other programs are not locked out
+    /// of the sources while we compress. It does <b>not</b> let us read a file another
+    /// process holds exclusively — nothing does (ERROR_SHARING_VIOLATION is returned even
+    /// with backup semantics); such members are skipped and reported as a warning.</summary>
+    public bool ShareLocked { get; init; }
     public Action<ProgressInfo>? Progress { get; init; }
     public Func<string?>? PasswordPrompt { get; init; }
 }

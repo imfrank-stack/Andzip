@@ -56,8 +56,13 @@
 extern "C" {
 #endif
 
-/* Bumped whenever the ABI changes in a way old binaries cannot tolerate. */
-#define AZ_ABI_VERSION 1
+/*
+ * ABI 2: az_create_options grew two trailing fields (preallocate, share_locked).
+ * Every options struct carries its own sizeof, so an old caller is rejected by
+ * AZ_ERROR_INVALID_ARG rather than mis-parsed -- but the number still has to move,
+ * because the shells assert it.
+ */
+#define AZ_ABI_VERSION 2
 
 /* ------------------------------------------------------------------------- */
 /* Result codes                                                              */
@@ -363,11 +368,22 @@ typedef struct az_create_options {
   const char          *comment;       /* zip/7z archive comment; may be NULL */
   const az_callbacks  *callbacks;     /* may be NULL */
   const char         *extra_properties; /* newline separated "name=value" passthrough, e.g. "mf=bt4\nfb=273" */
+  int32_t             preallocate;   /* 1 = reserve the output file's clusters before writing.
+                                        Windows: SetFileInformationByHandle(FileAllocationInfo);
+                                        POSIX: posix_fallocate(). The reservation is an upper bound
+                                        (the uncompressed total), so it can be far larger than the
+                                        finished archive -- it is released when the file closes.
+                                        Best effort: failure only warns, it never aborts the write.
+                                        Ignored when writing to memory. */
+  int32_t             share_locked;  /* 1 = open members with FILE_SHARE_READ|FILE_SHARE_WRITE, so a
+                                        file another process is still writing can be packed. A member
+                                        that still cannot be opened is skipped and reported, exactly
+                                        as before -- the archive is not abandoned. */
 } az_create_options;
 
 #define AZ_CREATE_OPTIONS_INIT \
   { sizeof(az_create_options), "7z", NULL, -1, 0, 0, 0, 0, NULL, AZ_ENC_NONE, \
-    0, 1, 1, NULL, NULL, NULL, NULL }
+    0, 1, 1, NULL, NULL, NULL, NULL, 0, 0 }
 
 /* Metadata attached to a single input item. Zero fields mean "derive". */
 typedef struct az_item_meta {

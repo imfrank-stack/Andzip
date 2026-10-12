@@ -26,7 +26,10 @@ public sealed record CompressionDefaults(
     bool TestAfterCreation,
     bool KeepProgressWindow,
     SettingKeys.OutputFolderMode OutputMode,
-    string? FixedOutputFolder)
+    string? FixedOutputFolder,
+    // 带默认值，所以它们必须排在最后：前面那些参数是位置式的，老调用点不用改。
+    bool PreallocateDisk = false,
+    bool ShareSources = false)
 {
     /// <summary>解析过的排除模式，直接喂给 <see cref="ArchiveCreationSettings.ExcludePatterns"/>。</summary>
     public IReadOnlyList<string> ParsedExcludePatterns => ArchiveCreationSettings.ParseExcludePatterns(ExcludePatternText);
@@ -63,6 +66,9 @@ public sealed record CompressionDefaults(
             KeepProgressWindow = settings.GetBool(SettingKeys.CompressKeepProgress, fallback: false),
             OutputMode = SettingKeys.ParseOutputFolderMode(settings.GetString(SettingKeys.CompressOutputFolderMode)),
             FixedOutputFolder = NullIfBlank(settings.GetString(SettingKeys.CompressOutputFolder)),
+            // 两项都缺省为 false，等于引入它们之前的行为：不占磁盘、按老规矩独占源文件。
+            PreallocateDisk = settings.GetBool(SettingKeys.CompressPreallocate, fallback: false),
+            ShareSources = settings.GetBool(SettingKeys.CompressShareSources, fallback: false),
         };
     }
 
@@ -78,6 +84,8 @@ public sealed record CompressionDefaults(
         settings.SetBool(SettingKeys.CompressKeepProgress, KeepProgressWindow);
         settings.SetString(SettingKeys.CompressOutputFolderMode, OutputMode.ToStorage());
         settings.SetString(SettingKeys.CompressOutputFolder, FixedOutputFolder);
+        settings.SetBool(SettingKeys.CompressPreallocate, PreallocateDisk);
+        settings.SetBool(SettingKeys.CompressShareSources, ShareSources);
     }
 
     /// <summary>空与纯空白一律当作"没设过"，免得设置文件里留一堆 <c>key =</c>。</summary>

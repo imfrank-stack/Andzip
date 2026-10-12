@@ -138,6 +138,8 @@ internal struct AzCreateOptions
     public IntPtr Comment;
     public IntPtr Callbacks;
     public IntPtr ExtraProperties;
+    public int Preallocate;
+    public int ShareLocked;
 }
 
 [StructLayout(LayoutKind.Sequential)]

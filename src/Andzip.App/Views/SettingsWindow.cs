@@ -1531,6 +1531,8 @@ public sealed class SettingsWindow : Window
         private readonly TextBox _excludePatterns;
         private readonly CheckBox _testAfter;
         private readonly CheckBox _keepProgress;
+        private readonly CheckBox _preallocate;
+        private readonly CheckBox _shareSources;
         private readonly RadioButton _outputLast;
         private readonly RadioButton _outputFixed;
         private readonly TextBox _outputFolder;
@@ -1558,6 +1560,8 @@ public sealed class SettingsWindow : Window
             _excludeThumbs = Check(lang.Get("TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS"), UpdateApplyState);
             _testAfter = Check(lang.Get("TEXT_SETTINGS_COMPRESS_TEST_AFTER"), UpdateApplyState);
             _keepProgress = Check(lang.Get("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS"), UpdateApplyState);
+            _preallocate = Check(lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC"), UpdateApplyState);
+            _shareSources = Check(lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES"), UpdateApplyState);
 
             _excludePatterns = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
             _excludePatterns.TextChanged += (_, _) => UpdateApplyState();
@@ -1595,6 +1599,10 @@ public sealed class SettingsWindow : Window
             panel.Children.Add(_testAfter);
             panel.Children.Add(_keepProgress);
             panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT")));
+            panel.Children.Add(_preallocate);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC_HINT")));
+            panel.Children.Add(_shareSources);
+            panel.Children.Add(Hint(lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT")));
 
             panel.Children.Add(new TextBlock
             {
@@ -1629,6 +1637,8 @@ public sealed class SettingsWindow : Window
             _excludePatterns.Text = _live.ExcludePatternText;
             _testAfter.IsChecked = _live.TestAfterCreation;
             _keepProgress.IsChecked = _live.KeepProgressWindow;
+            _preallocate.IsChecked = _live.PreallocateDisk;
+            _shareSources.IsChecked = _live.ShareSources;
             _outputLast.IsChecked = _live.OutputMode == SettingKeys.OutputFolderMode.LastUsed;
             _outputFixed.IsChecked = _live.OutputMode == SettingKeys.OutputFolderMode.Fixed;
             _outputFolder.Text = _live.FixedOutputFolder ?? string.Empty;
@@ -1663,7 +1673,9 @@ public sealed class SettingsWindow : Window
             OutputMode: _outputFixed.IsChecked == true
                 ? SettingKeys.OutputFolderMode.Fixed
                 : SettingKeys.OutputFolderMode.LastUsed,
-            FixedOutputFolder: string.IsNullOrWhiteSpace(_outputFolder.Text) ? null : _outputFolder.Text.Trim());
+            FixedOutputFolder: string.IsNullOrWhiteSpace(_outputFolder.Text) ? null : _outputFolder.Text.Trim(),
+            PreallocateDisk: _preallocate.IsChecked == true,
+            ShareSources: _shareSources.IsChecked == true);
 
         private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
 

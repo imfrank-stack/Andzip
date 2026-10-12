@@ -49,6 +49,13 @@ public static class SettingKeys
     /// <summary>压缩完成后保留进度窗口（关掉时跑完即消失）。</summary>
     public const string CompressKeepProgress = "compress_keep_progress";
 
+    /// <summary>压缩时预分配磁盘：先按未压缩总量占住簇，再开始写。</summary>
+    public const string CompressPreallocate = "compress_preallocate";
+
+    /// <summary>压缩时不独占源文件（别的程序可以继续写/删）。
+    /// 注意这一项<strong>不能</strong>读走别人独占的文件 —— Windows 不允许，见压缩页的提示。</summary>
+    public const string CompressShareSources = "compress_share_sources";
+
     /// <summary>输出目录策略：沿用上次，还是固定到一个目录。</summary>
     public const string CompressOutputFolderMode = "compress_output_folder_mode";
 

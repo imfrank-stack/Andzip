@@ -1,0 +1,250 @@
+using Andzip.App.Views;
+using Andzip.Core.Archive;
+using Andzip.Core.Lang;
+using Andzip.Core.Menu;
+using Andzip.Core.Settings;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+
+namespace Andzip.App.UiTests;
+
+/// <summary>
+/// 界面层的事实核查：这一轮加进去的东西<strong>真的出现在窗口上吗</strong>，还是只活在 Core 的测试里。
+/// <para>
+/// 全部从 <see cref="MainWindow"/> / <see cref="SettingsWindow"/> 这种真实装配好的窗口出发往下找，
+/// 不去直接调用 internal 的工厂 —— 工厂能造出正确控件，不代表装进窗口之后还对。
+/// </para>
+/// </summary>
+public class UiFeatureWiringTests
+{
+    // ------------------------------------------------ 主窗口：测试按钮与两项菜单
+
+    [AvaloniaFact]
+    public void MainWindowShowsAnEnabledTestButton()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings());
+
+        var test = VisualQuery.Titled(window, lang.Get("TEXT_TOOLBAR_TEST"));
+
+        Assert.NotEmpty(test);
+        Assert.All(test, control => Assert.True(control.IsEnabled));
+    }
+
+    [Fact]
+    public void MenuModelEnablesTestAndRepair()
+    {
+        var items = MainMenuModel.Create().SelectMany(menu => menu.Items).ToList();
+
+        var test = items.Single(i => i.Id == MainMenuModel.CommandTestArchive);
+        var repair = items.Single(i => i.Id == MainMenuModel.CommandRepairArchive);
+
+        Assert.True(test.Enabled);
+        Assert.True(repair.Enabled);
+        Assert.Equal("Ctrl+T", test.Shortcut);
+    }
+
+    [AvaloniaFact]
+    public void MainWindowMenuBarShowsTestAndRepairAsEnabledItems()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings()).Shown();
+        var menu = Assert.Single(VisualQuery.Of<Menu>(window));
+        var items = MenuWalk.All(menu).ToList();
+
+        // 菜单显示的是去掉助记符之后的文案：语言包里写「测试压缩文件(&T)」，用户看到的是
+        // 「测试压缩文件(T)」，所以按用户看到的形状比。
+        var repair = items.SingleOrDefault(i => Equals(i.Header?.ToString(), lang.Get("MENUSTR_TOOLS_REPAIR")));
+        var test = items.SingleOrDefault(i => Equals(i.Header?.ToString(),
+            lang.Get("MENUSTR_TEST_ARCHIVE").Replace("&", string.Empty, StringComparison.Ordinal)));
+
+        Assert.NotNull(repair);
+        Assert.True(repair.IsEnabled, "禁用态的「修复压缩包」就是这一轮之前那个死占位项");
+
+        Assert.NotNull(test);
+        Assert.True(test.IsEnabled);
+
+        // 菜单上印出来的快捷键文案是用户唯一能看到的承诺，它必须真的在那里。
+        Assert.NotNull(test.InputGesture);
+        Assert.Equal(Key.T, test.InputGesture.Key);
+        Assert.Equal(KeyModifiers.Control, test.InputGesture.KeyModifiers);
+    }
+
+    [AvaloniaFact]
+    public void MainWindowBindsCtrlPlusTToSomething()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+
+        var bound = false;
+        foreach (KeyBinding binding in window.KeyBindings)
+        {
+            if (binding.Gesture is { Key: Key.T, KeyModifiers: KeyModifiers.Control })
+            {
+                bound = true;
+                break;
+            }
+        }
+
+        // 菜单上写着 Ctrl+T 而窗口没绑 —— 那是给用户看的假快捷键。
+        Assert.True(bound);
+    }
+
+    // ------------------------------------------------ 设置页：两个新勾选真的存下来
+
+    [AvaloniaFact]
+    public void CompressPageShowsBothNewTogglesOffByDefault()
+    {
+        // 这两个开关都会改变磁盘行为，默认必须是"和用户以前看到的一样"。
+        var lang = TestLang.Chinese();
+        var settingsPath = TempSettings();
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+            ShowCompressPage(window, lang);
+
+            Assert.False(FindCheck(window, lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC")).IsChecked);
+            Assert.False(FindCheck(window, lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES")).IsChecked);
+        }
+        finally
+        {
+            TryDelete(settingsPath);
+        }
+    }
+
+    [AvaloniaFact]
+    public void CompressPageTogglesRoundTripThroughTheSettingsFile()
+    {
+        // 光"界面上有"不够：勾上、按应用、换一个新窗口读回来还是勾着的，才算真接上了存储。
+        var lang = TestLang.Chinese();
+        var settingsPath = TempSettings();
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+            ShowCompressPage(window, lang);
+
+            FindCheck(window, lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC")).IsChecked = true;
+            FindCheck(window, lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES")).IsChecked = true;
+
+            var apply = FindButton(window, lang.Get("TEXT_BTN_APPLY"));
+            Assert.True(apply.IsEnabled, "改了值，应用按钮就该可点");
+            Clicker.Invoke(apply);
+
+            Assert.True(File.Exists(settingsPath), "按了应用却没落盘");
+
+            var reopened = new SettingsWindow(lang, AppSettings.Load(settingsPath), settingsPath).Shown();
+            ShowCompressPage(reopened, lang);
+
+            Assert.True(FindCheck(reopened, lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC")).IsChecked);
+            Assert.True(FindCheck(reopened, lang.Get("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES")).IsChecked);
+        }
+        finally
+        {
+            TryDelete(settingsPath);
+        }
+    }
+
+    // ------------------------------------------------------ 修复对话框：三种模式
+
+    [AvaloniaFact]
+    public void RepairWindowOffersThreeDistinctModes()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new RepairWindow(lang, @"C:\somewhere\broken.zip", @"C:\somewhere\broken.修复.zip");
+
+        var radios = VisualQuery.Of<RadioButton>(dialog).ToList();
+
+        Assert.Equal(3, radios.Count);
+        Assert.Equal(
+            [lang.Get("TEXT_REPAIR_MODE_1"), lang.Get("TEXT_REPAIR_MODE_2"), lang.Get("TEXT_REPAIR_MODE_3")],
+            radios.Select(r => r.Content?.ToString()).ToArray());
+
+        Assert.True(radios[0].IsChecked);
+        Assert.Equal(ZipRepairMode.RebuildCentralDirectory, dialog.Mode);
+    }
+
+    [AvaloniaFact]
+    public void RepairWindowHintFollowsTheSelectedMode()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new RepairWindow(lang, @"C:\somewhere\broken.zip", @"C:\somewhere\broken.修复.zip");
+
+        VisualQuery.Of<RadioButton>(dialog).ToList()[2].IsChecked = true;
+
+        var texts = VisualQuery.Of<TextBlock>(dialog).Select(t => t.Text).ToList();
+        Assert.Contains(lang.Get("TEXT_REPAIR_MODE_3_HINT"), texts);
+        Assert.DoesNotContain(lang.Get("TEXT_REPAIR_MODE_1_HINT"), texts);
+    }
+
+    [AvaloniaFact]
+    public void RepairWindowCarriesModeAndOutputBackToTheCaller()
+    {
+        var lang = TestLang.Chinese();
+        const string suggested = @"C:\somewhere\broken.修复.zip";
+        var dialog = new RepairWindow(lang, @"C:\somewhere\broken.zip", suggested);
+
+        VisualQuery.Of<RadioButton>(dialog).ToList()[1].IsChecked = true;
+        Clicker.Invoke(FindButton(dialog, lang.Get("TEXT_REPAIR_START")));
+
+        Assert.Equal(ZipRepairMode.JoinTruncatedParts, dialog.Mode);
+        Assert.Equal(suggested, dialog.OutputPath);
+    }
+
+    [AvaloniaFact]
+    public void RepairWindowDoesNotReuseTheOriginalAsItsOutput()
+    {
+        var lang = TestLang.Chinese();
+        const string original = @"C:\somewhere\broken.zip";
+        var dialog = new RepairWindow(lang, original, ZipRepairer.SuggestOutputPath(original)).Shown();
+
+        Assert.NotEqual(original, dialog.OutputPath);
+        Assert.Contains(".修复", dialog.OutputPath, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public void RepairWindowExplainsItselfInEnglishToo()
+    {
+        // 两套语言都得有这三段说明；漏一边就是另一种语言下满屏裸键名。
+        var lang = TestLang.English();
+        var dialog = new RepairWindow(lang, @"C:\somewhere\broken.zip", @"C:\somewhere\broken.repair.zip");
+
+        var radios = VisualQuery.Of<RadioButton>(dialog).ToList();
+
+        Assert.Equal(3, radios.Count);
+        Assert.DoesNotContain(radios, r => r.Content?.ToString()?.StartsWith("TEXT_") == true);
+        Assert.DoesNotContain(VisualQuery.Of<TextBlock>(dialog).Select(t => t.Text ?? string.Empty),
+            text => text.StartsWith("TEXT_", StringComparison.Ordinal));
+    }
+
+    // ---------------------------------------------------------------- 辅助
+
+    private static void ShowCompressPage(Window window, LangCatalog lang)
+        => Clicker.Invoke(FindButton(window, lang.Get("TEXT_SETTINGS_COMPRESS")));
+
+    private static Button FindButton(Window window, string text)
+        => VisualQuery.Of<Button>(window).SingleOrDefault(b => Equals(b.Content?.ToString(), text))
+           ?? throw new InvalidOperationException($"界面上找不到按钮「{text}」。");
+
+    private static CheckBox FindCheck(Window window, string label)
+        => VisualQuery.Of<CheckBox>(window).SingleOrDefault(c => Equals(c.Content?.ToString(), label))
+           ?? throw new InvalidOperationException($"界面上找不到勾选项「{label}」。");
+
+    private static string TempSettings()
+        => Path.Combine(Path.GetTempPath(), $"andzip-ui-{Guid.NewGuid():N}.ini");
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+    }
+}

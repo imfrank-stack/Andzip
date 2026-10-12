@@ -113,6 +113,36 @@ TEXT_TITLE_ERROR                        = Error
 TEXT_ERR_EXTRACT_FAILED                 = Extraction failed:
 TEXT_ERR_COMPRESS_FAILED                = Compression failed:
 
+; ---- Integrity test (FR-3.6) ----
+TEXT_STATUS_TESTING                     = Testing...
+TEXT_TITLE_TEST_PASSED                  = Test complete
+TEXT_TEST_PASSED                        = Every member verified; nothing is damaged.
+TEXT_TITLE_TEST_FAILED                  = Test failed
+; This one separates "could not even read it" (missing file, wrong password, unsupported
+; format) from "read it and the data is broken"; they mean very different things to a user
+; and must not both be reported as "the archive is corrupt".
+TEXT_TEST_NOT_VERIFIED                  = The test could not run (this is not data damage):
+
+; ---- Repair archive (the user picks one of three modes) ----
+TEXT_TITLE_REPAIR                       = Repair archive
+TEXT_REPAIR_INTRO                       = Choose one repair strategy. The original archive is never modified; the result goes to a new file.
+TEXT_REPAIR_MODE_1                      = Rebuild the central directory (try this first)
+TEXT_REPAIR_MODE_1_HINT                 = Rewrites only the central directory and end record; member data is copied byte for byte, so this is the fastest option. The cost: members whose length is not in the local header (streamed archives) cannot be measured without decompressing, so they are skipped.
+TEXT_REPAIR_MODE_2                      = Join split volumes and a truncated tail
+TEXT_REPAIR_MODE_2_HINT                 = Reads name.z01 ... name.zip as one stream and allows the last member to be half present: it is written with the bytes that actually exist so the earlier members stay openable. The output is no longer split, because per-volume offsets on a damaged input are not trustworthy.
+TEXT_REPAIR_MODE_3                      = Salvage what decodes and repack
+TEXT_REPAIR_MODE_3_HINT                 = Decompresses every member for real; whatever decodes is recompressed into a new archive, whatever fails is skipped and named. Slowest, and the new bytes differ from the original - in exchange the central directory and CRCs are recomputed truths.
+TEXT_REPAIR_SOURCE                      = Repairing: ${file}
+TEXT_REPAIR_OUTPUT                      = Output to:
+TEXT_REPAIR_START                       = Start repair
+TEXT_STATUS_REPAIRING                   = Repairing...
+TEXT_ERR_REPAIR_FAILED                  = Repair failed:
+TEXT_TITLE_REPAIR_RESULT                = Repair result
+TEXT_REPAIR_RESULT                      = Recovered ${recovered} member(s), skipped ${skipped}.
+TEXT_REPAIR_NOTHING                     = Nothing could be recovered, so no new archive was written; the original is untouched.
+TEXT_REPAIR_RECOVERED                   = Recovered
+TEXT_REPAIR_SKIPPED                     = Skipped
+
 ; ---- Duplicate file prompt (FR-3.7) / extract password (dialog #7) ----
 TEXT_TITLE_ASK_DUPEFILE                 = Duplicate file
 TEXT_MSG_FILE_EXISTS                    = A file with the same name already exists in the destination:
@@ -166,7 +196,7 @@ TEXT_SETTINGS_GENERAL_TITLE             = General settings
 TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = When double-clicking an archive
 TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = Open Andzip
 TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = Extract directly
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This also rewrites the default verb of the registered formats in the registry, so the next double-click follows it. Extracting directly shows only the progress bar, which closes when it finishes.
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This only changes what the program itself does; it does not rewrite registry verbs, so it takes effect at once for every associated format. "Extract directly" follows the same auto-extract rules as the right-click entry, shows only the progress bar, and closes when it finishes.
 TEXT_SETTINGS_ESC_CANCEL                = Allow cancelling extraction with Esc
 TEXT_SETTINGS_NOT_IMPLEMENTED           = This settings page is not implemented yet; it will come in a later version.
 TEXT_SETTINGS_ASSOC_HINT                = Checking a format makes Andzip open it on double-click and appear in its right-click "Open with" list. Unchecking restores the previous default program. Formats guarded by the Windows default-app protection are reported so you can pick Andzip in system settings.
@@ -208,6 +238,10 @@ TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT     = Semicolon-separated name patterns, e.g
 TEXT_SETTINGS_COMPRESS_TEST_AFTER       = Test the archive after compression
 TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS    = Keep the progress window open when compression finishes
 TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT = When off the progress bar disappears as soon as it completes; when on it stays with the result. Useful for checking the ratio.
+TEXT_SETTINGS_COMPRESS_PREALLOC           = Preallocate disk space when compressing
+TEXT_SETTINGS_COMPRESS_PREALLOC_HINT      = Reserve the clusters for the uncompressed total before writing starts. The point is to learn that the disk cannot hold the archive at the beginning instead of at 90%; the cost is that the reservation can be far larger than the finished archive and is held while it runs. Leave off when the target volume is tight.
+TEXT_SETTINGS_COMPRESS_SHARE_SOURCES      = Do not lock the files being compressed
+TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT = With it on, other programs can still write to or delete the sources while they are being packed; with it off they have to wait. It does NOT let us read a file another program holds exclusively - Windows refuses that for everyone, backup semantics included. Such a file is skipped and the skipped names are reported when the archive is done.
 TEXT_SETTINGS_COMPRESS_OUTPUT_DIR       = Output folder
 TEXT_SETTINGS_COMPRESS_OUTPUT_LAST      = The folder used for the last new archive
 TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED     = Always output to this folder

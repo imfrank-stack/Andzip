@@ -30,6 +30,17 @@ public sealed record CompressionMethodOption(string EngineMethod, string Display
     /// 下发 -mm= 会被引擎拒绝（Win32 87 / E_INVALIDARG），所以它们的列表是空的 ——
     /// UI 因此自动不显示方法下拉，而不是显示一个假的选项。
     /// </para>
+    /// <para>
+    /// ZSTD / LZ4 / LZ5 / LIZARD / BROTLI 也不在表里，尽管 <c>-ExtraCodecs</c> 内核已经把五个
+    /// 编码器登记好了：<strong>登记 ≠ 能写</strong>。7z 的写入路径对这五个一律 E_INVALIDARG，
+    /// 而同样不在 7z 处理器方法表里的 <c>-mm=Copy</c> 更是直接段错误（实测记录见 docs/开发记录.md）。
+    /// 内核修好之前不许列出一个「选了必然失败」的项。
+    /// </para>
+    /// <para>
+    /// 非标准方法永不进 ZIP 是另一条与内核无关的红线：那种 ZIP 用的是非标准方法号，
+    /// WinRAR / 资源管理器 / 原版 7-Zip 都打不开，而用户会把这种包发给别人。
+    /// 顺带一提，原版 7-Zip 25 能<em>读</em> ZIP 里的 Zstandard 却写不出来 —— 单向兼容更容易骗人。
+    /// </para>
     /// 这份表已经过 native 引擎实测：ZIP 的 BZip2/LZMA 与 7z 的 LZMA2/LZMA/PPMd/BZip2/Copy
     /// 都能真实往返（见 README 的自检记录）。
     /// </summary>
@@ -41,7 +52,7 @@ public sealed record CompressionMethodOption(string EngineMethod, string Display
             // 无可选方法：GZ / TGZ / BZ2 / XZ / TAR / WIM
         };
 
-    /// <summary>该格式可选的方法；未知格式返回空列表（表示无可选项）。</summary>
+    /// <summary>该格式下的方法；未知格式返回空列表（表示无可选项）。</summary>
     public static IReadOnlyList<CompressionMethodOption> ForFormat(ArchiveFormatOption format)
         => format.CreateFormat is null
             ? []

@@ -31,12 +31,14 @@ int Fail(const char *what, az_result r)
 
 void Warn(const char *what, az_result r)
 {
-  if (r != AZ_OK)
-  {
-    const char *msg = az_last_error_message();
-    if (msg && *msg)
-      std::fprintf(stderr, "azcore: note on %s: %s\n", what, msg);
-  }
+  // The engine also reports on the success path: a member that could not be read
+  // is skipped and named, and the archive itself is fine. az_last_error_message()
+  // carries that note either way, so print whenever there is one.
+  const char *msg = az_last_error_message();
+  if (msg && *msg)
+    std::fprintf(stderr, "azcore: note on %s: %s\n", what, msg);
+  else if (r != AZ_OK)
+    std::fprintf(stderr, "azcore: %s failed (%d)\n", what, (int)r);
 }
 
 struct ProgressState
@@ -277,6 +279,8 @@ struct CreateArgs
   const char *volumeSize;
   int solid;
   int headers;
+  int prealloc;
+  int shareLocked;
 };
 
 int CmdCreate(const char *dest, const CreateArgs &args, const std::vector<const char *> &inputs)
@@ -294,6 +298,8 @@ int CmdCreate(const char *dest, const CreateArgs &args, const std::vector<const 
   opts.dict_size_mib = args.dictMiB;
   opts.volume_size = args.volumeSize;
   opts.solid = args.solid;
+  opts.preallocate = args.prealloc;
+  opts.share_locked = args.shareLocked;
   opts.callbacks = &cb;
   if (args.password && *args.password)
   {
@@ -338,7 +344,8 @@ void Usage()
     "  azcore test    <archive> [-p pass]\n"
     "  azcore extract <archive> <dir> [-p pass] [--flatten] [--skip]\n"
     "  azcore create  <archive> [-f fmt] [-m method] [-x level] [-d dictMiB]\n"
-    "                           [-p pass] [--headers] [-v size] [--solid=on|off] <input>...\n");
+    "                           [-p pass] [--headers] [-v size] [--solid=on|off]\n"
+    "                           [--prealloc] [--share-locked] <input>...\n");
 }
 
 } // namespace
@@ -408,6 +415,8 @@ int main(int argc, char **argv)
     args.volumeSize = NULL;
     args.solid = 1;
     args.headers = 0;
+    args.prealloc = 0;
+    args.shareLocked = 0;
 
     std::vector<const char *> inputs;
     for (int i = 3; i < argc; i++)
@@ -420,6 +429,8 @@ int main(int argc, char **argv)
       else if (!std::strcmp(a, "-p") && i + 1 < argc)      args.password = argv[++i];
       else if (!std::strcmp(a, "-v") && i + 1 < argc)      args.volumeSize = argv[++i];
       else if (!std::strcmp(a, "--headers"))               args.headers = 1;
+      else if (!std::strcmp(a, "--prealloc"))              args.prealloc = 1;
+      else if (!std::strcmp(a, "--share-locked"))          args.shareLocked = 1;
       else if (!std::strncmp(a, "--solid=", 8))           args.solid = std::strcmp(a + 8, "off") != 0;
       else                                                 inputs.push_back(a);
     }

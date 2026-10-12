@@ -66,7 +66,10 @@ public class SettingsDefaultsTests
             TestAfterCreation: true,
             KeepProgressWindow: true,
             SettingKeys.OutputFolderMode.Fixed,
-            FixedOutputFolder: @"D:\drops");
+            FixedOutputFolder: @"D:\drops",
+            // 两项都要真的走到设置文件里再回来，否则界面勾了个寂寞。
+            PreallocateDisk: true,
+            ShareSources: true);
 
         var settings = new AppSettings();
         wanted.Save(settings);
@@ -90,6 +93,9 @@ public class SettingsDefaultsTests
         Assert.Empty(loaded.ParsedExcludePatterns);
         Assert.False(loaded.KeepProgressWindow);
         Assert.Equal(SettingKeys.OutputFolderMode.LastUsed, loaded.OutputMode);
+        // 预分配会占住比最终包大很多的磁盘，独占源文件会挡住别的程序 —— 两个都不能替用户打开。
+        Assert.False(loaded.PreallocateDisk);
+        Assert.False(loaded.ShareSources);
     }
 
     [Fact]

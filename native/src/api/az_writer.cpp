@@ -82,6 +82,40 @@ UString GenericPathToU(const std::filesystem::path &p)
   #endif
 }
 
+// Reserving clusters up front. 7-Zip's CFileBase exposes its handle publicly on
+// Windows; the POSIX side keeps _handle protected, so reaching a descriptor there
+// would mean patching vendored source (vendor-sources.ps1 deletes that tree) -- and
+// opening the path a second time would race the writer's own handle. So on POSIX
+// this is a no-op that reports success: nothing was promised, nothing failed.
+bool PreallocateOutFile(const NWindows::NFile::NIO::COutFile &file, UInt64 bytes)
+{
+  if (bytes == 0)
+    return false;
+  #ifdef _WIN32
+  // FileAllocationInfo, NOT SetFileValidData: the latter needs SE_RENAME_NAME and
+  // hands back clusters that still hold somebody else's deleted data.
+  FILE_ALLOCATION_INFO info;
+  info.AllocationSize.QuadPart = (LONGLONG)bytes;
+  return ::SetFileInformationByHandle(file.GetHandle(), FileAllocationInfo,
+      &info, sizeof(info)) != FALSE;
+  #else
+  (void)file;
+  return true;
+  #endif
+}
+
+// What preallocation reserves: the uncompressed total. The compressed payload can
+// never exceed it (a coder that gains nothing falls back to stored), so this is a
+// true upper bound -- which is the point. If the volume cannot hold even the worst
+// case, we learn that before spending minutes compressing instead of at 90%.
+UInt64 SourceBytesTotal(const CObjectVector<Item> &items)
+{
+  UInt64 total = 0;
+  for (unsigned i = 0; i < items.Size(); i++)
+    total += items[i].Size;
+  return total;
+}
+
 // ---------------------------------------------------------------------------
 // Update callback
 // ---------------------------------------------------------------------------
@@ -99,24 +133,44 @@ class CUpdateCallback Z7_final
   // a UTF-8 round trip alive in the hot path of a non-ASCII password.
   UString _password;
   bool _passwordDefined;
+  bool _shareLocked;
   ProgressSink _progress;
 
 public:
   az_result Status;
   AString StatusDetail;
 
+  // Members the engine could not read. Counted separately from Status because the
+  // archive itself succeeded -- this is a warning for the caller, not a failure.
+  UInt32 SkippedCount;
+  AString SkippedNames;   // first few only; a folder of locked files must not blow up the message
+
+  void AddSkipped(const UString &name)
+  {
+    SkippedCount++;
+    if (SkippedNames.Len() >= 240)
+      return;
+    if (SkippedCount > 1)
+      SkippedNames += ", ";
+    SkippedNames += UToUtf8A(name);
+  }
+
   CUpdateCallback()
-    : _items(NULL), _passwordDefined(false), Status(AZ_OK) {}
+    : _items(NULL), _passwordDefined(false), _shareLocked(false), Status(AZ_OK),
+      SkippedCount(0) {}
 
   void Init(const CObjectVector<Item> *items, const char *password,
-            const az_callbacks *cb)
+            const az_callbacks *cb, bool shareLocked)
   {
     _items = items;
     _passwordDefined = (password && *password);
     _password = _passwordDefined ? Utf8ToU(password) : UString();
+    _shareLocked = shareLocked;
     _progress.Init(cb);
     Status = AZ_OK;
     StatusDetail.Empty();
+    SkippedCount = 0;
+    SkippedNames.Empty();
   }
 };
 
@@ -269,12 +323,23 @@ STDMETHODIMP CUpdateCallback::GetStream(UInt32 index, ISequentialInStream **inSt
 
   CInFileStream *fileStream = new CInFileStream();
   CMyComPtr<IInStream> wrap(fileStream);
-  if (!fileStream->Open(item.SourcePath))
+  // The plain Open asks for FILE_SHARE_READ only, so it fails on anything another
+  // process holds open for writing. Sharing the write side is what "pack locked
+  // files" means; a member that still cannot be opened is skipped below exactly as
+  // before. Note the trade-off: a file that is still being written can be captured
+  // mid-update, so the member is that instant of the file, not a consistent copy.
+  const bool opened = _shareLocked
+      ? fileStream->OpenShared(item.SourcePath, true)
+      : fileStream->Open(item.SourcePath);
+  if (!opened)
   {
-    Status = AZ_ERROR_IO;
-    StatusDetail = "cannot read '" + UToUtf8A(FsToU(item.SourcePath)) + "'";
-    // S_FALSE makes the handler skip this member rather than fail the archive;
-    // the reason is still recorded for the caller.
+    // Not fatal, and it must not be reported as if it were: S_FALSE makes the
+    // handler drop this one member and the archive is still written. Raising
+    // AZ_ERROR_IO here used to report the whole create as failed even though the
+    // .7z on disk was fine -- so the caller now gets the names as a warning.
+    // (Windows gives no way around a file another process holds without sharing:
+    // FILE_FLAG_BACKUP_SEMANTICS still returns ERROR_SHARING_VIOLATION, measured.)
+    AddSkipped(item.Name);
     return S_FALSE;
   }
 
@@ -744,7 +809,7 @@ az_result WriterOpenInternal(const char *path_utf8, const az_create_options *opt
   az::CUpdateCallback *cb = new az::CUpdateCallback();
   ctx->CallbackRef = cb;
   ctx->Callback = cb;
-  cb->Init(&ctx->Items, resolved.password, resolved.callbacks);
+  cb->Init(&ctx->Items, resolved.password, resolved.callbacks, resolved.share_locked != 0);
 
   *out = (az_writer)ctx.release();
   return az::Ok();
@@ -998,6 +1063,14 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
       ctx->Failed = true;
       return az::Fail(AZ_ERROR_IO, "cannot create '%s'", az::UToStd(ctx->DestPath).c_str());
     }
+    if (ctx->Opts.preallocate)
+    {
+      // Best effort. Not being able to reserve is no reason to abandon a write that
+      // may still succeed -- the disk could free up, or the worst-case estimate may
+      // simply exceed the volume while the real archive fits inside it.
+      if (!az::PreallocateOutFile(fileStream->File, az::SourceBytesTotal(ctx->Items)))
+        problems += "could not preallocate the output file; continuing without it. ";
+    }
     outStream = fileStream;
   }
 
@@ -1015,6 +1088,17 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
     return az::FailHr(res, AZ_ERROR_GENERIC, "writing the archive");
   }
 
+  if (ctx->Callback->SkippedCount)
+  {
+    AString note;
+    note += "skipped ";
+    note.Add_UInt32(ctx->Callback->SkippedCount);
+    note += " unreadable member(s), the archive itself is fine: ";
+    note += ctx->Callback->SkippedNames;
+    note += ". A file another program holds without sharing cannot be read by anyone "
+            "(ERROR_SHARING_VIOLATION, backup semantics included) -- that is Windows.";
+    problems += note.Ptr();
+  }
   if (ctx->FileOut)
   {
     const HRESULT closeRes = ctx->FileOut->Close();

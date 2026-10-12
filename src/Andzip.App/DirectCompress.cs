@@ -79,6 +79,8 @@ internal static class DirectCompress
             // 压文件夹时把文件夹本身装进去（docs.zip 里是 docs/…），右键压缩的语义就是"把这个压起来"。
             IncludeRootFolder: input.IsDirectory && defaults.IncludeRootFolder,
             TestAfterCreation: defaults.TestAfterCreation,
+            Preallocate: defaults.PreallocateDisk,
+            ShareSources: defaults.ShareSources,
             // UI 线程构造，引擎工作线程上报的进度会自动投递回 UI 线程。
             Progress: new Progress<ArchiveProgress>(progress.Update));
 

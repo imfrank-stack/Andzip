@@ -101,6 +101,110 @@ function Remove-Glob {
     }
 }
 
+function Add-ForkZstdCoders {
+    param([string]$From, [string]$To)
+
+    # The fork spells its coder NCompress::NZSTD and stock 7-Zip spells the newer
+    # decode-only one NCompress::NZstd -- same file names, different namespaces.
+    # Overwriting stock is not an option: Archive/Zip/ZipHandler.cpp and
+    # Archive/ZstdHandler.cpp both include "Compress/ZstdDecoder.h" for the stock
+    # class, and the build dies on C2039 "NZstd is not a member of NCompress".
+    #
+    # So the fork pair lands beside it as ZstdFork*, which means rewriting the
+    # quoted self-includes. Relative paths ("../../../C/zstd/zstd.h") are untouched
+    # because the files stay in Compress/.
+    $map = @{
+        'ZstdDecoder.h'  = 'ZstdForkDecoder.h'
+        'ZstdDecoder.cpp' = 'ZstdForkDecoder.cpp'
+        'ZstdEncoder.h'  = 'ZstdForkEncoder.h'
+        'ZstdEncoder.cpp' = 'ZstdForkEncoder.cpp'
+        'ZstdRegister.cpp' = 'ZstdForkRegister.cpp'
+    }
+
+    foreach ($entry in $map.GetEnumerator()) {
+        $source = Join-Path $From $entry.Key
+        if (-not (Test-Path -LiteralPath $source)) {
+            throw "zstd glue missing from the fork archive: $source"
+        }
+
+        $text = [IO.File]::ReadAllText($source)
+        foreach ($rename in $map.GetEnumerator()) {
+            $text = $text.Replace('#include "' + $rename.Key + '"', '#include "' + $rename.Value + '"')
+        }
+        [IO.File]::WriteAllText((Join-Path $To $entry.Value), $text)
+    }
+
+    Write-Host '      + ZstdFork{Decoder,Encoder,Register} (beside the stock NZstd coder)'
+}
+
+function Add-ZstdCoderProperties {
+    param([string]$Path)
+
+    # The zstd / LZ4 / LZ5 / Lizard / Brotli wrappers switch on NCoderPropID names
+    # that stock 7-Zip keeps inside a /* */ block. Appending them -- never inserting
+    # -- right before k_NUM_DEFINED keeps every ID above at the number stock gives
+    # it. Handlers and coders compile into the same DLL, so all that matters is that
+    # both sides agree, not that the numbers match some other build.
+    #
+    # This has to live in the script, not in a hand edit: the vendor run deletes
+    # third_party/7zip and copies it fresh from the zips every time.
+    $anchor = '    k_NUM_DEFINED'
+    $macros = '#define Z7_IFACEM_ICompressSetCoderPropertiesOpt'
+
+    $text = [IO.File]::ReadAllText($Path)
+    if ($text.Contains('kAdvMax,')) {
+        Write-Host '      ICoder.h already carries the zstd coder properties'
+        return
+    }
+
+    $enum = @(
+      '    /* ANDZIP LOCAL PATCH -- applied by native/scripts/vendor-sources.ps1 -ExtraCodecs.'
+      '       Property IDs the extra-codec wrappers read. kLdmSearchLength is the fork''s'
+      '       name for what stock spells kLdmMinMatchLength; both are dead here, our API'
+      '       only ever sends kLevel and kNumThreads. */'
+      '    kStrategy,          // VT_UI4 1=ZSTD_fast .. 8=ZSTD_btultra'
+      '    kFast,              // VT_UI4 1..64, the zstd --fast levels'
+      '    kLong,              // VT_UI4 10..31, the zstd --long window log'
+      '    kWindowLog,         // VT_UI4 10..31'
+      '    kHashLog,           // VT_UI4 6..26'
+      '    kChainLog,          // VT_UI4 6..28'
+      '    kSearchLog,         // VT_UI4 1..26'
+      '    kMinMatch,          // VT_UI4 3..7'
+      '    kTargetLen,         // VT_UI4 0..999'
+      '    kOverlapLog,        // VT_UI4 0..9 (default 6)'
+      '    kLdmHashLog,        // VT_UI4 6..26 (default 20)'
+      '    kLdmSearchLength,   // VT_UI4 4..4096 (default 64)'
+      '    kLdmBucketSizeLog,  // VT_UI4 0..8 (default 3)'
+      '    kLdmHashRateLog,    // VT_UI4 (default wlog - ldmhlog)'
+      '    kAdvMax,            // VT_BOOL zstd --max'
+      $anchor
+    ) -join "`r`n"
+
+    # k_NUM_DEFINED occurs exactly once in the stock header; the idempotence guard
+    # above means a second vendor run cannot splice the block twice.
+    $text = $text.Replace($anchor, $enum)
+    # zstd's fast/--max level encodings, used by both the encoder and the decoder.
+    # The fork gates --max on 64-bit; we gate it off outright: az_create_options has
+    # no knob that reaches kAdvMax, and zstd --max asks for hundreds of megabytes.
+    $defines = @(
+      '/* ANDZIP LOCAL PATCH -- zstd level encodings (see ZstdEncoder.cpp / ZstdDecoder.cpp).'
+      '   32: the fast levels are sent as 1..64 and stored as level + 32.'
+      '   255: "as strong as zstd goes", the fork''s stand-in for --max.'
+      '*/'
+      '#define Z7_ZSTD_FAST_LEV_INC  32'
+      '#define Z7_ZSTD_ULTIMATE_LEV  255'
+      '#ifndef Z7_ZSTD_ADVMAX_ALLOWED'
+      '#define Z7_ZSTD_ADVMAX_ALLOWED 0'
+      '#endif'
+      ''
+      $macros
+    ) -join "`r`n"
+    $text = $text.Replace($macros, $defines)
+
+    [IO.File]::WriteAllText($Path, $text)
+    Write-Host '      + ICoder.h: zstd coder property IDs and level macros'
+}
+
 Write-Host "Vendoring into $ThirdParty"
 New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 
@@ -135,14 +239,8 @@ Copy-Item -LiteralPath (Join-Path $zs 'COPYING') -Destination (Join-Path $Codecs
 Remove-Glob (Join-Path $SevenZip 'C\zstd') @('*.asm', '*.S')
 
 if ($ExtraCodecs) {
-    # The fork's Zstd{Decoder,Encoder,Register} replace the stock decoder, and
-    # its own ZstdHandler.cpp must come along -- the stock handler does not
-    # compile against the fork's NZstd namespace.
-    Write-Host '      + ZstdEncoder / ZstdRegister / fork ZstdHandler (replaces stock)'
-    Get-ChildItem -LiteralPath (Join-Path $zs 'CPP\7zip\Compress') -Filter 'Zstd*' |
-        Copy-Item -Destination (Join-Path $SevenZip 'CPP\7zip\Compress') -Force
-    Copy-Item -LiteralPath (Join-Path $zs 'CPP\7zip\Archive\ZstdHandler.cpp') `
-        -Destination (Join-Path $SevenZip 'CPP\7zip\Archive') -Force
+    Add-ForkZstdCoders (Join-Path $zs 'CPP\7zip\Compress') (Join-Path $SevenZip 'CPP\7zip\Compress')
+    Add-ZstdCoderProperties (Join-Path $SevenZip 'CPP\7zip\ICoder.h')
 }
 
 # ------------------------------------------------------------- NanaZip codecs

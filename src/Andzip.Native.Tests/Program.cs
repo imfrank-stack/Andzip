@@ -145,12 +145,12 @@ internal static class Program
     private static void TestGlobalInfo()
     {
         Section("build info + ABI");
-        CheckEq("AbiVersion == 1", 1u, AndzipCore.AbiVersion);
+        CheckEq("AbiVersion == 2", 2u, AndzipCore.AbiVersion);
         var info = AndzipCore.BuildInfo;
         Check("CoreVersion non-empty", !string.IsNullOrWhiteSpace(info.CoreVersion));
         Check("Engine non-empty", !string.IsNullOrWhiteSpace(info.Engine));
         Check("BuildConfig non-empty", !string.IsNullOrWhiteSpace(info.BuildConfig));
-        CheckEq("AbiVersion in build info", 1u, info.AbiVersion);
+        CheckEq("AbiVersion in build info", 2u, info.AbiVersion);
         Check("FormatCount > 0", info.FormatCount > 0);
         Check("CodecCount > 0", info.CodecCount > 0);
     }

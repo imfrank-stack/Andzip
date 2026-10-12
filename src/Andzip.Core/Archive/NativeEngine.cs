@@ -91,6 +91,21 @@ internal static class NativeEngine
     public static bool CanReadWith(string engineFormat) => FindFormat(engineFormat)?.CanRead == true;
 
     /// <summary>
+    /// 引擎这次真的带了这个编码器的<strong>编码</strong>方向。
+    /// <para>
+    /// ZSTD / LZ4 / LZ5 / Lizard / Brotli 只有在用 <c>-ExtraCodecs</c> 编出来的内核里才登记；
+    /// 发布的那版没有。所以"编码器在不在"必须由引擎回答。
+    /// </para>
+    /// <para>
+    /// 但要注意它<strong>不能</strong>单独用来决定某个方法可选：登记 ≠ 能写 —— 7z 的写入路径
+    /// 目前对这五个一律 E_INVALIDARG（<see cref="CompressionMethodOption.Table"/> 里没列它们）。
+    /// 等内核那条路径修通、方法重新进表之后，这里才是「少筛一项」的那一层保险。
+    /// </para>
+    /// </summary>
+    public static bool CanEncodeWith(string codecName)
+        => Codecs.Any(c => c.CanEncode && string.Equals(c.Name, codecName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// 引擎能读取的所有扩展名（小写、带点、已去重）。
     /// 引擎的 extension 字段是空格分隔的多扩展名，这里全部拆开。
     /// <para>
@@ -172,6 +187,8 @@ internal static class NativeEngine
             // 固实块是 7z 的概念；对别的格式不下发，免得引擎回一条用户从没要求的警告。
             Solid = format.IsSevenZip ? settings.Solid : false,
             MultiThread = true,
+            Preallocate = settings.Preallocate,
+            ShareLocked = settings.ShareSources,
             Progress = Bridge(progress, ArchiveOperation.Compress),
             // EntryComment 故意不下发：ABI 的 comment 是「归档注释」，而 7-Zip 的
             // out-handler 不支持设置它（见 az_writer.cpp）；Core 侧改为记一条警告。
@@ -255,7 +272,7 @@ internal static class NativeEngine
     /// “打开”阶段为 true：那时 ErrorBadFormat 的含义是“这不是我能识别的归档”，
     /// 对应 UI 的“格式不支持”提示；解压/测试阶段为 false，同样的错误码意味着包损坏。
     /// </param>
-    private static Exception Translate(string operation, AndzipException ex, bool badFormatMeansUnsupported)
+    internal static Exception Translate(string operation, AndzipException ex, bool badFormatMeansUnsupported)
     {
         var detail = string.IsNullOrWhiteSpace(ex.NativeMessage) ? ex.Message : ex.NativeMessage!;
 

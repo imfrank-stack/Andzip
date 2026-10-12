@@ -119,6 +119,35 @@ public class ZipAdvancedSettingsTests : IDisposable
         Assert.Empty(ArchiveFormatOption.FromId("ISO").Methods);
     }
 
+    /// <summary>非标准方法号 —— 只有 zstd/lz4 那一系 fork 的内核认得。</summary>
+    private static readonly string[] NonStandardEverywhere = ["ZSTD", "LZ4", "LZ5", "LIZARD", "BROTLI"];
+
+    [Fact]
+    public void NonStandardMethodsAreNotOfferedAnywhere_Yet()
+    {
+        // 两条独立的理由，目前都还成立，所以任何一种都不许出现在下拉框里：
+        //   1) ZIP：非标准方法号写出来的包 WinRAR / 资源管理器 / 原版 7-Zip 全都打不开，
+        //      而用户会把这种包发给别人 —— 这是用户定的红线，与内核能力无关。
+        //   2) 7z：内核登记了编码器，但 7z 的写入路径仍拒绝它们（-mm=LZ4 实测 E_INVALIDARG）。
+        // 等 2) 在内核侧修通，7z 这一半要放开、ZIP 那一半永远不放开 —— 到那时改这条断言。
+        var zip = ArchiveFormatOption.FromId("ZIP").Methods.Select(m => m.EngineMethod).ToList();
+        var sevenZip = ArchiveFormatOption.FromId("7Z").Methods.Select(m => m.EngineMethod).ToList();
+
+        foreach (var forbidden in NonStandardEverywhere)
+        {
+            Assert.DoesNotContain(forbidden, zip, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(forbidden, sevenZip, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void SevenZipOnlyListsMethodsThatRoundTrippedThroughTheEngine()
+    {
+        // 第一项就是默认方法，所以这张表的顺序是行为的一部分，不是随手写的列表。
+        Assert.Equal(["LZMA2", "LZMA", "PPMd", "BZip2", "Deflate", "Copy"],
+            ArchiveFormatOption.FromId("7Z").Methods.Select(m => m.EngineMethod).ToArray());
+    }
+
     [Fact]
     public void EncryptionOptions_MatchReferenceDefaults()
     {

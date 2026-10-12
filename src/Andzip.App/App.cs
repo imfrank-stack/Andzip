@@ -92,7 +92,8 @@ public sealed class App : Application
 
         if (SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)))
         {
-            task = ShellTask.Extract;
+            // 双击走智能解压，与右键那条同一个规则：整棵单子树的包不该得到 docs\docs\。
+            task = ShellTask.AutoExtract;
             return true;
         }
 

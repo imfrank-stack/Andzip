@@ -24,6 +24,11 @@ public sealed record ArchiveCreationSettings(
     string? EntryComment = null,
     bool EncryptHeaders = false,
     bool Solid = true,
+    /// <summary>先按未压缩总量占住磁盘簇再开始写。省的是「压到 90% 才发现放不下」，
+    /// 代价是临时占用可能远大于最终包 —— 见设置页的提示。</summary>
+    bool Preallocate = false,
+    /// <summary>压缩时不独占源文件。读不到别人独占的文件这件事，任何开关都改变不了。</summary>
+    bool ShareSources = false,
     IReadOnlyList<string>? ExcludePatterns = null,
     IProgress<ArchiveProgress>? Progress = null)
 {

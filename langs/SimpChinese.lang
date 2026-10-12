@@ -113,6 +113,35 @@ TEXT_TITLE_ERROR                        = 错误
 TEXT_ERR_EXTRACT_FAILED                 = 解压失败：
 TEXT_ERR_COMPRESS_FAILED                = 压缩失败：
 
+; ---- 完整性测试（FR-3.6）----
+TEXT_STATUS_TESTING                     = 正在测试...
+TEXT_TITLE_TEST_PASSED                  = 测试完成
+TEXT_TEST_PASSED                        = 所有成员校验通过，没有发现损坏。
+TEXT_TITLE_TEST_FAILED                  = 测试未通过
+; 下面这条区分的是"读都没读成"（缺文件、口令错、格式不支持）与"读到了但数据坏了"，
+; 两者对用户的意义完全不同，不能都写成"包坏了"。
+TEXT_TEST_NOT_VERIFIED                  = 没能完成校验（这不是数据损坏）：
+
+; ---- 修复压缩包（三种模式由用户选）----
+TEXT_TITLE_REPAIR                       = 修复压缩包
+TEXT_REPAIR_INTRO                       = 选择一种修复方式。原包不会被修改，结果写到新文件。
+TEXT_REPAIR_MODE_1                      = 重建中心目录（先试这个）
+TEXT_REPAIR_MODE_1_HINT                 = 只重写中央目录和结束记录，成员数据一个字节都不改，所以最快。代价是不解压就无从得知长度的那些成员（流式写入的包）会被跳过。
+TEXT_REPAIR_MODE_2                      = 续接分卷与被截断的包
+TEXT_REPAIR_MODE_2_HINT                 = 把 名字.z01 … 名字.zip 当一条流来读，并且允许最后一个成员只剩半截：按实际剩下的长度写入，其它成员仍然打得开。输出不再分卷，因为残缺输入上的分卷偏移本就不可信。
+TEXT_REPAIR_MODE_3                      = 能修多少修多少（重新打包）
+TEXT_REPAIR_MODE_3_HINT                 = 逐个成员真的解压一遍，解得出来的重新压缩入包，解不出的跳过并列名。最慢，而且新包字节与原包不同；好处是中心目录和 CRC 都是重算出来的真值。
+TEXT_REPAIR_SOURCE                      = 正在修复：${file}
+TEXT_REPAIR_OUTPUT                      = 输出到：
+TEXT_REPAIR_START                       = 开始修复
+TEXT_STATUS_REPAIRING                   = 正在修复...
+TEXT_ERR_REPAIR_FAILED                  = 修复失败：
+TEXT_TITLE_REPAIR_RESULT                = 修复结果
+TEXT_REPAIR_RESULT                      = 收回 ${recovered} 个成员，跳过 ${skipped} 个。
+TEXT_REPAIR_NOTHING                     = 没有恢复出任何成员，因此不生成新包；原包未动。
+TEXT_REPAIR_RECOVERED                   = 收回
+TEXT_REPAIR_SKIPPED                     = 跳过
+
 ; ---- 重名询问（FR-3.7）/ 解压密码（对话框 #7）----
 TEXT_TITLE_ASK_DUPEFILE                 = 要解压的文件
 TEXT_MSG_FILE_EXISTS                    = 目标文件夹中已存在同名文件：
@@ -166,7 +195,7 @@ TEXT_SETTINGS_GENERAL_TITLE             = 常规设置
 TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = 双击压缩包文件时
 TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = 打开 Andzip
 TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = 直接解压
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = 这项会同步改写已关联格式在注册表里的默认动词，下次双击就按新选择走。直接解压时只弹进度条，完成后自动关闭。
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = 这一项只改程序自己的行为，不重写注册表里的动词，所以对已关联的所有格式立刻生效。直接解压走「智能解压」那套规则，只弹进度条，完成后自动关闭。
 TEXT_SETTINGS_ESC_CANCEL                = 解压过程中允许按 Esc 取消
 TEXT_SETTINGS_NOT_IMPLEMENTED           = 该设置页尚未实现，会在后续版本加入。
 TEXT_SETTINGS_ASSOC_HINT                = 勾选后双击这些扩展名会用 Andzip 打开，右键「打开方式」里也会出现 Andzip；取消勾选会还原接管前的默认程序。若某项被 Windows 的默认应用保护挡住，会提示你去系统设置里手选。
@@ -208,6 +237,10 @@ TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT     = 用分号隔开的文件名模式，�
 TEXT_SETTINGS_COMPRESS_TEST_AFTER       = 压缩后测试
 TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS    = 压缩完成后不关闭进度窗口
 TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT = 关掉时进度条跑完就自己消失；勾上则留着窗口和结果，需要看一眼体积比的时候再开。
+TEXT_SETTINGS_COMPRESS_PREALLOC           = 压缩时预分配磁盘空间
+TEXT_SETTINGS_COMPRESS_PREALLOC_HINT      = 开始写入前，先按未压缩总量把磁盘簇占住。意义是一开始就知道这块盘放不下，而不是压到 90% 才失败；代价是这期间占用的空间可能比最终的包大很多，而且一直占到写完。目标盘紧张时别勾。
+TEXT_SETTINGS_COMPRESS_SHARE_SOURCES      = 压缩时不独占源文件
+TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT = 勾上后，压缩期间别的程序还能继续写或删这些源文件；不勾则要等压缩结束。它并不能让我们读取别的程序独占的文件 —— Windows 对谁都拒绝，用备份语义也一样是共享冲突。这样的文件会被跳过，压缩结束时告诉你跳过了哪几个。
 TEXT_SETTINGS_COMPRESS_OUTPUT_DIR       = 输出目录
 TEXT_SETTINGS_COMPRESS_OUTPUT_LAST      = 上次新建时使用的目录
 TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED     = 总是输出到以下目录

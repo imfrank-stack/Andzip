@@ -76,6 +76,8 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandOpenArchive] = OpenArchiveAsync,
             [MainMenuModel.CommandCloseArchive] = CloseArchive,
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
+            [MainMenuModel.CommandTestArchive] = TestArchiveAsync,
+            [MainMenuModel.CommandRepairArchive] = RepairArchiveAsync,
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
         };
@@ -90,7 +92,8 @@ public sealed class MainWindow : Window
         _toolBar = MainToolBar.Create(_lang, new MainToolBarActions(
             OpenArchive: OpenArchiveAsync,
             ExtractArchive: ExtractArchiveAsync,
-            NewArchive: OpenNewArchiveDialog));
+            NewArchive: OpenNewArchiveDialog,
+            TestArchive: TestArchiveAsync));
         DockPanel.SetDock(_toolBar, Dock.Top);
         root.Children.Add(_toolBar);
 
@@ -382,6 +385,178 @@ public sealed class MainWindow : Window
         {
             progress.Close();
         }
+    }
+
+    /// <summary>
+    /// 完整性测试（FR-3.6）：整个包读一遍校验 CRC，但不落地任何文件。
+    /// <para>
+    /// 结果必须说出来 —— 用户点这个按钮要的就是那句「通过了」或「哪个文件坏了」，
+    /// 静默关掉进度窗口等于什么都没做。引擎报的错里带成员名，原样转达，不替他概括成「包坏了」。
+    /// </para>
+    /// </summary>
+    private async void TestArchiveAsync()
+    {
+        // 没打开包时先挑一个，与「解压」同一条路径 —— 按钮常亮却点了没反应才是真故障。
+        var archivePath = _listing?.ArchivePath ?? await PickArchiveAsync();
+        if (archivePath is null)
+        {
+            return;
+        }
+
+        string? password = null;
+        if (Session.Passwords.TryGet(archivePath, out var remembered))
+        {
+            password = remembered;
+        }
+        else if (await Task.Run(() => ArchiveExtractor.IsPasswordProtected(archivePath)))
+        {
+            var passwordDialog = new PasswordWindow(_lang, initialPassword: null, requireConfirmation: false);
+            if (await passwordDialog.ShowDialog<bool>(this) != true)
+            {
+                return;
+            }
+
+            password = passwordDialog.Password;
+            Session.Passwords.Remember(archivePath, password);
+        }
+
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_TESTING",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+
+        string titleKey;
+        string body;
+        try
+        {
+            await Task.Run(() => ArchiveTester.Test(
+                archivePath, password, new Progress<ArchiveProgress>(progress.Update), cts.Token), cts.Token);
+
+            titleKey = "TEXT_TITLE_TEST_PASSED";
+            // 不报成员数：没打开包时是先挑文件再测的，手上没有清单，报个数就得再读一遍目录。
+            // 「全部通过」本身就是答案，数字是状态栏早就给过的东西。
+            body = _lang.Get("TEXT_TEST_PASSED");
+        }
+        catch (OperationCanceledException)
+        {
+            progress.Close();
+            return;
+        }
+        catch (InvalidDataException ex)
+        {
+            // 数据真的坏了（CRC 对不上 / 解压失败）：引擎点到谁就是谁。
+            titleKey = "TEXT_TITLE_TEST_FAILED";
+            body = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            // 连读都没读成（缺文件、口令错、格式不支持）—— 那不是「包坏了」，别混为一谈。
+            titleKey = "TEXT_TITLE_TEST_FAILED";
+            body = _lang.Get("TEXT_TEST_NOT_VERIFIED") + ex.Message;
+        }
+
+        progress.Close();
+        await new MessageWindow(_lang, _lang.Get(titleKey), body).ShowDialog(this);
+    }
+
+    /// <summary>
+    /// 修复压缩包（工具菜单）。先问模式，再跑，再把「收回 / 跳过 / 说明」三件事原样摊开 ——
+    /// 修复是个允许失败的操作，报喜不报忧比不修更糟。
+    /// </summary>
+    private async void RepairArchiveAsync()
+    {
+        var archivePath = _listing?.ArchivePath ?? await PickArchiveAsync();
+        if (archivePath is null)
+        {
+            return;
+        }
+
+        var dialog = new RepairWindow(_lang, archivePath, ZipRepairer.SuggestOutputPath(archivePath));
+        if (await dialog.ShowDialog<bool>(this) != true)
+        {
+            return;
+        }
+
+        var mode = dialog.Mode;
+        var output = dialog.OutputPath;
+
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_REPAIRING",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+
+        ZipRepairResult result;
+        try
+        {
+            result = await Task.Run(
+                () => ZipRepairer.Repair(archivePath, mode, output, new Progress<ArchiveProgress>(progress.Update), cts.Token),
+                cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            progress.Close();
+            return;
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+            await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_ERROR"),
+                _lang.Get("TEXT_ERR_REPAIR_FAILED") + ex.Message).ShowDialog(this);
+            return;
+        }
+
+        progress.Close();
+        await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_REPAIR_RESULT"), DescribeRepair(result))
+            .ShowDialog(this);
+
+        // 故意不自动打开修好的包：用户先要看的是"救回了什么、丢了什么"，
+        // 而不是被领进一个看起来完好、其实缺成员的窗口。
+    }
+
+    /// <summary>修复结果的文案。名单截到 12 条 —— MessageWindow 按内容长高，
+    /// 一个几万成员的包会把窗口撑到屏幕外，那等于没有报告。</summary>
+    private string DescribeRepair(ZipRepairResult result)
+    {
+        var lines = new List<string>();
+
+        if (!result.ProducedAnything)
+        {
+            lines.Add(_lang.Get("TEXT_REPAIR_NOTHING"));
+        }
+        else
+        {
+            lines.Add(_lang.Format("TEXT_REPAIR_RESULT",
+                ("recovered", result.RecoveredEntries.Count.ToString()),
+                ("skipped", result.SkippedEntries.Count.ToString())));
+            lines.Add(result.OutputPath);
+        }
+
+        AppendNames(lines, _lang.Get("TEXT_REPAIR_RECOVERED"), result.RecoveredEntries);
+        AppendNames(lines, _lang.Get("TEXT_REPAIR_SKIPPED"), result.SkippedEntries);
+
+        foreach (var note in result.Notes.Take(12))
+        {
+            lines.Add("· " + note);
+        }
+
+        if (result.Notes.Count > 12)
+        {
+            lines.Add($"…（还有 {result.Notes.Count - 12} 条说明）");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static void AppendNames(List<string> lines, string label, IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return;
+        }
+
+        var shown = names.Take(12).ToList();
+        var suffix = names.Count > shown.Count ? $"… (+{names.Count - shown.Count})" : string.Empty;
+        lines.Add($"{label}：{string.Join("、", shown)}{suffix}");
     }
 
     /// <summary>用系统资源管理器打开一个目录。打不开就算了，解压本身已经成功了。</summary>

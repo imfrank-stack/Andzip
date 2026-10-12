@@ -19,7 +19,8 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 
 /// <summary>
 /// 主菜单结构（对应需求文档附录 A，7 个顶级菜单）。
-/// 当前已接入命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O，承载解压流程）；其余项按参考软件结构占位（禁用态），后续里程碑逐项接入。
+/// 当前已接入命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
+/// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）；其余项按参考软件结构占位（禁用态），后续里程碑逐项接入。
 /// </summary>
 public static class MainMenuModel
 {
@@ -35,6 +36,12 @@ public static class MainMenuModel
 
     /// <summary>解压文件（未打开压缩包时先选择压缩包）。</summary>
     public const string CommandExtractArchive = "file.extract";
+
+    /// <summary>测试压缩包完整性（Ctrl+T；未打开时同样先选择压缩包）。</summary>
+    public const string CommandTestArchive = "file.test";
+
+    /// <summary>修复损坏的 ZIP（三种模式由用户选；只写副本，绝不动原包）。</summary>
+    public const string CommandRepairArchive = "tools.repair";
 
     /// <summary>启动画面 / 压缩包视图切换（F6）。</summary>
     public const string CommandToggleStartScreen = "view.start";
@@ -57,7 +64,7 @@ public static class MainMenuModel
             new("file.permanentdelete", "MENUSTR_PERM_DELETE_ARCHIVE", "Shift+Ctrl+Del"),
             new("file.openfolder", "MENUSTR_OPEN_ARCHIVE_FOLDER"),
             MenuItemModel.Separator(),
-            new("file.test", "MENUSTR_TEST_ARCHIVE", "Ctrl+T"),
+            new("file.test", "MENUSTR_TEST_ARCHIVE", "Ctrl+T", Enabled: true, CommandId: CommandTestArchive),
             new("file.scan", "MENUSTR_SCAN_ARCHIVE", "Ctrl+I"),
             new("file.extract", "MENUSTR_EXTRACT_FILE", "Ctrl+E", Enabled: true, CommandId: CommandExtractArchive),
             MenuItemModel.Separator(),
@@ -112,7 +119,7 @@ public static class MainMenuModel
 
         new("tools", "MENUSTR_TOOLS",
         [
-            new("tools.repair", "MENUSTR_TOOLS_REPAIR"),
+            new("tools.repair", "MENUSTR_TOOLS_REPAIR", Enabled: true, CommandId: CommandRepairArchive),
             new("tools.recovery", "MENUSTR_TOOLS_RECOVERY"),
         ]),
 

@@ -80,6 +80,8 @@ internal sealed class NativeArgs : IDisposable
             Comment = strings.Add(o.Comment),
             Callbacks = bridge?.Handle ?? IntPtr.Zero,
             ExtraProperties = strings.Add(o.ExtraProperties),
+            Preallocate = o.Preallocate ? 1 : 0,
+            ShareLocked = o.ShareLocked ? 1 : 0,
         };
         return new NativeArgs(Alloc(s), strings, bridge);
     }

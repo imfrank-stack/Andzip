@@ -1,5 +1,5 @@
 ﻿{
-    "generatedUtc":  "2026-10-10T20:22:34.7438837Z",
+    "generatedUtc":  "2026-10-11T23:32:38.0724299Z",
     "note":  "Regenerate with native/scripts/vendor-sources.ps1. Do not edit vendored files by hand.",
     "sources":  [
                     {
@@ -72,16 +72,9 @@
                     },
                     {
                         "path":  "third_party/7zip/CPP/7zip/{Compress,Archive}/{Lz4,Lz5,Lizard,Brotli}*",
-                        "origin":  "NanaZip-main (same upstream as cankao/NanaZip-main.zip) -> NanaZip.ZS.Codecs/SevenZip/CPP/7zip/{Compress,Archive}",
+                        "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.ZS.Codecs/SevenZip/CPP/7zip/{Compress,Archive}",
                         "license":  "MIT (NanaZip, see NanaZip-License.md)",
-                        "note":  "7-Zip wrappers for the codec libraries above; placed in the engine tree so their relative includes resolve. Placed by hand on 2026-10-12 from a local NanaZip-main checkout because cankao/ no longer exists, so vendor-sources.ps1 -ExtraCodecs cannot be re-run for these. Still not compiled: ANDZIP_EXTRA_CODECS stays OFF pending the Lizard include-layout fix."
-                    },
-                    {
-                        "path":  "third_party/7zip/C/hashes/xxhash.h",
-                        "origin":  "materialised at configure time by cmake/codecs.cmake from third_party/codecs/xxhash/xxhash.h",
-                        "upstream":  "https://github.com/Cyan4973/xxHash",
-                        "license":  "BSD-2-Clause",
-                        "note":  "zstd's zstd_internal.h does #include \"../hashes/xxhash.h\", a sibling directory the 7-Zip-zstd fork had and we do not. One copy of the code; the path exists only to satisfy that include."
+                        "note":  "7-Zip wrappers for the codec libraries above; placed in the engine tree so their relative includes resolve"
                     }
                 ]
 }
