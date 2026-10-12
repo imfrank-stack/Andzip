@@ -288,6 +288,52 @@ public class UiFeatureWiringTests
 
     private static bool TextCarriesMarker(string text) => text.Contains("(&", StringComparison.Ordinal);
 
+    // ------------------------------------------------------- 文件 → 最近的文件
+
+    [AvaloniaFact]
+    public void RecentFilesMenuIsEnabledAndListsWhatWasOpened()
+    {
+        var lang = TestLang.Chinese();
+        var directory = Directory.CreateTempSubdirectory("andzip-menu-recent-");
+
+        try
+        {
+            var archive = Path.Combine(directory.FullName, "box.zip");
+            File.WriteAllText(archive, "x");
+
+            var settings = new AppSettings();
+            RecentFiles.Record(settings, archive);
+
+            var window = new MainWindow(lang, settings).Shown();
+            var menu = Assert.Single(VisualQuery.Of<Menu>(window));
+            var recent = MenuWalk.All(menu).Single(i =>
+                Equals(i.Header?.ToString(), lang.Get("MENUSTR_RECENT")));
+
+            // 以前这一项是永久灰着的占位；现在它得真的能点开，并且里面有东西。
+            Assert.True(recent.IsEnabled);
+            Assert.Contains(recent.Items.Cast<MenuItem>(), entry =>
+                Equals(entry.Header, Path.GetFullPath(archive)));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void RecentFilesMenuSaysSoWhenNothingHasBeenOpenedYet()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings()).Shown();
+        var menu = Assert.Single(VisualQuery.Of<Menu>(window));
+        var recent = MenuWalk.All(menu).Single(i =>
+            Equals(i.Header?.ToString(), lang.Get("MENUSTR_RECENT")));
+
+        var placeholder = Assert.Single(recent.Items.Cast<MenuItem>());
+        Assert.Equal(lang.Get("MENUSTR_RECENT_EMPTY"), placeholder.Header);
+        Assert.False(placeholder.IsEnabled);
+    }
+
     // ------------------------------------ 选择解压路径：浏览只走系统组件
 
     /// <summary>

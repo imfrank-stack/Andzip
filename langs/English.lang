@@ -299,6 +299,8 @@ MENUSTR_HELP                            = &Help
 
 MENUSTR_OPEN                            = &Open archive
 MENUSTR_RECENT                          = Recent files
+MENUSTR_RECENT_EMPTY                    = (nothing yet)
+MENUSTR_CLEAR_RECENT                    = Clear recent files
 MENUSTR_CREATE_ARCHIVE                  = &New archive
 MENUSTR_CLOSE_FILE                      = &Close archive
 MENUSTR_SAVE_AS_ARCHIVE                 = Save as...

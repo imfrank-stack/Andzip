@@ -84,7 +84,8 @@ public sealed class MainWindow : Window
 
         var root = new DockPanel();
 
-        var menuBar = MainMenuBar.Create(_lang, commands);
+        var menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
+            LoadRecentFiles, OpenRecentFile, ClearRecentFiles));
         DockPanel.SetDock(menuBar, Dock.Top);
         root.Children.Add(menuBar);
 
@@ -352,6 +353,38 @@ public sealed class MainWindow : Window
         }
 
         ShowArchiveView(listing);
+        RecordRecentArchive(archivePath);
+    }
+
+    // ---------- 文件 → 最近的文件 ----------
+
+    /// <summary>
+    /// 打开成功才记账。失败的包、被取消的口令都不该出现在「最近的文件」里 ——
+    /// 那个菜单的承诺是"点开就能再看一次"。
+    /// </summary>
+    private void RecordRecentArchive(string archivePath)
+    {
+        RecentFiles.Record(_settings, archivePath);
+        _settings.Save(AppSettings.DefaultFilePath);
+    }
+
+    /// <summary>菜单展开时读的那一份：先把已经不存在的记录清掉再给出去。</summary>
+    private IReadOnlyList<string> LoadRecentFiles()
+    {
+        if (RecentFiles.Prune(_settings) > 0)
+        {
+            _settings.Save(AppSettings.DefaultFilePath);
+        }
+
+        return RecentFiles.Load(_settings);
+    }
+
+    private void OpenRecentFile(string path) => _ = OpenArchive(path);
+
+    private void ClearRecentFiles()
+    {
+        RecentFiles.Clear(_settings);
+        _settings.Save(AppSettings.DefaultFilePath);
     }
 
     /// <summary>解压文件（Ctrl+E）：解压已打开的压缩包；未打开时先选择压缩包（FR-3.1 流程）。</summary>

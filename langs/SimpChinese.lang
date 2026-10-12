@@ -298,6 +298,8 @@ MENUSTR_HELP                            = 帮助(&H)
 
 MENUSTR_OPEN                            = 打开压缩文件(&O)
 MENUSTR_RECENT                          = 最近的文件
+MENUSTR_RECENT_EMPTY                    = （尚无记录）
+MENUSTR_CLEAR_RECENT                    = 清除最近使用的文件记录
 MENUSTR_CREATE_ARCHIVE                  = 新建压缩文件(&N)
 MENUSTR_CLOSE_FILE                      = 关闭压缩文件(&C)
 MENUSTR_SAVE_AS_ARCHIVE                 = 另存为...

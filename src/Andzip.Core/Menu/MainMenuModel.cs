@@ -49,12 +49,19 @@ public static class MainMenuModel
     /// <summary>设置窗口（F5）。</summary>
     public const string CommandSettings = "options.settings";
 
+    /// <summary>
+    /// 「最近的文件」子菜单。它的条目是运行时按存储列表生成的，所以这里只登记"这一项有子菜单"，
+    /// 具体内容由 <c>MainMenuBar</c> 在展开时填 —— 菜单建一次就冻住的话，
+    /// 用户打开十个包之后看到的还是空的。
+    /// </summary>
+    public const string CommandRecentFiles = "file.recent";
+
     public static IReadOnlyList<MenuModel> Create() =>
     [
         new("file", "MENUSTR_FILE",
         [
             new("file.open", "MENUSTR_OPEN", "Ctrl+O", Enabled: true, CommandId: CommandOpenArchive),
-            new("file.recent", "MENUSTR_RECENT"),
+            new("file.recent", "MENUSTR_RECENT", Enabled: true, CommandId: CommandRecentFiles),
             MenuItemModel.Separator(),
             new("file.new", "MENUSTR_CREATE_ARCHIVE", "Ctrl+N", Enabled: true, CommandId: CommandNewArchive),
             new("file.close", "MENUSTR_CLOSE_FILE", "F4", Enabled: true, CommandId: CommandCloseArchive),

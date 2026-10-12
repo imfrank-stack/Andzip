@@ -134,6 +134,16 @@ public static class SettingKeys
     /// <summary>同一次运行里记住用过的口令，不再对同一个包重复追问。</summary>
     public const string RememberPasswordsThisSession = "remember_passwords_this_session";
 
+    // ---------------------------------------------------------- 最近的文件
+
+    /// <summary>
+    /// 「文件 → 最近的文件」列表，<c>|</c> 分隔的完整路径，最新在前。
+    /// <para>不用 <see cref="AppSettings.GetStringList"/> 那套 <c>;</c> 分隔：
+    /// 分号在 Windows 文件名里合法，会把一条记录劈成两条。<c>|</c> 才是文件名里禁止出现的字符。
+    /// 读写都在 <see cref="RecentFiles"/> 里，这里只放键名。</para>
+    /// </summary>
+    public const string RecentFiles = "recent_files";
+
     /// <summary>认不出来回落到 <see cref="OutputFolderMode.LastUsed"/> —— 那是改动前的行为。</summary>
     public static OutputFolderMode ParseOutputFolderMode(string? stored)
         => stored?.Trim().ToLowerInvariant() == "fixed" ? OutputFolderMode.Fixed : OutputFolderMode.LastUsed;
