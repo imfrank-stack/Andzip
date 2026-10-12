@@ -69,6 +69,10 @@ if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
 
 # 4) Artifact + size report (NFR-8 / AC-14)
 $artifact = Join-Path $root "dist\Andzip-v$version-$Rid.exe"
+# Move-Item -Force does NOT replace an existing file on Windows (it only overrides the
+# read-only attribute), so re-publishing the same version died with "cannot create a file
+# when that file already exists" -- twice now. Remove first, then move.
+if (Test-Path $artifact) { Remove-Item $artifact -Force }
 Move-Item -Force (Join-Path $stage "Andzip.exe") $artifact
 Remove-Item $stage -Recurse -Force
 

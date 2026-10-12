@@ -288,6 +288,38 @@ public class UiFeatureWiringTests
 
     private static bool TextCarriesMarker(string text) => text.Contains("(&", StringComparison.Ordinal);
 
+    // ------------------------------------ 选择解压路径：浏览只走系统组件
+
+    /// <summary>
+    /// 0.11.0 之前右边那块是一棵手写的 <c>TreeView</c>，而且它<strong>根本展不开</strong> ——
+    /// <c>ItemTemplate</c> 用的是扁平模板，没把子集合绑成子项来源，所以连展开三角都不出现。
+    /// 参考软件那块是系统的 shell 树，嵌不进 Avalonia 窗口，所以浏览统一交给系统文件夹
+    /// 选择对话框。这条断言钉的是"别再手写一棵回来"。
+    /// </summary>
+    [AvaloniaFact]
+    public void ExtractPathDialogHasNoHandRolledFolderTree()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new ExtractPathWindow(lang, @"C:\somewhere\box.zip").Shown();
+
+        Assert.Empty(VisualQuery.Of<TreeView>(dialog));
+
+        var browse = lang.Get("TEXT_BTN_BROWSE").Replace("&", string.Empty, StringComparison.Ordinal);
+        Assert.Contains(VisualQuery.Of<Button>(dialog), button =>
+            Equals(button.Content?.ToString(), browse) && button.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void ExtractPathDialogStartsAtTheArchiveFolder()
+    {
+        // "当前位置"默认就是包所在目录 —— 大多数时候用户只想原地解开。
+        var dialog = new ExtractPathWindow(TestLang.Chinese(), @"C:\somewhere\box.zip").Shown();
+        var path = VisualQuery.Of<ComboBox>(dialog).Single();
+
+        Assert.True(path.IsEditable);
+        Assert.Equal(@"C:\somewhere", path.Text);
+    }
+
     // ---------------------------------- 新建压缩文件：默认包名与格式列表
 
     [AvaloniaFact]

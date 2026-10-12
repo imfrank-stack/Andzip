@@ -1,10 +1,9 @@
-using System.Collections.ObjectModel;
 using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Controls.Primitives;
 using Avalonia.Platform.Storage;
 
 namespace Andzip.App.Views;
@@ -18,16 +17,23 @@ public sealed record ExtractPathChoice(
 
 /// <summary>
 /// 「选择解压路径」对话框（FR-3.1 / 参考截图 04）：
-/// 目标路径（可编辑下拉）+ 文件夹选择；左侧快捷位置、右侧文件夹树；
+/// 目标路径（可编辑下拉）+ 浏览（系统文件夹选择对话框）；快捷位置一行；
 /// 「解压缩:」全部文件 / 选定的文件（无选中时禁用）+ 新建文件夹；
 /// 复选项：解压到同名文件夹（默认勾选）/ 解压后删除压缩文件 / 记住设置；确定 / 取消。
+/// <para>
+/// 这里<strong>没有</strong>自己画的目录树了。0.11.0 之前右边那块是一棵手写的
+/// <c>TreeView</c>，而且它根本展不开（<c>ItemTemplate</c> 用的是扁平模板，没把
+/// <c>FolderNode.Children</c> 绑成子项来源，连展开三角都不出现）。参考软件那块是系统
+/// 的 shell 树（<c>SysTreeView32</c>），带图标、能一路展开到任意深度 —— 那种控件嵌不进
+/// Avalonia 的窗口，所以浏览一律交给 <see cref="IStorageProvider.OpenFolderPickerAsync"/>：
+/// 它就是系统组件，比参考软件那个还新（现代常见项对话框）。
+/// </para>
 /// </summary>
 public sealed class ExtractPathWindow : Window
 {
     private readonly LangCatalog _lang;
     private readonly string _archivePath;
     private readonly ComboBox _pathCombo;
-    private readonly TreeView _tree;
     private readonly CheckBox _intoFolderCheck;
     private readonly CheckBox _deleteArchiveCheck;
     private readonly CheckBox _rememberCheck;
@@ -45,15 +51,15 @@ public sealed class ExtractPathWindow : Window
         _archivePath = archivePath;
 
         Title = lang.Label("TEXT_TITLE_EXTRACT_PATH");
-        Width = 760;
-        Height = 560;
-        MinWidth = 640;
-        MinHeight = 460;
+        Width = 700;
+        Height = 292;
+        MinWidth = 560;
+        MinHeight = 280;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = Brushes.White;
         FontSize = 14;
 
-        // ---- 目标路径（可编辑下拉 + 文件夹选择）----
+        // ---- 目标路径（可编辑下拉 + 系统文件夹选择）----
         var initialDestination = _remembered?.DestinationPath
                                  ?? Path.GetDirectoryName(Path.GetFullPath(archivePath))
                                  ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -69,48 +75,12 @@ public sealed class ExtractPathWindow : Window
         var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
         browseButton.Click += async (_, _) => await BrowseAsync();
 
-        // ---- 左侧快捷位置 + 右侧文件夹树 ----
-        var quickPanel = new StackPanel { Orientation = Orientation.Vertical, Spacing = 6, Width = 150 };
-        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_DESKTOP"), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)));
-        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_MY_DOCUMENTS"), Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)));
-        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_MY_PICTURES"), Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)));
-        quickPanel.Children.Add(QuickLocation(lang.Label("TEXT_QUICK_MY_COMPUTER"), Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\"));
-
-        _tree = new TreeView
-        {
-            ItemsSource = LoadRoots(),
-            ItemTemplate = new FuncDataTemplate<FolderNode>((node, _) => new TextBlock
-            {
-                Text = node!.DisplayName,
-                VerticalAlignment = VerticalAlignment.Center,
-            }),
-        };
-        _tree.SelectionChanged += (_, _) =>
-        {
-            if (_tree.SelectedItem is FolderNode node)
-            {
-                EnsureChildrenLoaded(node);
-                _pathCombo.Text = node.Path;
-            }
-        };
-
-        var treeBox = new Border
-        {
-            BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.Parse("#C8C8C8")),
-            Child = _tree,
-        };
-
-        var contentGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            RowDefinitions = new RowDefinitions("*"),
-        };
-        Grid.SetColumn(quickPanel, 0);
-        Grid.SetColumn(treeBox, 1);
-        quickPanel.Margin = new Thickness(0, 0, 10, 0);
-        contentGrid.Children.Add(quickPanel);
-        contentGrid.Children.Add(treeBox);
+        // ---- 快捷位置：横向一行，等宽 ----
+        var quickPanel = new UniformGrid { Rows = 1, Margin = new Thickness(0, 0, 0, 14) };
+        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_DESKTOP", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_MY_DOCUMENTS", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_MY_PICTURES", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
+        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_MY_COMPUTER", Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\");
 
         // ---- 解压缩: 全部 / 选定 + 新建文件夹 ----
         var allFiles = new RadioButton
@@ -126,7 +96,7 @@ public sealed class ExtractPathWindow : Window
             GroupName = "extract-scope",
         };
         var newFolderButton = new Button { Content = lang.Label("TEXT_BTN_NEW_FOLDER"), MinWidth = 120 };
-        newFolderButton.Click += async (_, _) => await CreateFolderAsync();
+        newFolderButton.Click += (_, _) => CreateFolder();
 
         var scopeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto") };
         var scopeLabel = new TextBlock
@@ -186,10 +156,10 @@ public sealed class ExtractPathWindow : Window
         var layout = new Grid
         {
             Margin = new Thickness(16),
-            RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto"),
         };
         AddRow(layout, 0, BuildFieldRow(lang.Label("TEXT_LABEL_DEST_PATH"), _pathCombo, browseButton));
-        AddRow(layout, 1, contentGrid);
+        AddRow(layout, 1, quickPanel);
         AddRow(layout, 2, scopeRow);
         AddRow(layout, 3, new StackPanel
         {
@@ -231,119 +201,57 @@ public sealed class ExtractPathWindow : Window
         return row;
     }
 
-    private Button QuickLocation(string text, string path)
+    /// <summary>
+    /// 一个快捷位置按钮。路径为空（比如这台机器没有"我的图片"重定向到别处）就不加这个按钮 ——
+    /// 摆一个点了什么也不会发生的按钮，比少一个按钮更糟。
+    /// </summary>
+    private void AddQuickLocation(UniformGrid panel, LangCatalog lang, string textKey, string path)
     {
-        var button = new Button
-        {
-            Content = text,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-        };
-        button.Click += (_, _) =>
-        {
-            if (!string.IsNullOrEmpty(path))
-            {
-                _pathCombo.Text = path;
-                SelectPathInTree(path);
-            }
-        };
-        return button;
-    }
-
-    private void SelectPathInTree(string path)
-    {
-        foreach (var node in Flatten(_tree.ItemsSource as IEnumerable<FolderNode> ?? []))
-        {
-            if (string.Equals(node.Path.TrimEnd('\\'), path.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
-            {
-                _tree.SelectedItem = node;
-                return;
-            }
-        }
-    }
-
-    private static IEnumerable<FolderNode> Flatten(IEnumerable<FolderNode> nodes)
-    {
-        foreach (var node in nodes)
-        {
-            yield return node;
-            foreach (var child in Flatten(node.Children))
-            {
-                yield return child;
-            }
-        }
-    }
-
-    private ObservableCollection<FolderNode> LoadRoots()
-    {
-        var roots = new ObservableCollection<FolderNode>();
-        foreach (var drive in DriveInfo.GetDrives())
-        {
-            try
-            {
-                if (!drive.IsReady)
-                {
-                    continue;
-                }
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-
-            roots.Add(new FolderNode(drive.RootDirectory.FullName, drive.Name));
-        }
-
-        return roots;
-    }
-
-    private static void EnsureChildrenLoaded(FolderNode node)
-    {
-        if (node.Loaded)
+        if (string.IsNullOrEmpty(path))
         {
             return;
         }
 
-        node.Loaded = true;
-        try
+        var button = new Button
         {
-            foreach (var directory in Directory.EnumerateDirectories(node.Path))
-            {
-                var name = Path.GetFileName(directory);
-                if (string.IsNullOrEmpty(name))
-                {
-                    continue;
-                }
-
-                node.Children.Add(new FolderNode(directory, name));
-            }
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (IOException)
-        {
-        }
+            Content = lang.Label(textKey),
+            Margin = new Thickness(0, 0, 8, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+        };
+        button.Click += (_, _) => _pathCombo.Text = path;
+        panel.Children.Add(button);
     }
 
+    /// <summary>
+    /// 打开<strong>系统</strong>的文件夹选择对话框。给它 <c>SuggestedStartLocation</c>
+    /// 是当前目标路径 —— 这样"换个子目录"是在原地往下走一层，而不是从我的文档重新开始翻。
+    /// </summary>
     private async Task BrowseAsync()
     {
+        var current = _pathCombo.Text?.Trim();
+        IStorageFolder? startAt = null;
+        if (!string.IsNullOrEmpty(current) && Directory.Exists(current))
+        {
+            startAt = await StorageProvider.TryGetFolderFromPathAsync(current);
+        }
+
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = _lang.Label("TEXT_LABEL_DEST_PATH"),
             AllowMultiple = false,
+            SuggestedStartLocation = startAt,
         });
 
         var path = folders.FirstOrDefault()?.TryGetLocalPath();
         if (!string.IsNullOrEmpty(path))
         {
             _pathCombo.Text = path;
-            SelectPathInTree(path);
         }
     }
 
     /// <summary>在当前目标路径下创建「新建文件夹」（重名自动加序号），并把目标路径切换到新文件夹。</summary>
-    private async Task CreateFolderAsync()
+    private void CreateFolder()
     {
         var parent = _pathCombo.Text?.Trim();
         if (string.IsNullOrEmpty(parent))
@@ -374,8 +282,6 @@ public sealed class ExtractPathWindow : Window
         {
             ShowHint(ex.Message);
         }
-
-        await Task.CompletedTask;
     }
 
     private void Confirm()
@@ -411,17 +317,5 @@ public sealed class ExtractPathWindow : Window
     {
         _hint.Text = text;
         _hint.IsVisible = true;
-    }
-
-    /// <summary>文件夹树节点（展开时按需加载子目录）。</summary>
-    private sealed class FolderNode(string path, string displayName)
-    {
-        public string Path { get; } = path;
-
-        public string DisplayName { get; } = displayName;
-
-        public ObservableCollection<FolderNode> Children { get; } = [];
-
-        public bool Loaded { get; set; }
     }
 }
