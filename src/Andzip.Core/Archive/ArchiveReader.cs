@@ -71,13 +71,25 @@ public static class ArchiveReader
             throw new FileNotFoundException("Archive to open was not found.", fullPath);
         }
 
-        return NativeEngine.Run("read archive", () =>
+        // 头加密的 7z 在不给口令时，引擎只能报成"不是压缩包"；不改判的话界面会说
+        // 「该格式不支持」，用户连口令框都等不到。详见 EncryptedHeaderProbe。
+        try
         {
-            // 7-Zip 风格的分卷引擎自己处理；WinZip 的 .z01 需要先拼成单文件。
-            using var single = SingleFileArchive.Open(fullPath, cancellationToken);
-            using var reader = OpenNative(single.FilePath, password);
-            return BuildListing(reader, fullPath);
-        }, badFormatMeansUnsupported: true);
+            return NativeEngine.Run("read archive", () =>
+            {
+                // 7-Zip 风格的分卷引擎自己处理；WinZip 的 .z01 需要先拼成单文件。
+                using var single = SingleFileArchive.Open(fullPath, cancellationToken);
+                using var reader = OpenNative(single.FilePath, password);
+                return BuildListing(reader, fullPath);
+            }, badFormatMeansUnsupported: true);
+        }
+        catch (Exception ex) when (EncryptedHeaderProbe.LooksLikeMissingPassword(ex, fullPath))
+        {
+            throw new ArchiveFailureException(
+                ArchiveFailureReason.Password,
+                "这个包的内容是加密的，需要口令。",
+                ex);
+        }
     }
 
     /// <summary>

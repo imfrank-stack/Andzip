@@ -58,6 +58,11 @@ public static class ArchiveExtractor
     /// <summary>
     /// 是否需要密码。头加密的 7z 在没密码时连打开都会失败，这种“失败即需要密码”也返回 true，
     /// 因此比旧的“能打开才看得到位位”更准。任何其它失败都返回 false（交给正式解压报错）。
+    /// <para>
+    /// 注意引擎对"头加密且没给口令"报的是 <c>BAD_FORMAT</c> 而不是 <c>PASSWORD</c>
+    /// （7-Zip 的处理器只回一句"这不是我的格式"），所以那一类要靠签名改判 ——
+    /// 不这么判的话解压路径连口令框都不会弹，见 <see cref="EncryptedHeaderProbe"/>。
+    /// </para>
     /// </summary>
     public static bool IsPasswordProtected(string archivePath)
     {
@@ -73,6 +78,12 @@ public static class ArchiveExtractor
             return reader.IsEncrypted || reader.Entries.Any(entry => entry.IsEncrypted);
         }
         catch (Andzip.Native.AndzipException ex) when (ex.Result == Andzip.Native.AzResult.ErrorPassword)
+        {
+            return true;
+        }
+        catch (Andzip.Native.AndzipException ex)
+            when (ex.Result is Andzip.Native.AzResult.ErrorBadFormat or Andzip.Native.AzResult.ErrorUnsupported
+                  && EncryptedHeaderProbe.HasSevenZipSignature(archivePath))
         {
             return true;
         }
