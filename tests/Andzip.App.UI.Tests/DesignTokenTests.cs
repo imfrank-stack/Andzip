@@ -99,6 +99,52 @@ public class DesignTokenTests
 
     private static readonly Color BrandColor = Color.FromRgb(0x0F, 0x6C, 0xBD);
 
+    /// <summary>
+    /// 每个 <c>new ProgressWindow(…)</c> 之后必须有一句真的把它摆上屏幕。
+    /// <para>1.8.6 修的两条是同一个形状：<c>TestArchiveAsync</c> 与修复那条都 new 了进度窗口、
+    /// 把 sink 交给后台、跑完再 <c>Close()</c> —— 可那个窗口从头到尾没上过屏。
+    /// 于是用户看到的是"点了没反应，过几秒突然弹个结果框"，正是这次的反馈。</para>
+    /// <para>行为测试拦不住它：<c>ProgressWindowThreadingTests</c> 自己 new 自己 <c>.Shown()</c>，
+    /// 量的是那个机制，不是这条命令。所以这里扫源码 —— 规则只写在文档里就会失守一次（版本号那条）。</para>
+    /// </summary>
+    [Fact]
+    public void EveryProgressWindowIsActuallyShown()
+    {
+        var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");
+        var offenders = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            {
+                continue;
+            }
+
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("new ProgressWindow(", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // 局部变量一律叫 progress，所以往后找一句"被显示出来"就够，不必解析控制流。
+                var shown = lines.Skip(i).Take(24).Any(l =>
+                    l.Contains(".ShowDialog(", StringComparison.Ordinal) || l.Contains(".Show()", StringComparison.Ordinal));
+
+                if (!shown)
+                {
+                    offenders.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {lines[i].Trim()}");
+                }
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "有进度窗口 new 出来却没人把它摆上屏幕（用户只会看到「点了没反应」）：\n    "
+            + string.Join("\n    ", offenders));
+    }
+
     private static List<string> OffendingLines(params string[] needles)
     {
         var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");

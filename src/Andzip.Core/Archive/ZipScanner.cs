@@ -68,6 +68,18 @@ public sealed record ZipMap(
     /// <summary>中央目录声称 N 条、实际读出 M 条，差值就是被截掉/被覆盖的那部分。</summary>
     public int MissingCentralEntries { get; init; }
 
+    /// <summary>
+    /// 结构上有没有损伤。<strong>只看骨架，不看数据</strong>：
+    /// 判据是"这些数对不上"（找不到结束记录 / 声称的成员数比读出来的多 / 一条成员都认不出来），
+    /// 不是"说明里有字" —— <see cref="Notes"/> 里有一类是情报不是病（自解压前导、EOCD 之后的追加字节），
+    /// 拿它当损伤会把好包说成坏包。
+    /// <para>反过来也不成立：结构完好而某个成员 CRC 错的包，这里仍是 <c>false</c> ——
+    /// 那要真把数据解一遍才知道，是「测试」那个按钮的活，不是扫描的。</para>
+    /// </summary>
+    public bool Damaged => EocdOffset < 0
+        || MissingCentralEntries > 0
+        || (CentralDirectory.Count == 0 && LocalHeaders.Count == 0);
+
     /// <summary>按局部头的文件位置查（已经算上 SFX 前导）。</summary>
     public ZipLocalHeader? LocalAt(long headerOffset)
         => LocalHeaders.FirstOrDefault(l => l.HeaderOffset == headerOffset);

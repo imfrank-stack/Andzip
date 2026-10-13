@@ -32,7 +32,11 @@ public sealed class RepairWindow : Window
     /// <summary>输出文件路径。</summary>
     public string OutputPath { get; private set; } = string.Empty;
 
-    public RepairWindow(LangCatalog lang, string archivePath, string suggestedOutput)
+    /// <param name="findings">结构扫描发现的问题（原样转达，不替他概括）。null / 空表示没有：
+    /// 那种包压根不该走到这个对话框（调用方先问一句"没问题，要吗？"）。</param>
+    public RepairWindow(
+        LangCatalog lang, string archivePath, string suggestedOutput,
+        IReadOnlyList<string>? findings = null)
     {
         ArgumentNullException.ThrowIfNull(lang);
         _lang = lang;
@@ -120,6 +124,13 @@ public sealed class RepairWindow : Window
             Margin = new Thickness(0, 0, 0, 12),
         });
 
+        // 扫到了什么，先摊在模式选择上方：用户选模式的依据是"坏在哪"，
+        // 不是三种修复各是什么 —— 后者下面的三行提示已经给了。
+        foreach (var line in FindingsLines(lang, findings))
+        {
+            panel.Children.Add(line);
+        }
+
         foreach (var radio in _modes)
         {
             panel.Children.Add(radio);
@@ -171,6 +182,46 @@ public sealed class RepairWindow : Window
         Margin = new Thickness(0, 2, 0, 4),
         GroupName = "repairmode",
     };
+
+    /// <summary>
+    /// 扫描结论 → 界面行。名单截到 6 条：这个对话框是让人挑模式的，
+    /// 一个几万成员的坏包会把窗口撑到屏幕外，那时既选不了也读不完（修复结果那侧同理，截到 12）。
+    /// </summary>
+    private static IEnumerable<Control> FindingsLines(LangCatalog lang, IReadOnlyList<string>? findings)
+    {
+        if (findings is not { Count: > 0 })
+        {
+            yield break;
+        }
+
+        yield return new TextBlock
+        {
+            Text = lang.Label("TEXT_REPAIR_FINDINGS"),
+            Foreground = Design.Ink.Secondary,
+            FontSize = Design.Type.Caption,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+
+        foreach (var note in findings.Take(6))
+        {
+            yield return new TextBlock
+            {
+                Text = "· " + note,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 2),
+            };
+        }
+
+        if (findings.Count > 6)
+        {
+            yield return new TextBlock
+            {
+                Text = $"…（还有 {findings.Count - 6} 条）",
+                Foreground = Design.Ink.Secondary,
+                FontSize = Design.Type.Caption,
+            };
+        }
+    }
 
     private void Confirm()
     {

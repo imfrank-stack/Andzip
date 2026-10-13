@@ -18,6 +18,29 @@ namespace Andzip.App.UiTests;
 [Collection("界面状态")]
 public class CardLanguageTests
 {
+    /// <summary>
+    /// 提示框里的长文案必须<strong>折行</strong>，不能被窗口右边界裁掉。
+    /// <para>1.8.6 真机截图抓到的：修复那条"这个包的骨架是完整的：…都对得上，没" —— 后面半句
+    /// 在屏幕外。文案设了 <c>TextWrapping.Wrap</c> 却仍不折行，是因为它当时装在横向
+    /// <c>StackPanel</c> 里：那个面板给子元素的是无限宽，Wrap 于是永远不触发。
+    /// 一条说不完的错误信息被裁成半句，等于没有那条信息。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ALongMessageWrapsInsteadOfRunningOffTheEdge()
+    {
+        var lang = TestLang.Chinese();
+        var message = lang.Label("TEXT_REPAIR_HEALTHY");
+        var window = new MessageWindow(lang, "修复压缩包", message).Shown();
+
+        var text = VisualQuery.Of<TextBlock>(window).Single(t => Equals(t.Text, message));
+
+        Assert.True(text.Bounds.Width < window.Bounds.Width,
+            $"正文量到的宽度是 {text.Bounds.Width}，窗口才 {window.Bounds.Width} —— 说明它按无限宽测量，"
+            + "Wrap 根本没生效，超出部分在屏幕外");
+        Assert.True(text.Bounds.Height > Design.Type.BodyLineHeight * 1.5,
+            $"正文只占 {text.Bounds.Height} 高，是一行没折的长句（一行读不完就被裁掉）");
+    }
+
     [AvaloniaFact]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]   // 安装器也是这张清单里的一员，而它只在 Windows 上存在
     public void EveryDialogWrapsItsContentInAnElevatedCard()

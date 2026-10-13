@@ -271,6 +271,78 @@ public class ZipScannerTests : IDisposable
 
     private static void Write(Stream stream, ReadOnlySpan<byte> bytes) => stream.Write(bytes);
 
+    // ------------------------------------------------------- "有没有损伤"这个判断
+    //
+    // 它是修复入口的依据：判成"有问题"就去问用户选哪种模式，判成"没问题"就一句话收工。
+    // 所以两边都要钉住 —— 把好包说成坏包（SFX、ZIP64 是最容易被误判的两类）
+    // 与把坏包说成好包一样糟。
+
+    [Fact]
+    public void AWholeArchiveIsNotReportedAsDamaged()
+    {
+        var zip = BuildZip(
+            ("readme.txt", "hello"u8.ToArray()),
+            ("docs/说明.md", "中文内容"u8.ToArray()));
+
+        Assert.False(ZipScanner.Inspect(zip).Damaged);
+    }
+
+    [Fact]
+    public void AnSfxPrefixIsInformationNotDamage()
+    {
+        var zip = BuildZip(("payload.txt", "inside"u8.ToArray()));
+        var sfx = PathOf("sfx-info.exe");
+        using (var write = File.Create(sfx))
+        {
+            write.Write(Noise(5, 4096));
+            write.Write(File.ReadAllBytes(zip));
+        }
+
+        var map = ZipScanner.Inspect(sfx);
+
+        // 先确认扫描器真的把前导当情报报了一句 —— 否则这条测的是"没读到东西"。
+        Assert.Contains(map.Notes, n => n.Contains("自解压前导"));
+        Assert.False(map.Damaged, "前导只是偏移换算的说明，不是结构损伤：拿它去问用户修不修就是误报");
+    }
+
+    [Fact]
+    public void AHandBuiltZip64IsNotReportedAsDamaged()
+    {
+        var zip = PathOf("z64-health.zip");
+        File.WriteAllBytes(zip, BuildZip64Fixture());
+
+        Assert.False(ZipScanner.Inspect(zip).Damaged);
+    }
+
+    [Fact]
+    public void MissingEndRecordCountsAsDamage()
+    {
+        var zip = BuildZip(("first.bin", Noise(2, 200_000)), ("second.bin", Noise(3, 200_000)));
+        var bytes = File.ReadAllBytes(zip);
+        var cut = PathOf("cut-damaged.zip");
+        File.WriteAllBytes(cut, bytes.AsSpan(0, bytes.Length * 3 / 5));
+
+        Assert.True(ZipScanner.Inspect(cut).Damaged);
+    }
+
+    [Fact]
+    public void WipedCentralDirectoryCountsAsDamage()
+    {
+        var zip = BuildZip(("a.txt", "aaa"u8.ToArray()), ("b.txt", "bbb"u8.ToArray()));
+        var map = ZipScanner.Inspect(zip);
+
+        var bytes = File.ReadAllBytes(zip);
+        Array.Clear(bytes, (int)map.CentralDirectoryOffset, (int)map.CentralDirectoryLength);
+        var wiped = PathOf("wiped-damaged.zip");
+        File.WriteAllBytes(wiped, bytes);
+
+        var rescan = ZipScanner.Inspect(wiped);
+
+        // 成员数据一个没丢、局部头全在，但声称的条数与实际读出的对不上 —— 这正是模式一的用武之地。
+        Assert.Equal(2, rescan.LocalHeaders.Count);
+        Assert.True(rescan.Damaged);
+    }
+
     [Fact]
     public void MissingFileIsNotFoundNotScanned()
     {

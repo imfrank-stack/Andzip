@@ -46,14 +46,18 @@ public sealed class MessageWindow : Window
             Foreground = Design.Ink.Primary,
             LineHeight = Design.Type.BodyLineHeight,
             VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(Design.Space.X3, 0, 0, 0),
         };
 
-        var body = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = Design.Space.X3,
-            Children = { Badge(dangerous), text },
-        };
+        // 一列 Auto（图标）+ 一列 *（正文）。用横向 StackPanel 的话，它给子元素的是
+        // <strong>无限宽</strong>，于是 TextWrapping.Wrap 永远不触发：长文案不折行，
+        // 直接被窗口右边界裁掉（1.8.6 真机截图里"…都对得上，没"就是这么断的）。
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        var badge = Badge(dangerous);
+        Grid.SetColumn(badge, 0);
+        Grid.SetColumn(text, 1);
+        body.Children.Add(badge);
+        body.Children.Add(text);
 
         var okButton = new Button
         {

@@ -824,6 +824,12 @@ public sealed class MainWindow : Window
         string titleKey;
         string body;
         var sink = progress.CreateSink();
+
+        // 进度窗口要<strong>先摆出来</strong>再开测：整个包读一遍 CRC 在照片包上是好几秒，
+        // 而这几秒里用户唯一的凭据就是那个在动的条。少了这一句，界面就是"点了没反应，
+        // 然后突然冒出一个结果框"。
+        _ = progress.ShowDialog(this);
+
         try
         {
             await Task.Run(() => ArchiveTester.Test(archivePath, password, sink, cts.Token), cts.Token);
@@ -856,8 +862,9 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// 修复压缩包（工具菜单）。先问模式，再跑，再把「收回 / 跳过 / 说明」三件事原样摊开 ——
-    /// 修复是个允许失败的操作，报喜不报忧比不修更糟。
+    /// 修复压缩包（工具菜单）。<strong>先量，再问</strong>：进度窗口里跑一遍结构扫描，
+    /// 骨架对得上就直接说"没发现问题"，对不上才把三种模式摆出来 ——
+    /// 好包不该逼用户去猜该选哪个模式（猜错的代价是白等一次全量重压）。
     /// </summary>
     private async void RepairArchiveAsync()
     {
@@ -867,7 +874,30 @@ public sealed class MainWindow : Window
             return;
         }
 
-        var dialog = new RepairWindow(_lang, archivePath, ZipRepairer.SuggestOutputPath(archivePath));
+        // 修复做的是 ZIP 骨架的字节级重建（EOCD / 中央目录 / 局部头），别的容器没有这套结构。
+        // 先说清楚，而不是弹一个注定失败的对话框。
+        if (!Path.GetExtension(archivePath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_REPAIR"), _lang.Get("TEXT_REPAIR_ZIP_ONLY"))
+                .ShowDialog(this);
+            return;
+        }
+
+        var findings = await InspectStructureAsync(archivePath);
+        if (findings is null)
+        {
+            return;
+        }
+
+        if (findings.Count == 0)
+        {
+            await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_REPAIR"), _lang.Get("TEXT_REPAIR_HEALTHY"))
+                .ShowDialog(this);
+            return;
+        }
+
+        var dialog = new RepairWindow(
+            _lang, archivePath, ZipRepairer.SuggestOutputPath(archivePath), findings);
         if (await dialog.ShowDialog<bool>(this) != true)
         {
             return;
@@ -883,6 +913,11 @@ public sealed class MainWindow : Window
 
         ZipRepairResult result;
         var repairSink = progress.CreateSink();
+
+        // 同「测试」那一条：进度窗口必须先摆出来。修复是这里最慢的一步（模式三要逐成员解压重压），
+        // 之前它压根没显示过，用户看到的只有"点了菜单 → 卡几秒 → 弹结果"。
+        _ = progress.ShowDialog(this);
+
         try
         {
             result = await Task.Run(
@@ -908,6 +943,51 @@ public sealed class MainWindow : Window
 
         // 故意不自动打开修好的包：用户先要看的是"救回了什么、丢了什么"，
         // 而不是被领进一个看起来完好、其实缺成员的窗口。
+    }
+
+    /// <summary>
+    /// 在进度窗口里跑一遍 ZIP 结构扫描，返回"扫到的问题"。
+    /// <para>返回 <strong>空表</strong> = 骨架对得上；返回 <c>null</c> = 没测成（用户取消 / 文件读不了），
+    /// 那时已经报过一次，调用方直接收工，不要再追问模式。</para>
+    /// <para>扫描本身不报进度（它是分块读头，秒级），所以进度条是不确定态；
+    /// 它在这里的作用是"这件事正在发生"的凭据，别让用户以为点没反应。</para>
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> InspectStructureAsync(string archivePath)
+    {
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_INSPECTING",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+
+        _ = progress.ShowDialog(this);
+
+        ZipMap map;
+        try
+        {
+            map = await Task.Run(() => ZipScanner.Inspect(archivePath), cts.Token);
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+            // 取消不算故障，不弹框；其余（文件被占用、路径没了）原样转达。
+            if (ex is not OperationCanceledException)
+            {
+                await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_ERROR"), ex.Message).ShowDialog(this);
+            }
+
+            return null;
+        }
+
+        progress.Close();
+
+        // 扫描那段字节读是不看取消标志的（它没有可中断的点），所以这里补一次：
+        // 用户按了取消，就不能接着往下问"要修哪种"。
+        if (cts.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        return map.Damaged ? map.Notes : [];
     }
 
     /// <summary>修复结果的文案。名单截到 12 条 —— MessageWindow 按内容长高，
