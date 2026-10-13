@@ -138,7 +138,7 @@ public class InstallerTests : IDisposable
         Assert.Contains(lang.Label("TEXT_INSTALLER_CONTEXT"), titles);
 
         var uninstall = VisualQuery.Of<Button>(window)
-            .Single(b => Equals(b.Content?.ToString(), lang.Label("TEXT_BTN_UNINSTALL")));
+            .Single(b => Equals(VisualQuery.TextOf(b), lang.Label("TEXT_BTN_UNINSTALL")));
         var installedOnThisMachine = File.Exists(new InstallationService(lang).CurrentPlan().ExecutablePath);
         Assert.Equal(installedOnThisMachine, uninstall.IsVisible);
     }
@@ -247,7 +247,7 @@ public class InstallerTests : IDisposable
     }
 
     private static Button Button(InstallerWindow window, LangCatalog lang, string labelKey)
-        => VisualQuery.Of<Button>(window).Single(b => Equals(b.Content?.ToString(), lang.Label(labelKey)));
+        => VisualQuery.Of<Button>(window).Single(b => Equals(VisualQuery.TextOf(b), lang.Label(labelKey)));
 
     /// <summary>
     /// 从界面上卸完，那一句"这台机器上已经装过"必须跟着改口。

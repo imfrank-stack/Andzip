@@ -43,11 +43,16 @@ public static class P {
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
   [StructLayout(LayoutKind.Sequential)] public struct R { public int L, T, Rt, B; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
+  public const uint LeftDown = 0x0002, LeftUp = 0x0004;
   public static void Click(int x, int y) {
     SetCursorPos(x, y);
-    mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
-    mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero);
+    mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
   }
+  // Held press: some states only exist while the button is down (a nav row's :pressed
+  // shade), and a click is too fast to screenshot.
+  public static void Down(int x, int y) { SetCursorPos(x, y); mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); }
+  public static void Up(int x, int y) { SetCursorPos(x, y); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero); }
 }
 '@
 
@@ -70,21 +75,22 @@ function Rect {
     return $r
 }
 
+function Save-Rect([int]$x, [int]$y, [int]$w, [int]$h, [string]$path) {
+    if ($w -le 1 -or $h -le 1) { Write-Host "  skip degenerate $path"; return }
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    $g.Dispose(); $bmp.Dispose()
+    Write-Host ("  shot {0} ({1} x {2})" -f $path, $w, $h)
+}
+
 function Shot([string]$name) {
     [void][P]::SetForegroundWindow($process.MainWindowHandle)
     [void][P]::BringWindowToTop($process.MainWindowHandle)
     Start-Sleep -Milliseconds 600
     $r = Rect
-    $w = $r.Rt - $r.L
-    $h = $r.B - $r.T
-    if ($w -le 1 -or $h -le 1) { Write-Host "  skip degenerate $name"; return }
-    $bmp = New-Object System.Drawing.Bitmap($w, $h)
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.CopyFromScreen($r.L, $r.T, 0, 0, (New-Object System.Drawing.Size($w, $h)))
-    $path = Join-Path $OutDir ("$name.png")
-    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-    $g.Dispose(); $bmp.Dispose()
-    Write-Host ("  shot {0} ({1} x {2})" -f $path, $w, $h)
+    Save-Rect $r.L $r.T ($r.Rt - $r.L) ($r.B - $r.T) (Join-Path $OutDir "$name.png")
 }
 
 # The window appears a moment after the process, and /selftest never has one at all,
@@ -107,6 +113,20 @@ foreach ($step in $Steps) {
     $rest = if ($step.Contains(':')) { $step.Split(':', 2)[1] } else { '' }
     switch ($kind) {
         'shot' { Shot $rest }
+        # A dialog centered on its owner can stick out above the owner's rect, so the
+        # owner-rectangle shot misses it. fullshot grabs the whole screen.
+        'fullshot' {
+            [void][P]::SetForegroundWindow($process.MainWindowHandle)
+            Start-Sleep -Milliseconds 500
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            Save-Rect $b.X $b.Y $b.Width $b.Height (Join-Path $OutDir "$rest.png")
+        }
+        # grab: no SetForegroundWindow, no sleep -- raising the owner window can cancel
+        # a held mouse button, which is exactly the state a 'press' step is trying to catch.
+        'grab' {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            Save-Rect $b.X $b.Y $b.Width $b.Height (Join-Path $OutDir "$rest.png")
+        }
         'wait' { Start-Sleep -Milliseconds ([int]$rest) }
         'click' {
             $xy = $rest.Split(',')
@@ -114,6 +134,22 @@ foreach ($step in $Steps) {
             [P]::Click($r.L + [int]$xy[0], $r.T + [int]$xy[1])
             Write-Host ("  click +{0},+{1}" -f $xy[0], $xy[1])
             Start-Sleep -Milliseconds 500
+        }
+        # press / release: the states that only exist while the button is held down
+        # (a nav row's :pressed shade) cannot be screenshotted with a single click.
+        'press' {
+            $xy = $rest.Split(',')
+            $script:lastX = [int]$xy[0]
+            $script:lastY = [int]$xy[1]
+            $r = Rect
+            [P]::Down($r.L + $script:lastX, $r.T + $script:lastY)
+            Write-Host ("  press +{0},+{1}" -f $xy[0], $xy[1])
+        }
+        'release' {
+            $r = Rect
+            [P]::Up($r.L + $script:lastX, $r.T + $script:lastY)
+            Write-Host "  release"
+            Start-Sleep -Milliseconds 400
         }
         'key' { [System.Windows.Forms.SendKeys]::SendWait($rest); Start-Sleep -Milliseconds 500 }
         default { throw "unknown step '$step' (expected shot:/wait:/click:/key:)" }

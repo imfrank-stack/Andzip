@@ -105,6 +105,10 @@ internal static class Design
         public static IBrush Base => Active.SurfaceBase;
         public static IBrush Muted => Active.SurfaceMuted;
         public static IBrush Sunken => Active.SurfaceSunken;
+
+        /// <summary>按下那一档（比悬停再沉一点）。只给"自己画状态"的控件用，
+        /// 别让 SimpleTheme 的 <c>:pressed</c> 替我们决定 —— 它给的是深灰块。</summary>
+        public static IBrush Pressed => Active.SurfacePressed;
     }
 
     internal static class Line
@@ -280,6 +284,11 @@ internal sealed class Palette
     public required IBrush SurfaceMuted { get; init; }
     public required IBrush SurfaceSunken { get; init; }
 
+    /// <summary>按下去那一档：比 <see cref="SurfaceMuted"/> 再沉一点。
+    /// 设置页导航项用它 —— 那一处不能让 SimpleTheme 自己画 <c>:pressed</c>，
+    /// 它给的是 <c>#686868</c> 那种深灰块，压在浅底上像按坏了（1.8.7，用户截图）。</summary>
+    public required IBrush SurfacePressed { get; init; }
+
     public required IBrush LineHair { get; init; }
     public required IBrush LineSubtle { get; init; }
     public required IBrush LineStrong { get; init; }
@@ -324,6 +333,7 @@ internal sealed class Palette
         SurfaceBase = Brush(0xFF, 0xFF, 0xFF),
         SurfaceMuted = Brush(0xF6, 0xF8, 0xFA),
         SurfaceSunken = Brush(0xFA, 0xFB, 0xFC),
+        SurfacePressed = Brush(0xE9, 0xED, 0xF1),
 
         LineHair = Brush(0xF0, 0xF2, 0xF5),
         LineSubtle = Brush(0xE6, 0xE9, 0xEC),
@@ -380,6 +390,7 @@ internal sealed class Palette
         SurfaceBase = Brush(0x1F, 0x23, 0x28),
         SurfaceMuted = Brush(0x26, 0x2B, 0x31),
         SurfaceSunken = Brush(0x1A, 0x1E, 0x22),
+        SurfacePressed = Brush(0x30, 0x37, 0x3F),
 
         LineHair = Brush(0x27, 0x2C, 0x32),
         LineSubtle = Brush(0x2E, 0x34, 0x3A),

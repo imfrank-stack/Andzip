@@ -146,7 +146,7 @@ public class RepairFlowTests : IDisposable
     private static void ClickButton(Window dialog, string label)
     {
         var owner = dialog.Owner as Window;   // OwnedWindows 在 Window 上，Owner 的静态类型是 WindowBase
-        var button = VisualQuery.Of<Button>(dialog).SingleOrDefault(b => Equals(b.Content?.ToString(), label));
+        var button = VisualQuery.Of<Button>(dialog).SingleOrDefault(b => Equals(VisualQuery.TextOf(b), label));
         Assert.NotNull(button);
 
         Clicker.Invoke(button!);

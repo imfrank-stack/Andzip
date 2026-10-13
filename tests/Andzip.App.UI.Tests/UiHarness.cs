@@ -89,6 +89,10 @@ namespace Andzip.App.UiTests
         public static IReadOnlyList<string> VisibleTexts(Control root)
             => [.. Descendants(root).Select(ContentText).Where(text => !string.IsNullOrEmpty(text)).Select(text => text!)];
 
+        /// <summary>这个控件对用户写着什么。测试按文案找控件时用它，不要自己 <c>Content.ToString()</c>
+        /// —— 有的按钮把视觉画在 Content 里的一颗 Border 上（设置页导航），那样读回来是类型名。</summary>
+        public static string? TextOf(Control control) => ContentText(control);
+
         private static IEnumerable<Control> Descendants(Control control)
         {
             foreach (var child in control.GetLogicalChildren().OfType<Control>())
@@ -109,7 +113,15 @@ namespace Andzip.App.UiTests
             MenuItem item => item.Header?.ToString(),
             RadioButton radio => radio.Content?.ToString(),
             CheckBox check => check.Content?.ToString(),
-            Button button => button.Content?.ToString(),
+            Button button => button.Content switch
+            {
+                string text => text,
+                // 视觉画在 Content 里那颗自绘 Border 上的按钮（设置页导航、开关），
+                // 直接 ToString 会读回 "Avalonia.Controls.Border" —— 那不是用户看见的东西。
+                Control content => Descendants(content).OfType<TextBlock>()
+                    .Select(t => t.Text).FirstOrDefault(t => !string.IsNullOrEmpty(t)),
+                _ => button.Content?.ToString(),
+            },
             TextBlock text => text.Text,
             _ => null,
         };

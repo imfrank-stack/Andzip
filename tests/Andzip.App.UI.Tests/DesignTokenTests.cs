@@ -90,7 +90,7 @@ public class DesignTokenTests
         var lang = TestLang.Chinese();
         var dialog = new MessageWindow(lang, "标题", "正文", "TEXT_BTN_OK", "TEXT_BTN_CANCEL").Shown();
 
-        var ok = VisualQuery.Of<Button>(dialog).Single(b => Equals(b.Content?.ToString(), lang.Label("TEXT_BTN_OK")));
+        var ok = VisualQuery.Of<Button>(dialog).Single(b => Equals(VisualQuery.TextOf(b), lang.Label("TEXT_BTN_OK")));
         var at = (ok.TranslatePoint(new Point(4, 4), dialog) ?? default);
 
         Assert.True(Same(Sample(dialog, at), BrandColor),

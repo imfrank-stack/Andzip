@@ -183,7 +183,7 @@ public class ShellServiceTests
         UiWait.Pump(100);
 
         var wanted = lang.Label(buttonKey);
-        var button = VisualQuery.Of<Button>(dialog).Single(b => b.Content?.ToString() == wanted);
+        var button = VisualQuery.Of<Button>(dialog).Single(b => VisualQuery.TextOf(b) == wanted);
         Clicker.Invoke(button);
 
         return UiWait.Until(answer, $"确认框按「{wanted}」");

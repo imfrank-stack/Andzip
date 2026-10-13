@@ -108,7 +108,7 @@ public class ProgressWindowThreadingTests : IDisposable
         Assert.Equal(lang.Get("TEXT_STATUS_TESTING"), window.Title);
 
         var cancel = VisualQuery.Of<Button>(window).Single(b =>
-            Equals(b.Content?.ToString(), lang.Get("TEXT_BTN_CANCEL")));
+            Equals(VisualQuery.TextOf(b), lang.Get("TEXT_BTN_CANCEL")));
         Clicker.Invoke(cancel);
 
         Assert.True(cts.IsCancellationRequested);

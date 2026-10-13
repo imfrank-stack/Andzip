@@ -297,5 +297,5 @@ public class CardLanguageTests
     }
 
     private static Button FindButton(Window window, string text)
-        => VisualQuery.Of<Button>(window).Single(b => Equals(b.Content?.ToString(), text));
+        => VisualQuery.Of<Button>(window).Single(b => Equals(VisualQuery.TextOf(b), text));
 }

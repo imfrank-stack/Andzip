@@ -661,7 +661,7 @@ public class UiFeatureWiringTests
     }
 
     private static Button FindButton(Window window, string text)
-        => VisualQuery.Of<Button>(window).SingleOrDefault(b => Equals(b.Content?.ToString(), text))
+        => VisualQuery.Of<Button>(window).SingleOrDefault(b => Equals(VisualQuery.TextOf(b), text))
            ?? throw new InvalidOperationException($"界面上找不到按钮「{text}」。");
 
     /// <summary>这个控件是不是在自绘标题栏里（那条 caption 与窗口标题同文本，按文字找控件时要排掉）。</summary>

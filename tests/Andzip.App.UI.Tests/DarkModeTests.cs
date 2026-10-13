@@ -96,10 +96,10 @@ public class DarkModeTests
     }
 
     private static Button NavButton(Window window, string text)
-        => VisualQuery.Of<Button>(window).Single(b => Equals(b.Content?.ToString(), text));
+        => VisualQuery.Of<Button>(window).Single(b => Equals(VisualQuery.TextOf(b), text));
 
     private static Button FindButton(Window window, string text)
-        => VisualQuery.Of<Button>(window).Single(b => Equals(b.Content?.ToString(), text));
+        => VisualQuery.Of<Button>(window).Single(b => Equals(VisualQuery.TextOf(b), text));
 
     private static double Luminance(Avalonia.Media.Color c)
         => 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;

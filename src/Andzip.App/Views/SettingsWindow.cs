@@ -6,6 +6,7 @@ using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -76,9 +77,10 @@ public sealed class SettingsWindow : Window
             new LanguagePage(lang, settings, settingsPath),
         ];
 
+        // Spacing 必须是 0：条目之间那几像素是点不动的死区（1.8.7 用户第二条反馈）。
+        // 行的间隔改由药丸自己的上下内距给，整行都归这一项命中。
         var nav = new StackPanel
         {
-            Spacing = Design.Space.X1,
             Margin = new Thickness(Design.Space.X2, Design.Space.X3, Design.Space.X2, Design.Space.X3),
         };
         for (var i = 0; i < navKeys.Length; i++)
@@ -157,52 +159,78 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 左侧导航项。以前整条导航是蓝底白字，改版后按规范 5.8 换成浅底 + 选中项淡蓝 + 左侧 3px 标记条：
-    /// 蓝色留给"动作"（按钮），导航是"位置"，用实心蓝会把位置读成可点的主命令。
+    /// 左侧导航项。两件事都反直觉，都有用户截图为证（1.8.7）：
+    /// <para><strong>药丸画在 Content 里，不交给按钮模板。</strong>
+    /// SimpleTheme 的 Button 在 <c>:pressed</c> 上自己涂一整块 <c>#686868</c>，
+    /// 应用层给 <c>Background</c> 写的局部值压不过它 —— 于是"按下"这一下在浅底上是一块脏灰，
+    /// 文字几乎看不见。与开关轨道同一族的问题，同一个解法（规范 §二）：
+    /// 视觉全画在 Content 那颗自绘 <c>Border</c> 上，控件本体只管行为（点击、键盘、焦点）。
+    /// 也正因为如此，药丸必须<strong>铺满整行</strong>：留一圈 margin 的话，
+    /// 模板那层深灰会从缝里透出来，等于没修。</para>
+    /// <para><strong>行与行之间不留空隙。</strong>以前条目之间留了 4px 的
+    /// <c>StackPanel.Spacing</c>，那是一条点不动的死区 —— 用户的手指在列表上移动时一定会划到它，
+    /// 划到就没反应。现在条目紧贴，呼吸感做进药丸自己的上下内距里，
+    /// 整行都是这一项的命中区。</para>
     /// </summary>
     private Button NavButton(string text, Action onClick)
     {
+        var pill = new Border
+        {
+            Padding = new Thickness(Design.Space.X3, Design.Space.X2 + 6, Design.Space.X2, Design.Space.X2 + 6),
+            CornerRadius = Design.Radius.Md,
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = Design.Type.Body,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+
         var button = new Button
         {
-            Content = text,
-            Foreground = Design.Ink.Primary,
+            Content = pill,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(0),
+            CornerRadius = Design.Radius.None,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(Design.Space.X3, Design.Space.X2 + 2, Design.Space.X2, Design.Space.X2 + 2),
-            FontSize = Design.Type.Body,
-            CornerRadius = Design.Radius.Sm,
         };
         button.Click += (_, _) => onClick();
 
-        // 选中态由 PaintNav 决定，悬停只是"浮一下"：两者叠在一起时选中必须赢，
-        // 否则鼠标划过当前项会让它看起来被取消选中了。
-        button.PointerEntered += (_, _) => PaintNav(button, Equals(button.Tag, true), hover: true);
-        button.PointerExited += (_, _) => PaintNav(button, Equals(button.Tag, true), hover: false);
+        // 状态一律现读现画（IsPointerOver / IsPressed / Tag 里的选中），
+        // 不在事件里传"我是悬停还是按下"——那种写法一旦漏一个退出事件就会卡在深色那一档。
+        button.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == InputElement.IsPointerOverProperty
+                || e.Property == Button.IsPressedProperty)
+            {
+                PaintNav(button, Equals(button.Tag, true));
+            }
+        };
         return button;
     }
 
     /// <summary>
-    /// 导航项的三种状态：选中 = 白色药丸 + 亮边；悬停 = 浅一档；其余 = 透明。
-    /// <para>1.6.0 之前选中靠"淡蓝底 + 左侧 3px 蓝条"，那是没有阴影时唯一的表达手段。
-    /// 现在选中项抬到卡片那一级（白底 + 1px 亮边），未选项留在画布上 ——
-    /// "哪一项被选中"变成一个高度问题而不是颜色问题，深浅两套主题下都成立。</para>
-    /// <para><strong>这里给不了真阴影</strong>：<c>BoxShadow</c> 是 <see cref="Border"/> 的属性，
-    /// 导航项是 Button，模板控件不吃（规范 §二那条仍然成立）。白药丸压在灰画布上本身已经有
-    /// 明度差，所以这一处用底色差 + 亮边顶上，不为它把按钮再包一层 Border。</para>
+    /// 导航项的三档：选中 = 白色药丸 + 亮边 + 半粗；按下 = <c>Surface.Pressed</c>；
+    /// 悬停 = <c>Surface.Muted</c>；其余透明。按下压在悬停之上，选中压在按下之下 ——
+    /// 按下去时选中项也要给出"这里被按住了"的反馈，但松手后它还得是那颗白色药丸。
     /// </summary>
-    private static void PaintNav(Button button, bool selected, bool hover = false)
+    private static void PaintNav(Button button, bool selected)
     {
         button.Tag = selected;
-        button.Background = selected
-            ? Design.Surface.Base
-            : hover ? Design.Surface.Muted : Brushes.Transparent;
-        button.BorderBrush = selected ? Design.Line.Subtle : Brushes.Transparent;
-        button.BorderThickness = new Thickness(selected ? 1 : 0);
-        button.CornerRadius = Design.Radius.Md;
-        button.Foreground = selected ? Design.Ink.Primary : Design.Ink.Secondary;
-        button.FontWeight = selected ? Design.Type.Semibold : FontWeight.Normal;
+        if (button.Content is not Border pill || pill.Child is not TextBlock label)
+        {
+            return;
+        }
+
+        pill.Background = button.IsPressed
+            ? Design.Surface.Pressed
+            : selected ? Design.Surface.Base : button.IsPointerOver ? Design.Surface.Muted : Brushes.Transparent;
+        pill.BorderBrush = selected ? Design.Line.Subtle : Brushes.Transparent;
+        pill.BorderThickness = selected ? new Thickness(1) : new Thickness(0);
+        label.Foreground = selected ? Design.Ink.Primary : Design.Ink.Secondary;
+        label.FontWeight = selected ? Design.Type.Semibold : FontWeight.Normal;
     }
 
     private void AcceptAndClose()
