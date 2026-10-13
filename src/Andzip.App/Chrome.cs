@@ -187,20 +187,6 @@ internal static class Chrome
         }
     }
 
-    /// <summary>
-    /// 浅色卡片上的大按钮（工具栏）：悬停是<strong>比卡片深一档</strong>的圆角药丸。
-    /// <para>1.6.0 之前这条带子是实心品牌蓝，悬停只能叠半透明白"浮亮"；带子改成白色卡片之后
-    /// 方向就反过来了 —— 白底上再叠白看不见，往下压一档才读得出"这颗被指到了"。
-    /// 规范里"悬停必须看得见"没变，变的只是它长什么样。</para>
-    /// <para>1.8.0 起这条只剩"改底色"这一半，浮起的阴影归 <see cref="Lift"/>；
-    /// 对话框里那些按钮不需要浮起来（它们本来就在一块平面上），所以这一半单独留着。</para>
-    /// </summary>
-    public static T OnCard<T>(this T button) where T : Button
-    {
-        button.CornerRadius = Design.Radius.Lg;
-        return TrackStates(button, Design.Line.Subtle, Design.Line.Strong);
-    }
-
     /// <summary>对话框主按钮：品牌蓝底白字。内距也在这里定 —— 各对话框的按钮不该有两种胖瘦。</summary>
     public static T Accent<T>(this T button) where T : Button
     {
