@@ -305,6 +305,26 @@ TEXT_BTN_FORGET_PASSWORDS               = Clear remembered passwords
 TEXT_SETTINGS_NO_PASSWORDS              = No passwords remembered this run yet.
 TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = The reference program's cross-restart "password manager" is not built: doing it properly needs OS credential protection (DPAPI on Windows), which means a Windows-only dependency while this project still builds on Linux. Storing passwords in plain text in the settings file would not be a simpler version of it — it would be a trap.
 
+; ---- 安装器（正常安装 / 卸载）----
+TEXT_TITLE_INSTALLER                     = Install Andzip
+TEXT_INSTALLER_TARGET                    = Install to
+TEXT_INSTALLER_ALREADY                   = Already installed on this machine: ${dir}
+TEXT_INSTALLER_NOT_YET                   = Not installed yet.
+TEXT_INSTALLER_ASSOCIATE                 = Associate common archive formats
+TEXT_INSTALLER_ASSOCIATE_HINT            = ZIP / 7Z / RAR / TAR. Only the current user's association table is written, no administrator rights; anything blocked by the system "default app" setting is listed so you can point it there.
+TEXT_INSTALLER_CONTEXT                   = Add to the Explorer context menu
+TEXT_INSTALLER_CONTEXT_HINT              = Extract and compress commands, current user only as well.
+TEXT_INSTALLER_WORKING                   = Installing...
+TEXT_INSTALLER_REMOVING                  = Uninstalling...
+TEXT_INSTALLER_DONE                      = Installed. Desktop and Start Menu shortcuts created.
+TEXT_INSTALLER_REMOVED                   = Uninstalled.
+TEXT_INSTALLER_LEFT                      = The program file was still running; it is scheduled for deletion on exit: ${dir}
+TEXT_INSTALLER_BLOCKED                   = These extensions are blocked by the system default-app setting, point them there: 
+TEXT_INSTALLER_SHORTCUT_HINT             = Open archives with Andzip
+TEXT_BTN_INSTALL                         = Install
+TEXT_BTN_UNINSTALL                       = Uninstall
+TEXT_BTN_CLOSE                           = Close
+
 [MENU]
 MENUSTR_FILE                            = &File
 MENUSTR_EDIT                            = &Edit

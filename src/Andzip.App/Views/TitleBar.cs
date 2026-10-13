@@ -29,7 +29,7 @@ internal sealed class TitleBar : Border
     private readonly Button? _minimize;
     private readonly Button? _maximize;
     private readonly Button _close;
-    private readonly List<(Button Button, Path Glyph, bool Danger)> _buttons = new();
+    private readonly List<(Button Button, Border Chip, Path Glyph, bool Danger)> _buttons = new();
 
     /// <param name="resizable">给不给最小化/最大化两个按钮。对话框与进度窗口不给。</param>
     public TitleBar(Window window, LangCatalog lang, bool resizable)
@@ -44,7 +44,11 @@ internal sealed class TitleBar : Border
         {
             Width = 16,
             Height = 16,
-            Child = Icons.AppMark(16),
+            // 与任务栏、桌面快捷方式是同一张图：标题栏里那枚换成另一套画法，
+            // 用户就会看到"桌面上一个图标、窗口里另一个图标"。
+            Child = Assets.AppArt is { } art
+                ? new Image { Source = art, Width = 16, Height = 16 }
+                : Icons.AppMark(16),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(Design.Space.X1, 0, Design.Space.X2, 0),
         };
@@ -76,14 +80,17 @@ internal sealed class TitleBar : Border
 
         if (resizable)
         {
-            _minimize = WindowButton(Icons.Minimize, "TEXT_TITLEBAR_MINIMIZE", () => _window.WindowState = WindowState.Minimized);
-            _maximize = WindowButton(Icons.Maximize, "TEXT_TITLEBAR_MAXIMIZE", ToggleMaximize);
-            right.Children.Add(_minimize);
-            right.Children.Add(_maximize);
+            var minimize = WindowSlot(Icons.Minimize, "TEXT_TITLEBAR_MINIMIZE", () => _window.WindowState = WindowState.Minimized);
+            var maximize = WindowSlot(Icons.Maximize, "TEXT_TITLEBAR_MAXIMIZE", ToggleMaximize);
+            _minimize = minimize.Button;
+            _maximize = maximize.Button;
+            right.Children.Add(minimize.Host);
+            right.Children.Add(maximize.Host);
         }
 
-        _close = WindowButton(Icons.Close, "TEXT_TITLEBAR_CLOSE", () => _window.Close(), danger: true);
-        right.Children.Add(_close);
+        var close = WindowSlot(Icons.Close, "TEXT_TITLEBAR_CLOSE", () => _window.Close(), danger: true);
+        _close = close.Button;
+        right.Children.Add(close.Host);
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         Grid.SetColumn(left, 0);
@@ -130,14 +137,23 @@ internal sealed class TitleBar : Border
     public void Repaint()
     {
         _caption.Foreground = Design.Ink.Primary;
-        foreach (var (button, glyph, danger) in _buttons)
+        foreach (var (button, chip, glyph, danger) in _buttons)
         {
-            glyph.Stroke = danger && button.IsPointerOver ? Design.Ink.OnBrand : Design.Ink.Secondary;
-            button.Background = Brushes.Transparent;
+            Paint(button, chip, glyph, danger);
         }
     }
 
-    private Button WindowButton(string geometry, string nameKey, Action onClick, bool danger = false)
+    /// <summary>
+    /// 一颗 46×40 的命中区，里面是一枚会浮起的圆角药丸。
+    /// <para>关闭按钮原来悬停时整块刷成实心红（Windows 的习惯），用户的评价是<strong>突兀</strong>：
+    /// 一块 46×40 的方形红块压在圆角面板的角上，比它警告的那件事还抢眼。
+    /// 现在改成淡红底 + 红色叉，"危险"这件事由颜色本身说，不由面积说。</para>
+    /// </summary>
+    /// <summary>
+    /// 一颗按钮 = 一层"药丸 + 按钮"的宿主。宿主进 StackPanel，按钮留给调用方握着
+    /// （最大化那一项事后要换图标与无障碍名）。
+    /// </summary>
+    private (Control Host, Button Button) WindowSlot(string geometry, string nameKey, Action onClick, bool danger = false)
     {
         var glyph = Icons.WindowGlyph(geometry, Design.IconSize.Inline, Design.Ink.Secondary);
         var button = new Button
@@ -148,25 +164,41 @@ internal sealed class TitleBar : Border
             Padding = new Thickness(0),
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
-            CornerRadius = danger ? new CornerRadius(0, 0, 15, 0) : Design.Radius.None,
+            CornerRadius = Design.Radius.None,
         };
+
+        var chip = new Border
+        {
+            Margin = new Thickness(5),
+            CornerRadius = Design.Radius.Md,
+            Background = Brushes.Transparent,
+            IsHitTestVisible = false,
+        };
+
+        var host = new Panel { Children = { chip, button } };
 
         Avalonia.Automation.AutomationProperties.SetName(button, _lang.Label(nameKey));
         button.Click += (_, _) => onClick();
+        button.PointerEntered += (_, _) => Paint(button, chip, glyph, danger);
+        button.PointerExited += (_, _) => Paint(button, chip, glyph, danger);
 
-        button.PointerEntered += (_, _) =>
-        {
-            button.Background = danger ? Design.Semantic.Danger : Design.Surface.Muted;
-            glyph.Stroke = danger ? Design.Ink.OnBrand : Design.Ink.Primary;
-        };
-        button.PointerExited += (_, _) =>
-        {
-            button.Background = Brushes.Transparent;
-            glyph.Stroke = Design.Ink.Secondary;
-        };
+        Paint(button, chip, glyph, danger);
+        _buttons.Add((button, chip, glyph, danger));
+        return (host, button);
+    }
 
-        _buttons.Add((button, glyph, danger));
-        return button;
+    /// <summary>按"指针在不在上面"画这一颗按钮。换主题与指针进出走的都是这一个方法。</summary>
+    private void Paint(Button button, Border chip, Path glyph, bool danger)
+    {
+        var hot = button.IsPointerOver && button.IsEnabled;
+
+        chip.Background = hot
+            ? danger ? Design.Semantic.DangerTint : Design.Surface.Muted
+            : Brushes.Transparent;
+        chip.BoxShadow = hot ? Design.Shadow.Lift : default;
+        glyph.Stroke = hot
+            ? danger ? Design.Semantic.Danger : Design.Ink.Primary
+            : Design.Ink.Secondary;
     }
 
     private void ToggleMaximize()

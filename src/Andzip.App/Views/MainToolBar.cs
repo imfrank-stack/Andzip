@@ -52,7 +52,7 @@ internal static class MainToolBar
         return items;
     }
 
-    private static Button CreateButton(string text, string icon, Action? run)
+    private static Control CreateButton(string text, string icon, Action? run)
     {
         var enabled = run is not null;
 
@@ -95,9 +95,9 @@ internal static class MainToolBar
             button.Click += (_, _) => action();
         }
 
-        // 圆角 + 悬停/按下。禁用时 Chrome 的事件根本不会触发（收不到指针事件），
+        // 圆角 + 悬停浮起。禁用时 Chrome 的事件根本不会触发（收不到指针事件），
         // 所以静止态保持透明，不会在卡片上留一块"亮着的死按钮"。
-        return button.OnCard();
+        return button.Lift();
     }
 
     private static Control CreateIcon(string geometry, IBrush stroke)

@@ -290,7 +290,7 @@ internal sealed class ArchiveView : IDisposable
             ClipToBounds = true,
             Height = 32,
             Background = Design.Surface.Muted,
-            BorderBrush = Design.Line.Subtle,
+            BorderBrush = Design.Line.Hair,
             BorderThickness = new Thickness(0, 0, 0, 1),
             Child = header,
         };

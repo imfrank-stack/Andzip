@@ -1,19 +1,22 @@
-"""Andzip 程序图标生成器。
+"""Andzip 程序图标：由 assets/andzip.png 生成 assets/andzip.ico。
 
 用法：python assets/make_icon.py
 输出：assets/andzip.ico（16 / 24 / 32 / 48 / 64 / 128 / 256 七档）
 
-为什么用代码画而不是一张现成的图：
+图源是 assets/andzip.png —— 一张 512×512、四角 alpha=0 的透明底图。
+这里不再自己画几何（1.6.0 之前是代码画的拉链方块），只做三件事：
 
-1. 图标要在 16px 的标题栏里站得住。一张 1024 的精美大图缩到 16 会糊成一团，
-   所以小尺寸必须有单独的简化画法（去掉拉链齿、去掉软投影、把滑块放大）。
-2. 颜色要跟界面上的品牌色同源。色值取自 Design.cs 的 Brand / Folder 一族，
-   改一处两边一起改，不会出现"图标是另一个蓝"。
-3. 可复现。规范文档写的是几何与色值，这个脚本就是那份规范的机器版本。
+1. 按 alpha 外接框裁掉四周空白，再按每一档的边距放回格子里。
+   不裁的话 16px 上有效画面只剩 11px，图标会在任务栏里显得又小又虚。
+2. 小尺寸（≤32）用"贴边"档：边距比大图小一档，让画面尽量占满。
+   大图自带的软投影在 16px 上只会糊成一块脏边，但它就在 alpha 里，
+   裁不掉 —— 所以小尺寸只靠"占满 + 不额外加锐"来保可读性，别假装做了别的。
+3. 透明通道原样带进 ICO：16/24/32 存 32 位 DIB（BGRA + 全 0 的 AND 掩码），
+   48 以上存 PNG 条目。桌面快捷方式读的就是这个透明底，
+   存成白底的话图标会带一个方方的白框。
 
-ICO 里 16 / 24 / 32 存成无压缩的 32 位 DIB，48 以上存 PNG：PNG 条目在
-Vista+ 的 shell 里没问题，但 Office / Outlook 这类老组件读 16px 时只认位图，
-小尺寸用 DIB 免掉"在某个程序里图标是空白"这类报告。
+ICO 里 16 / 24 / 32 用位图而不是 PNG：Office / Outlook 这类老组件读小尺寸时
+只认位图，用 PNG 条目会出现"在某个程序里图标是空白"的报告。
 """
 
 import io
@@ -21,173 +24,42 @@ import struct
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
-# ---------------------------------------------------------------- 色板（与 Design.cs 同源）
-
-BRAND_TOP = (0x3D, 0x94, 0xE0)       # 比 BrandBright 再亮一档：方块顶部要吃到光
-BRAND_MID = (0x0F, 0x6C, 0xBD)       # Design.BrandBase（浅色板）
-BRAND_BOTTOM = (0x0B, 0x4E, 0x8C)    # 比 BrandDeep 再深一点：底部压住重量
-
-PAPER_EDGE = (0xA8, 0xC4, 0xE0)
-PAPER_STOPS = ((0.0, (255, 255, 255)), (0.62, (0xF6, 0xFA, 0xFF)), (1.0, (0xDD, 0xE9, 0xF6)))
-TOOTH = (0xEF, 0xF6, 0xFC)
-AMBER = (0xF2, 0xC0, 0x3C)           # 介于 FolderFace 与 FolderEdge 之间
-AMBER_DARK = (0xD9, 0xA6, 0x1F)      # Design.FolderEdge
-AMBER_EDGE = (0x8A, 0x61, 0x00)
-SHADOW_RGB = (6, 24, 46)
-
-STOPS = ((0.0, BRAND_TOP), (0.42, BRAND_MID), (1.0, BRAND_BOTTOM))
+SOURCE = Path(__file__).with_name("andzip.png")
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 DIB_SIZES = (16, 24, 32)
 
-
-# ---------------------------------------------------------------- 画布与底
-
-def _blend(stops, t):
-    for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
-        if t <= t1:
-            k = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
-            return tuple(int(c0[i] + (c1[i] - c0[i]) * k) for i in range(3))
-    return stops[-1][1]
+# 画面在格子里占的比例：贴边档给任务栏和标题栏用，留白档给桌面与资源管理器用。
+EDGE_FILL = 0.94
+PADDED_FILL = 0.86
 
 
-def _ramp(stops, n=256):
-    ramp = Image.new("RGB", (1, n))
-    for i in range(n):
-        ramp.putpixel((0, i), _blend(stops, i / (n - 1)))
-    return ramp
+def load_source():
+    """读图源并确认它真的带透明通道 —— 白底图混进来时这里就停，别等到桌面上看见白框。"""
+    if not SOURCE.exists():
+        raise SystemExit(f"缺少图源 {SOURCE.name}：图标由它生成，没有它就出不来 ICO。")
+
+    image = Image.open(SOURCE).convert("RGBA")
+    extremes = image.getchannel("A").getextrema()
+    if extremes[0] > 8:
+        raise SystemExit(f"{SOURCE.name} 没有透明通道（最小 alpha={extremes[0]}），装出来的图标会带方框。")
+    return image
 
 
-def _rounded_mask(ss, rect, radius):
-    mask = Image.new("L", (ss, ss), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(rect, radius=radius, fill=255)
-    return mask
+def render(source, size, fill):
+    """按 alpha 外接框裁切，再等比放进 size×size 的透明格子。"""
+    box = source.getbbox()
+    art = source.crop(box) if box else source
 
+    side = int(round(size * fill))
+    scale = side / max(art.size)
+    resized = art.resize((max(1, round(art.size[0] * scale)), max(1, round(art.size[1] * scale))),
+                         Image.LANCZOS)
 
-def _tile_layer(ss, rect, radius, tier):
-    """圆角方块本体：竖向渐变，full 档再加顶边那道受光高光。"""
-    tile = Image.new("RGBA", (ss, ss))
-    tile.paste(_ramp(STOPS).resize((ss, ss)), (0, 0))
-    tile.putalpha(_rounded_mask(ss, rect, radius))
-
-    if tier == "small":
-        return tile
-
-    inset = tuple(v + ss * 0.008 for v in rect[:2]) + tuple(v - ss * 0.008 for v in rect[2:])
-    hl = Image.new("L", (ss, ss), 0)
-    ImageDraw.Draw(hl).rounded_rectangle(
-        inset, radius=radius * 0.86, outline=255, width=max(1, int(ss * 0.0045)))
-    hl = hl.filter(ImageFilter.GaussianBlur(ss * 0.0045))
-    light = Image.new("RGBA", (ss, ss), (255, 255, 255, 0))
-    light.putalpha(hl.point(lambda v: int(v * 0.34)))
-    tile = Image.alpha_composite(tile, light)
-
-    # 内圈那道暗边：白色背景下没有它，方块的边缘会"化"掉
-    ring = Image.new("L", (ss, ss), 0)
-    ImageDraw.Draw(ring).rounded_rectangle(rect, radius=radius, outline=255,
-                                           width=max(1, int(ss * 0.006)))
-    edge = Image.new("RGBA", (ss, ss), (4, 26, 48, 0))
-    edge.putalpha(ring.point(lambda v: int(v * 0.30)))
-    tile = Image.alpha_composite(tile, edge)
-
-    tile.putalpha(_rounded_mask(ss, rect, radius))
+    tile = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    tile.paste(resized, ((size - resized.size[0]) // 2, (size - resized.size[1]) // 2), resized)
     return tile
-
-
-# ---------------------------------------------------------------- 内容
-
-def _panel_shadow(ss, panels, radius, strength):
-    layer = Image.new("L", (ss, ss), 0)
-    d = ImageDraw.Draw(layer)
-    drop = ss * 0.016
-    for x0, y0, x1, y1 in panels:
-        d.rounded_rectangle((x0 * ss, y0 * ss + drop, x1 * ss, y1 * ss + drop),
-                            radius=ss * radius, fill=255)
-    layer = layer.filter(ImageFilter.GaussianBlur(ss * 0.011))
-    shadow = Image.new("RGBA", (ss, ss), (*SHADOW_RGB, 0))
-    shadow.putalpha(layer.point(lambda v: int(v * strength)))
-    return shadow
-
-
-def _panels(canvas, ss, panels, radius, tier):
-    """两片纸不是纯白：从上到下带一点冷色，才不像两张剪纸贴在上面。"""
-    ramp = _ramp(PAPER_STOPS).resize((ss, ss))
-    edge_w = max(1, int(ss * 0.0018))
-    for box in panels:
-        mask = Image.new("L", (ss, ss), 0)
-        ImageDraw.Draw(mask).rounded_rectangle(tuple(v * ss for v in box),
-                                               radius=ss * radius, fill=255)
-        layer = Image.new("RGBA", (ss, ss), (0, 0, 0, 0))
-        layer.paste(ramp, (0, 0), mask)
-        canvas.alpha_composite(layer)
-        if tier == "full":
-            ImageDraw.Draw(canvas).rounded_rectangle(
-                tuple(v * ss for v in box), radius=ss * radius,
-                outline=(*PAPER_EDGE, 255), width=edge_w)
-
-
-def _teeth(canvas, ss, top, bottom, gap):
-    """缝里交错的拉链齿：左齿搭左半边、右齿搭右半边，错开半个步距。"""
-    d = ImageDraw.Draw(canvas)
-    step, height = 0.0525, 0.031
-    y, i = top, 0
-    while y + height < bottom:
-        if i % 2 == 0:
-            box = (0.50 - gap * 1.9, y, 0.50 + gap * 0.25, y + height)
-        else:
-            box = (0.50 - gap * 0.25, y, 0.50 + gap * 1.9, y + height)
-        d.rounded_rectangle(tuple(v * ss for v in box), radius=ss * height * 0.45,
-                            fill=(*TOOTH, 255), outline=(*PAPER_EDGE, 255),
-                            width=max(1, int(ss * 0.0016)))
-        y, i = y + step, i + 1
-
-
-def _slider(canvas, ss, box, tab_box, radius, tier):
-    """拉头 + 下面那片拉环。琥珀色是画面里唯一的暖色，也是视线的落点。"""
-    d = ImageDraw.Draw(canvas)
-    edge = max(1, int(ss * (0.006 if tier == "full" else 0.010)))
-    if tier == "full":
-        d.rounded_rectangle(tuple(v * ss for v in tab_box), radius=ss * radius * 0.7,
-                            fill=(*AMBER_DARK, 255), outline=(*AMBER_EDGE, 255), width=edge)
-        d.rounded_rectangle(tuple(v * ss for v in box), radius=ss * radius,
-                            fill=(*AMBER, 255), outline=(*AMBER_EDGE, 255), width=edge)
-        # 滑块中间那道凹槽，是让读者认出"这是拉头"的关键一笔 —— 但 16px 上它只会
-        # 把拉头啃成一个暗点，所以小尺寸不画
-        slot = (box[0] + 0.024, box[1] + 0.022, box[2] - 0.024, box[3] - 0.034)
-        d.rounded_rectangle(tuple(v * ss for v in slot), radius=ss * radius * 0.55,
-                            fill=(*AMBER_DARK, 255))
-    else:
-        d.rounded_rectangle(tuple(v * ss for v in box), radius=ss * radius, fill=(*AMBER, 255))
-
-
-def draw_icon(size, tier):
-    ss = size * (8 if size <= 64 else 4)
-    margin = 0.030 if tier == "small" else 0.022
-    radius = ss * (0.235 if tier == "small" else 0.225)
-    rect = (ss * margin, ss * margin, ss * (1 - margin), ss * (1 - margin))
-
-    canvas = Image.new("RGBA", (ss, ss), (0, 0, 0, 0))
-    if tier == "small":
-        # 16px 上没有能容纳四五种形状的地方。三样：左纸、右纸、拉头 —— 
-        # 中间那道缝直接让方块的蓝透出来，比再画一条"拉链带"更清楚。
-        gap = 0.062
-        panels = [(0.235, 0.250, 0.50 - gap / 2, 0.720), (0.50 + gap / 2, 0.250, 0.765, 0.720)]
-        canvas = Image.alpha_composite(canvas, _panel_shadow(ss, panels, 0.052, 0.20))
-        _panels(canvas, ss, panels, 0.052, tier)
-        _slider(canvas, ss, (0.408, 0.560, 0.592, 0.730), (0.408, 0.560, 0.592, 0.730),
-                0.070, tier)
-    else:
-        gap = 0.046
-        panels = [(0.230, 0.255, 0.50 - gap / 2, 0.745), (0.50 + gap / 2, 0.255, 0.770, 0.745)]
-        canvas = Image.alpha_composite(canvas, _panel_shadow(ss, panels, 0.040, 0.34))
-        _panels(canvas, ss, panels, 0.040, tier)
-        _teeth(canvas, ss, 0.300, 0.560, gap)
-        _slider(canvas, ss, (0.437, 0.560, 0.563, 0.668), (0.462, 0.658, 0.538, 0.752),
-                0.045, tier)
-
-    composed = Image.alpha_composite(_tile_layer(ss, rect, radius, tier), canvas)
-    return composed.resize((size, size), Image.LANCZOS)
 
 
 # ---------------------------------------------------------------- ICO 封装
@@ -230,7 +102,8 @@ def write_ico(path, images):
 
 
 def main():
-    images = [draw_icon(size, "small" if size <= 32 else "full") for size in SIZES]
+    source = load_source()
+    images = [render(source, size, EDGE_FILL if size <= 32 else PADDED_FILL) for size in SIZES]
     images.sort(key=lambda im: -im.size[0] * im.size[1])  # 大的排前面，shell 挑第一个能用的
     out_path = Path(__file__).with_name("andzip.ico")
     write_ico(out_path, images)

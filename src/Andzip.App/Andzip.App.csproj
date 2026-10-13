@@ -37,4 +37,10 @@
     <None Include="..\..\langs\*.lang" Link="langs\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 程序图标：exe 上的那份由 ApplicationIcon 管（shell 读），界面里（标题栏、Window.Icon）
+       读的是这张内嵌 PNG。单文件绿色版没有旁边的 assets 目录，不内嵌就等于没有图标。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\andzip.png" Link="assets\andzip.png" />
+  </ItemGroup>
+
 </Project>

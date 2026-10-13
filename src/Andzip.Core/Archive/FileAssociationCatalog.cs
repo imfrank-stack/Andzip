@@ -109,6 +109,14 @@ public static class FileAssociationCatalog
         => All.SelectMany(g => g.Items).FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
 
     /// <summary>
+    /// 安装器上那个「关联常见压缩包格式」勾选框实际会登记的几项。
+    /// <para>不是全部候选：安装时默认勾一堆冷门票（ARJ / CHM / NSIS / EXE）只会让
+    /// 资源管理器的"打开方式"变脏，而用户根本没那些文件。这四项是"装了压缩包软件"这个词
+    /// 通常指的东西。要更多请去「设置 → 文件关联」，那里是全量开关。</para>
+    /// </summary>
+    public static IReadOnlyList<string> InstallerDefaults { get; } = ["zip", "7z", "rar", "tar"];
+
+    /// <summary>
     /// 右键「压缩为 …」应当对哪些扩展名隐身 —— 也就是本表认为"这是个压缩包"的那些后缀。
     /// <para>
     /// 对压缩包提供压缩是个没有意义的动作（把 zip 再压成 zip 几乎不省空间，还多套一层），

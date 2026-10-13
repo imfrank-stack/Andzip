@@ -18,6 +18,10 @@ internal static class Seam
     /// 所以是"看得见的细线 + 盖在它上面的透明命中区"两层。
     /// 上一版这里是一根 4px 的 <c>Border.Strong</c> 粗杠，那是"没有卡片可分块"时的做法，
     /// 现在它会把一整块表面劈成两半，正是用户说的那种割裂感。</para>
+    /// <para>1.8.0 再退一步：颜色从 <c>Line.Subtle</c> 换到最淡的 <c>Line.Hair</c>，
+    /// 并且<strong>上下各留 8px 不贴边</strong>。用户对这一条的意见是"太粗、不和谐" ——
+    /// 量出来它其实只有 1px（1.5 倍缩放下 2 个物理像素），粗的不是线，是它<strong>顶天立地</strong>：
+    /// 一根贯通的线把面板切成两个"框"，而这两框本来是一整张表面。</para>
     /// </summary>
     public static Control Splitter(int column)
     {
@@ -26,8 +30,10 @@ internal static class Seam
         host.Children.Add(new Rectangle
         {
             Width = 1,
+            Margin = new Thickness(0, Design.Space.X2),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Fill = Design.Line.Subtle,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Fill = Design.Line.Hair,
             Stretch = Stretch.Fill,
         });
         host.Children.Add(new GridSplitter
@@ -44,13 +50,13 @@ internal static class Seam
         return host;
     }
 
-    /// <summary>一条横线：内容区与底部栏之间。</summary>
+    /// <summary>一条横线：内容区与底部栏之间。用最淡的一档，见 <see cref="Splitter"/> 那段。</summary>
     public static Control Line(double thickness = 1) => new Rectangle
     {
         Height = thickness,
         HorizontalAlignment = HorizontalAlignment.Stretch,
         VerticalAlignment = VerticalAlignment.Top,
-        Fill = Design.Line.Subtle,
+        Fill = Design.Line.Hair,
         Stretch = Stretch.Fill,
     };
 }

@@ -304,6 +304,26 @@ TEXT_BTN_FORGET_PASSWORDS               = 清除已记住的口令
 TEXT_SETTINGS_NO_PASSWORDS              = 本次运行还没有记住任何口令。
 TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = 参考软件那个跨重启保存的「口令管理器」没有做：要做对得用操作系统的凭据保护（Windows 上是 DPAPI），那需要一个 Windows 专用的依赖，而这个项目还要在 Linux 上构建。把口令明文写进设置文件不是它的简化版，是一个谁都会踩的坑。
 
+; ---- 安装器（正常安装 / 卸载）----
+TEXT_TITLE_INSTALLER                     = 安装 Andzip
+TEXT_INSTALLER_TARGET                    = 安装到
+TEXT_INSTALLER_ALREADY                   = 这台机器上已经装过：${dir}
+TEXT_INSTALLER_NOT_YET                   = 还没有安装。
+TEXT_INSTALLER_ASSOCIATE                 = 关联常见压缩包格式
+TEXT_INSTALLER_ASSOCIATE_HINT            = ZIP / 7Z / RAR / TAR。只写当前用户的关联表，不需要管理员；被系统「默认应用」挡住的会列出来，需要到系统设置里再指一次。
+TEXT_INSTALLER_CONTEXT                   = 加入资源管理器右键菜单
+TEXT_INSTALLER_CONTEXT_HINT              = 解压与压缩两组命令，同样只写当前用户。
+TEXT_INSTALLER_WORKING                   = 正在安装……
+TEXT_INSTALLER_REMOVING                  = 正在卸载……
+TEXT_INSTALLER_DONE                      = 已安装。桌面与开始菜单的快捷方式已创建。
+TEXT_INSTALLER_REMOVED                   = 已卸载。
+TEXT_INSTALLER_LEFT                      = 程序文件当时还在运行，已安排在退出后删除：${dir}
+TEXT_INSTALLER_BLOCKED                   = 这些扩展名被系统的默认应用挡住，请到系统设置里再指定一次：
+TEXT_INSTALLER_SHORTCUT_HINT             = 用 Andzip 打开压缩包
+TEXT_BTN_INSTALL                         = 安装
+TEXT_BTN_UNINSTALL                       = 卸载
+TEXT_BTN_CLOSE                           = 关闭
+
 [MENU]
 MENUSTR_FILE                            = 文件(&F)
 MENUSTR_EDIT                            = 编辑(&E)

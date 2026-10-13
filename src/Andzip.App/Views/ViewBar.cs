@@ -9,8 +9,8 @@ namespace Andzip.App.Views;
 /// 视图底部栏（首页与压缩包视图共用）：右侧依次是视图切换按钮与状态文字。
 /// <para>1.7.0 起它与上面的内容在同一张表面上，只靠顶上一根发丝线分开 ——
 /// 上一版它是第四张卡片，一屏四块白板就是用户说的"割裂感"。</para>
-/// <para>按钮的悬停色：静止透明、悬停压深一档、选中淡蓝。白底上"提亮"等于没有反馈，
-/// 所以方向与工具栏一致（规范 3.1 末）。</para>
+/// <para>按钮的悬停：与工具栏同一颗浮起的圆角药丸（<c>Chrome.Lift</c>）；
+/// "当前生效"那一态仍是淡蓝底 + 蓝边，因为它要表达的不是"指针在这里"而是"程序现在这样工作"。</para>
 /// <para>按钮命中区按规范第八节抬到 30×26 以上。</para>
 /// </summary>
 internal static class ViewBar
@@ -28,7 +28,9 @@ internal static class ViewBar
 
         foreach (var item in rightItems)
         {
-            right.Children.Add(item);
+            // 图标按钮悬停时浮起一颗药丸（阴影只能画在 Border 上，所以是包一层而不是改底色）；
+            // 状态文字那类不是按钮，原样放过。
+            right.Children.Add(item is Button button ? button.Lift(new Thickness(2), Design.Radius.Md) : item);
         }
 
         var row = new Border
@@ -70,11 +72,10 @@ internal static class ViewBar
             button.Click += (_, _) => onClick();
         }
 
-        // 这三个按钮的"当前生效"是由 Highlight 事后改底色的，所以悬停态不能像 Chrome 那样
-        // 记住调用时的静止色 —— 那样一悬停就把选中高亮冲掉了。状态一律从 Tag 现算。
-        button.PointerEntered += (_, _) => Paint(button, hover: true);
-        button.PointerExited += (_, _) => Paint(button, hover: false);
-        Paint(button, hover: false);
+        // 悬停的反馈交给外面那颗药丸（ViewBar.Create 负责包），这里只管"当前生效"那一态。
+        // 静止透明、选中淡蓝 —— 状态一律从 Tag 现算，因为 Highlight 是事后改底色的。
+        button.PointerExited += (_, _) => Paint(button);
+        Paint(button);
         return button;
     }
 
@@ -82,17 +83,15 @@ internal static class ViewBar
     public static void Highlight(Button button, bool active)
     {
         button.Tag = active;
-        Paint(button, hover: button.IsPointerOver);
+        Paint(button);
     }
 
-    private static void Paint(Button button, bool hover)
+    private static void Paint(Button button)
     {
         var active = Equals(button.Tag, true);
-        var hot = hover && button.IsEnabled;
 
-        // 静止透明、悬停压深一档、选中淡蓝 —— 三者必须在白卡片上彼此分得开。
-        button.Background = active ? Design.Brand.Soft : hot ? Design.Line.Subtle : Brushes.Transparent;
-        button.BorderBrush = active ? Design.Brand.Line : hot ? Design.Line.Strong : Brushes.Transparent;
-        button.BorderThickness = new Thickness(active || hot ? 1 : 0);
+        button.Background = active ? Design.Brand.Soft : Brushes.Transparent;
+        button.BorderBrush = active ? Design.Brand.Line : Brushes.Transparent;
+        button.BorderThickness = new Thickness(active ? 1 : 0);
     }
 }

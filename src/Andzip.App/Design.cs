@@ -109,6 +109,9 @@ internal static class Design
 
     internal static class Line
     {
+        /// <summary>最淡的一档：面板内部分区用的发丝线（树与列表之间、内容区与底栏之间）。</summary>
+        public static IBrush Hair => Active.LineHair;
+
         public static IBrush Subtle => Active.LineSubtle;
         public static IBrush Strong => Active.LineStrong;
     }
@@ -125,7 +128,7 @@ internal static class Design
     }
 
     /// <summary>
-    /// 两档阴影（规范 4.4）。每一档都是<strong>两层</strong>：一层紧贴的接触影（小而实）
+    /// 三档阴影（规范 4.4）。每一档都是<strong>两层</strong>：一层紧贴的接触影（小而实）
     /// + 一层弥散的环境影（大而虚）—— 单层大模糊会糊成一片灰雾，看着脏；
     /// 两层才有"浮起来"而不是"变暗了"的感觉。
     /// <para>深色下阴影几乎不可见（底本来就黑），所以那一份只把不透明度提高一档，
@@ -135,6 +138,13 @@ internal static class Design
     {
         /// <summary>整块窗口面板浮在桌面上：主窗口、设置窗口、每个对话框。</summary>
         public static BoxShadows Floating => Active.ShadowFloating;
+
+        /// <summary>
+        /// 一块"能被指到"的小面浮在面板上：悬停药丸、弹出的菜单与下拉列表。
+        /// <para>比 <see cref="Floating"/> 收得很紧 —— 这些东西只有几十像素高，
+        /// 用整窗那档大弥散影会在旁边糊出一圈灰雾，看着像脏了而不是浮起来。</para>
+        /// </summary>
+        public static BoxShadows Lift => Active.ShadowLift;
 
         /// <summary>小件：开关的滑块。</summary>
         public static BoxShadows Pill => Active.ShadowPill;
@@ -218,7 +228,7 @@ internal static class Design
 }
 
 /// <summary>
-/// 一套完整的调色板：28 个画刷 + 2 档阴影，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
+/// 一套完整的调色板：29 个画刷 + 3 档阴影，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
 /// <para>深色那一份刻意<strong>不用纯黑</strong>：画布停在 <c>#14171A</c>、卡片 <c>#1F2328</c>，
 /// 纯黑配高对比文字会在暗环境里产生"光晕"，眼睛要不停重新对焦。
 /// 品牌蓝在深色下反而要<strong>压深</strong>（<c>#1B5E9E</c>）而不是提亮：
@@ -252,6 +262,7 @@ internal sealed class Palette
     public required IBrush SurfaceMuted { get; init; }
     public required IBrush SurfaceSunken { get; init; }
 
+    public required IBrush LineHair { get; init; }
     public required IBrush LineSubtle { get; init; }
     public required IBrush LineStrong { get; init; }
 
@@ -260,6 +271,7 @@ internal sealed class Palette
     public required IBrush ToggleKnob { get; init; }
 
     public required BoxShadows ShadowFloating { get; init; }
+    public required BoxShadows ShadowLift { get; init; }
     public required BoxShadows ShadowPill { get; init; }
 
     public required IBrush Danger { get; init; }
@@ -295,6 +307,7 @@ internal sealed class Palette
         SurfaceMuted = Brush(0xF6, 0xF8, 0xFA),
         SurfaceSunken = Brush(0xFA, 0xFB, 0xFC),
 
+        LineHair = Brush(0xF0, 0xF2, 0xF5),
         LineSubtle = Brush(0xE6, 0xE9, 0xEC),
         LineStrong = Brush(0xC9, 0xCE, 0xD6),
 
@@ -305,6 +318,10 @@ internal sealed class Palette
         // 影子的颜色不是黑的，是品牌深墨蓝：灰黑影子在白底上发脏，带一点冷的墨色才干净。
         // 两层 —— 一层贴地的接触影（小而实）+ 一层弥散的环境影（大而虚）。
         ShadowFloating = Shadows("0 2 6 0 #1F0B1E33, 0 12 32 0 #2E0B1E33"),
+        // 两层分工明确：第二层往下方弥散（重量），第一层不偏移但带 1px 扩散（四周那一圈接触影）。
+        // 只有下方偏移的那一层，药丸<strong>上方</strong>读不出浮起 —— 实测差值只有 1/255，
+        // 用户要的"带阴影的圆角框"必须一眼看得见。
+        ShadowLift = Shadows("0 2 10 0 #240B1E33, 0 0 3 1 #1F0B1E33"),
         ShadowPill = Shadows("0 1 2 0 #1A0B1E33"),
 
         Danger = Brush(0xC4, 0x2B, 0x1C),
@@ -343,6 +360,7 @@ internal sealed class Palette
         SurfaceMuted = Brush(0x26, 0x2B, 0x31),
         SurfaceSunken = Brush(0x1A, 0x1E, 0x22),
 
+        LineHair = Brush(0x27, 0x2C, 0x32),
         LineSubtle = Brush(0x2E, 0x34, 0x3A),
         LineStrong = Brush(0x45, 0x4D, 0x56),
 
@@ -353,6 +371,7 @@ internal sealed class Palette
 
         // 同一套几何，不透明度提高一档：纯黑上的黑影子只有加深边缘这一种作用，太淡等于没有。
         ShadowFloating = Shadows("0 2 6 0 #66000000, 0 12 32 0 #8C000000"),
+        ShadowLift = Shadows("0 2 10 0 #73000000, 0 0 3 1 #59000000"),
         ShadowPill = Shadows("0 1 2 0 #66000000"),
 
         Danger = Brush(0xF2, 0x8B, 0x82),

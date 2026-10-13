@@ -31,7 +31,7 @@ internal static class MainMenuBar
 
         foreach (var top in MainMenuModel.Create())
         {
-            var topItem = new MenuItem { Header = lang.Label(top.TextKey) };
+            var topItem = new MenuItem { Header = lang.Label(top.TextKey) }.MenuGrayHover().RoundOnOpen();
 
             foreach (var item in top.Items)
             {
@@ -49,7 +49,7 @@ internal static class MainMenuBar
                     // Tag 存 CommandId，好让窗口在切换视图时按命令找到这一项置灰 / 点亮
                     // （「删除压缩文件」在首页上不该能点）。
                     Tag = item.CommandId,
-                };
+                }.MenuGrayHover();
 
                 if (item.CommandId is not null && commands.TryGetValue(item.CommandId, out var action))
                 {
@@ -95,14 +95,14 @@ internal static class MainMenuBar
             {
                 // 标题就是路径本身，不过 lang.Label / MnemonicText.Strip：
                 // 文件名里可以合法出现 &，剥一下就把用户的路径改错了。
-                var entry = new MenuItem { Header = path };
+                var entry = new MenuItem { Header = path }.MenuGrayHover();
                 ToolTip.SetTip(entry, path);
                 entry.Click += (_, _) => recent.Open(path);
                 host.Items.Add(entry);
             }
 
             host.Items.Add(new Separator());
-            var clear = new MenuItem { Header = lang.Label("MENUSTR_CLEAR_RECENT") };
+            var clear = new MenuItem { Header = lang.Label("MENUSTR_CLEAR_RECENT") }.MenuGrayHover();
             clear.Click += (_, _) =>
             {
                 recent.Clear();

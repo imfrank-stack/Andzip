@@ -19,6 +19,7 @@ namespace Andzip.App.UiTests;
 public class CardLanguageTests
 {
     [AvaloniaFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]   // 安装器也是这张清单里的一员，而它只在 Windows 上存在
     public void EveryDialogWrapsItsContentInAnElevatedCard()
     {
         var lang = TestLang.Chinese();
@@ -33,6 +34,9 @@ public class CardLanguageTests
             new VolumeSizeWindow(lang, 100),
             new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),
             new ProgressWindow(lang, new CancellationTokenSource()),
+
+            // 安装器也是同一个界面语言里的一员：它不该长得像另一个程序
+            new InstallerWindow(lang),
         };
 
         foreach (var window in windows)

@@ -99,6 +99,7 @@ public sealed class MainWindow : Window
         Background = Brushes.Transparent;
         FontFamily = Design.Font;
         FontSize = Design.Type.Body;
+        Icon = Assets.AppIcon;
 
         _homeContent = HomeView.Create(lang);
 
@@ -138,7 +139,7 @@ public sealed class MainWindow : Window
         _headerHost = new Border
         {
             Child = _headerBody,
-            BorderBrush = Design.Line.Subtle,
+            BorderBrush = Design.Line.Hair,
             BorderThickness = new Thickness(0, 0, 0, 1),
             Margin = new Thickness(Design.Space.X2, 0, Design.Space.X2, 0),
         };
@@ -148,10 +149,14 @@ public sealed class MainWindow : Window
         root.Children.Add(_contentHost);
 
         // 整块面板：外面 12px 是透明边距（圆角与阴影要地方画），里面是同一张表面。
+        // 那一圈发丝边不能省：桌面也是浅色的时候，只有阴影分不出边界 —— 对话框那边
+        // （Chrome.Chromeless）一直有，主窗口漏了就会显得"只有它是飘着的一块白"。
         _surface = new Border
         {
             Margin = new Thickness(Design.Space.X3),
             CornerRadius = new CornerRadius(16),
+            BorderBrush = Design.Line.Subtle,
+            BorderThickness = new Thickness(1),
             BoxShadow = Design.Shadow.Floating,
             Child = root,
         };
@@ -192,7 +197,8 @@ public sealed class MainWindow : Window
         // 窗口本身永远是透明的（圆角外要能看见桌面），有颜色的是那层面板。
         Background = Brushes.Transparent;
         _surface.Background = Design.Surface.Base;
-        _headerHost.BorderBrush = Design.Line.Subtle;
+        _surface.BorderBrush = Design.Line.Subtle;
+        _headerHost.BorderBrush = Design.Line.Hair;
         _titleBar.Repaint();
         _menuBar.Background = Brushes.Transparent;
         _menuBar.Foreground = Design.Ink.Primary;

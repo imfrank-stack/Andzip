@@ -2,6 +2,79 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [1.8.0] - 2026-10-13（新增：正常安装那条路 + 悬停浮起与弹出框圆润）
+
+> 版本号 1.7.0 → **1.8.0**（新增"安装器"这条产品路径算功能级 → 第二位 +1、第三位清零）。
+
+### 先探后写（四条，都是量出来的）
+
+- **菜单弹窗的根就是一枚 `Border`**。子菜单 / 右键菜单 / 下拉列表挂在**本窗口**的 `OverlayLayer`
+  上（`OverlayPopupHost`），`Popup.Child` 是枚直角白底 1px 灰边的 `Border` —— 它有 `BoxShadow`，
+  所以圆角与阴影是"打开那一刻改属性"，不必替 `MenuFlyoutPresenter` 重写 ControlTheme。
+- **但弹窗宿主 `ClipToBounds=true`，影子画不出宿主矩形**。实测：给那枚 Border 设了阴影后
+  外沿一个像素都不动，连把 `ClipToBounds` 关掉都没用（宿主自己的矩形就是裁剪框）。
+  解法是给 Border 加 `Margin = 12` —— 宿主量到的尺寸跟着变大，影子才有地方落；
+  再把 `Popup.Horizontal/VerticalOffset` 各收回 12，面板仍贴在锚点上。
+- **`ToolTip` 的模板里只有一枚 `ContentPresenter`，没有 Border**。设 `CornerRadius` 完全没效果。
+  唯一办法是换模板 —— 而这条**实测有效**，于是规范 §二 那句"应用层样式压不过 ControlTheme"
+  被限定成它真正的意思：**伪类 setter 压不过，模板压得过**。
+- **`MenuItem` 的高亮画在模板里的 `Border#root` 上**，值来自 ControlTheme 的伪类 setter（20% 品牌蓝）。
+  应用层样式改不动它，但**实例上的本地值改得动** —— 所以菜单栏悬停置灰是
+  "进来写本地值、离开 `ClearValue` 交还给模板"，展开态的高亮仍归 SimpleTheme 管。
+
+### 新增
+
+- **「正常安装」这条路径**（FR-1 分发）：`Andzip-Setup-v1.8.0-win-x64.exe` 双击 → 装到
+  `%LOCALAPPDATA%\Programs\Andzip`，桌面 + 开始菜单快捷方式，控制面板「应用和功能」里可卸载。
+  两个开关：关联常见压缩包格式（ZIP / 7Z / RAR / TAR）、加入资源管理器右键菜单。
+  **同一个二进制两种身份**，判据是它自己的文件名 —— 安装器与应用不可能版本不一致，
+  装进电脑的那份与绿色版是同一个文件。全程只写当前用户，一处都不需要管理员。
+- 打包一次出**两件产物**（`build.ps1` 第 5 步）：`Andzip-v1.8.0-win-x64.exe`（单文件绿色版）
+  与 `Andzip-Setup-v1.8.0-win-x64.exe`（安装器，同字节复制改名）。各 20.02 MB。
+- `Chrome.Lift()`（悬停药丸）、`Chrome.RoundPopups()` / `RoundOnOpen()`（弹出框）、
+  `Chrome.MenuGrayHover()`（菜单栏置灰）、`Chrome.InstallBubbles()`（气泡换模板）。
+- `Core/Installation/InstallLayout.cs`（安装落点纯字符串计算）、`Services/ShellLink.cs`
+  （`IShellLinkW` + `IPersistFile`）、`Services/InstallationService.cs`、`Views/InstallerWindow.cs`、`Assets.cs`。
+- 语言包 320 → **338** 个键（安装器 18 个）。
+
+### 变更
+
+- **首页所有可点控件悬停时浮起**：`Surface.Muted` 的圆角药丸 + `Shadow.Lift` 外阴影
+  （用户："鼠标扫过就出现带阴影的圆角框"）。工具栏大按钮、底部视图按钮、标题栏三颗都算。
+- **菜单栏（文件 / 编辑 / …）悬停改成轻微置灰**，不再是 SimpleTheme 那层 20% 品牌蓝。
+- **关闭按钮悬停不再是整块实心红**：改成 36×30 的圆角芯片，`Danger.50` 淡红底 + 红色叉
+  （用户："鼠标扫过时太突兀了"）。最小化 / 最大化同样收成芯片。
+- **所有弹出框圆角 + 阴影，没有直角**：子菜单、下拉列表、提示气泡。
+- **首页左栏那根线降一档**：新增最淡的 `Border.Hair`（`#F0F2F5` / `#272C32`）专供面板内部分区线，
+  且树与列表那根竖线**上下各留 8px 不贴边**。量出来它本来就只有 1px —— 粗的不是线，是它顶天立地。
+- **阴影从 2 档变 3 档**（`Shadow.Lift`），并且 `Shadow.Lift` 的第二层不偏移、带 1px 扩散：
+  只往下方偏移的话，药丸**上方**读不出浮起（实测差 1/255）。
+- **程序图标改成一张图**：图源 `assets/andzip.png`（512 RGBA 透明底），
+  `make_icon.py` 不再画几何，只按 alpha 外接框裁出七档 ICO（保留真透明）。
+  标题栏那枚、任务栏那个、桌面上那个快捷方式，全部来自这同一张图。
+- 主窗口补上**面板外圈那 1px 发丝边** —— 对话框一直有，主窗口漏了。
+
+### 修复
+
+- `SettingToggle` 上一个从没人用的 `IsEnabled`（它把 `InputElement.IsEnabled` 藏了，
+  还会让"禁用整行"看着生效其实没生效）删掉。
+- `ShellLink.ReadIcon` 之前没 `Load` 那个 `.lnk` 就 `GetIconLocation`，永远读回空串；
+  顺带量到 `IPersistFile.Load` 的模式参数必须传 0（传 4 得到 `E_INVALIDARG`）。
+
+### 测试
+
+- 界面 71 → **86**、核心 406 → **410**、内核 532、shell 自检 69 —— 合计 **1097** 条断言全绿。
+- 新增 `HoverAndPopupTests` 7 条（全部量像素）：药丸外沿必须有影子、菜单栏悬停是灰不是蓝、
+  子菜单圆角 + 影子、下拉列表同样、气泡角是圆的、关闭按钮是淡红芯片（中心与左上角两点分别验）、
+  分隔线是最淡一档且上下留白。
+- 新增 `InstallerTests` 5 条：真的装一次再卸一次（临时目录 + 探针注册表键），
+  断言程序文件 / 两个 `.lnk` / 卸载表三条都落了地，卸载后三处都收回；
+  快捷方式的图标字段确实指向安装后的 exe；没勾的开关记为 0（卸载不该顺手删它没做过的事）。
+- `AssetIconTests` 加两条：七档 DIB 的**四角 alpha 必须为 0**（否则桌面上是块白底方砖）、
+  图源 PNG 的 IHDR 颜色类型必须是 6（真彩色带 alpha）且真的内嵌进 exe。
+- 出包：`dist/Andzip-v1.8.0-win-x64.exe` 与 `dist/Andzip-Setup-v1.8.0-win-x64.exe`，各 20.02 MB，
+  引擎内嵌检查通过。
+
 ## [1.7.0] - 2026-10-13（变更：整块窗口改成一张圆角阴影面板 —— 无边框 + 自绘标题栏 + 设置页重做）
 
 > 版本号 1.6.0 → **1.7.0**（界面改版算功能级变化 → 第二位 +1、第三位清零）。

@@ -1,5 +1,7 @@
 using Andzip.App.Services;
+using Andzip.App.Views;
 using Andzip.Core.Archive;
+using Andzip.Core.Installation;
 using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia;
@@ -14,6 +16,9 @@ public sealed class App : Application
     public override void Initialize()
     {
         Styles.Add(new SimpleTheme());
+
+        // 提示气泡也换成圆角 + 阴影的那层外壳（它没有弹窗那枚 Border，只能换模板）。
+        Chrome.InstallBubbles(this);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -60,9 +65,21 @@ public sealed class App : Application
                 return;
             }
 
+            // 同一个二进制，两种身份：文件名是 Andzip-Setup* （用户从资源管理器双击的那一个），
+            // 或者带了 /uninstall（控制面板里那条卸载命令），就开安装器窗口而不是主窗口。
+            // 安装这件事只在 Windows 上存在，所以先问一句操作系统 —— 项目还要在 Linux 上构建。
+            if (OperatingSystem.IsWindows()
+                && (InstallLayout.IsInstallerFile(Environment.ProcessPath ?? string.Empty)
+                    || (desktop.Args?.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(arg, "/install", StringComparison.OrdinalIgnoreCase)) ?? false)))
+            {
+                desktop.MainWindow = new InstallerWindow(lang);
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             var window = new MainWindow(lang, settings);
             desktop.MainWindow = window;
-
             // 命令行带压缩包路径时直接打开：文件关联与「发送到 Andzip」都依赖这条入口。
             if (target is not null)
             {

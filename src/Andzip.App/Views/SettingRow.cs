@@ -122,10 +122,4 @@ internal sealed class SettingToggle : Border
         get => _toggle.IsChecked;
         set => _toggle.IsChecked = value;
     }
-
-    public bool IsEnabled
-    {
-        get => _toggle.IsEnabled;
-        set => _toggle.IsEnabled = value;
-    }
 }

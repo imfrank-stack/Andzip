@@ -77,6 +77,59 @@ public class AssetIconTests
         Assert.Equal(6, colorType);   // 6 = 真彩色 + alpha，缺 alpha 的图标在深色任务栏上会带一圈白底
     }
 
+    /// <summary>
+    /// 小尺寸那三档必须<strong>真的</strong>带透明像素，而不是把透明合成到白底上再存一遍。
+    /// <para>这是"桌面上的图标带透明通道"这句话唯一可验证的形式：shell 画 16/24/32 时读的就是
+    /// 这几档，它们要是白底，桌面上就会看到一个方方的白块，而 exe 里的 256 档再透明也没用。</para>
+    /// </summary>
+    [Fact]
+    public void SmallBitmapEntriesKeepTransparentCorners()
+    {
+        var entries = ReadEntries(out var bytes);
+
+        foreach (var entry in entries.Where(e => BitmapEntries.Contains(e.Width)))
+        {
+            var size = entry.Width;
+
+            // 头 40 字节，然后是自下而上的 BGRA；高度字段是"颜色 + 掩码"的两倍
+            Assert.Equal(40, BitConverter.ToInt32(bytes, entry.Offset));
+            Assert.Equal(size * 2, BitConverter.ToInt32(bytes, entry.Offset + 8));
+
+            var stride = size * 4;
+            var firstRow = entry.Offset + 40;
+            var lastRow = firstRow + stride * (size - 1);
+
+            var cornerAlpha = bytes[lastRow + 3];           // 左上角（存储顺序的最后一段）
+            var oppositeAlpha = bytes[firstRow + (size - 1) * 4 + 3];
+
+            Assert.True(cornerAlpha == 0 && oppositeAlpha == 0,
+                $"{size}px 那档的四角 alpha 不是 0（{cornerAlpha} / {oppositeAlpha}）—— "
+                + "桌面上会带一个方方的白底");
+        }
+    }
+
+    /// <summary>
+    /// 图源就是那张带透明通道的 PNG，而界面里用的图标与 exe 里的是<strong>同一张</strong>。
+    /// <para>标题栏那枚、任务栏那个、桌面上那个一旦来自三个源，改设计时必然出现"对不上"。</para>
+    /// </summary>
+    [Fact]
+    public void ThePngSourceIsEmbeddedAndActuallyTransparent()
+    {
+        var path = Path.Combine(RepositoryRoot(), "assets", "andzip.png");
+        Assert.True(File.Exists(path), "assets/andzip.png 不见了：ICO 与界面图标都以它为准。");
+
+        // 直接读 PNG 的 IHDR：签名 + 位深 8 + 颜色类型 6（真彩色带 alpha）。
+        // 不解码像素 —— 透明这件事在文件头就定了，而读文件头不需要把 Avalonia 拉进来。
+        var bytes = File.ReadAllBytes(path);
+        Assert.Equal(0x89, bytes[0]);
+        Assert.Equal((byte)'P', bytes[1]);
+        Assert.Equal(8, bytes[24]);
+        Assert.Equal(6, bytes[25]);
+
+        var project = Path.Combine(RepositoryRoot(), "src", "Andzip.App", "Andzip.App.csproj");
+        Assert.Contains("assets\\andzip.png", File.ReadAllText(project), StringComparison.Ordinal);
+    }
+
     private sealed record Entry(int Width, int Height, int BitCount, int Length, int Offset);
 
     private static List<Entry> ReadEntries(out byte[] bytes)

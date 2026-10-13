@@ -5,7 +5,7 @@
     powershell -ExecutionPolicy Bypass -File build.ps1 -SkipTests     # debug only
     powershell -ExecutionPolicy Bypass -File build.ps1 -Rid linux-x64
 
-  Pipeline: read VersionNo.ini -> unit tests (abort on failure) -> publish (single-file + trim + compress) -> artifact -> size report
+  Pipeline: version -> tests -> publish -> embed check -> portable exe + setup exe
   NOTE: keep this script ASCII-only (Windows PowerShell 5.1 reads non-BOM UTF-8 as ANSI).
 #>
 param(
@@ -27,11 +27,11 @@ if (-not $version -or -not $buildNo) {
     # VersionInfo.Parse enforces the same thing on the managed side.
     throw "VersionNo.ini: Version must be A.B.C with each part a single digit 0-9 (carry left when a part passes 9: 0.9.9 -> 1.0.0, not 0.10.0); BuildNo must be a number. Packaging refused."
 }
-Write-Host "[1/4] Version: $version (Build $buildNo)"
+Write-Host "[1/5] Version: $version (Build $buildNo)"
 
 # 2) Unit test gate (§11.1: no green, no package)
 if (-not $SkipTests) {
-    Write-Host "[2/4] Running unit tests (abort on failure)..."
+    Write-Host "[2/5] Running unit tests (abort on failure)..."
     dotnet test (Join-Path $root "Andzip.slnx") -c Release --nologo
     if ($LASTEXITCODE -ne 0) { throw "Unit tests failed; packaging aborted (requirements §11.1)." }
 
@@ -42,11 +42,11 @@ if (-not $SkipTests) {
     dotnet run --project $shellProj -c Release --no-build
     if ($LASTEXITCODE -ne 0) { throw "Native shell checks failed; packaging aborted (requirements §11.1)." }
 } else {
-    Write-Host "[2/4] Tests skipped (-SkipTests; debug only)."
+    Write-Host "[2/5] Tests skipped (-SkipTests; debug only)."
 }
 
 # 3) Publish
-Write-Host "[3/4] Publishing $Rid (single-file + trim + compress)..."
+Write-Host "[3/5] Publishing $Rid (single-file + trim + compress)..."
 $stage = Join-Path $root "dist\staging-$Rid"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 
@@ -73,8 +73,7 @@ dotnet publish (Join-Path $root "src\Andzip.App\Andzip.App.csproj") -c Release -
 if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
 
 # 4) Artifact + size report (NFR-8 / AC-14)
-$artifact = Join-Path $root "dist\Andzip-v$version-$Rid.exe"
-# Move-Item -Force does NOT replace an existing file on Windows (it only overrides the
+$artifact = Join-Path $root "dist\Andzip-v$version-$Rid.exe"# Move-Item -Force does NOT replace an existing file on Windows (it only overrides the
 # read-only attribute), so re-publishing the same version died with "cannot create a file
 # when that file already exists" -- twice now. Remove first, then move.
 if (Test-Path $artifact) { Remove-Item $artifact -Force }
@@ -95,5 +94,17 @@ for ($i = 0; $i -le $bytes.Length - $needle.Length; $i++) {
 if (-not $found) { throw "$artifact does not embed andzip_core.dll -- the native engine would be missing at run time." }
 Write-Host "      native engine embedded: OK"
 
+# 5) Two ways to ship the same build (1.8.0):
+#    - portable single file  : Andzip-vX.Y.Z-rid.exe          (run it, no install)
+#    - "normal install"      : Andzip-Setup-vX.Y.Z-rid.exe    (same bytes, renamed)
+# The installer is recognised by its OWN FILE NAME (InstallLayout.IsInstallerFile), so the
+# setup artifact cannot drift from the app build -- it is literally the same bytes.
+# Copy-Item, not a second publish: a second publish would re-trim and could differ.
+$setup = Join-Path $root "dist\Andzip-Setup-v$version-$Rid.exe"
+if (Test-Path $setup) { Remove-Item $setup -Force }
+Copy-Item $artifact $setup
+
 $sizeMb = [math]::Round((Get-Item $artifact).Length / 1MB, 2)
-Write-Host "[4/4] Artifact: $artifact ($sizeMb MB)"
+Write-Host "[5/5] Artifacts ($sizeMb MB each):"
+Write-Host "      $artifact"
+Write-Host "      $setup"
