@@ -2,6 +2,44 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [1.8.2] - 2026-10-13（修复：安装器一点「安装」就报 Call from invalid thread）
+
+> 版本号 1.8.1 → **1.8.2**（修 bug 动第三位）。
+
+### 症状与原因
+
+用户第一次真点「安装」，界面上只剩一行英文 `Call from invalid thread`，什么都没装成。
+
+后台线程里顺手读了控件属性：
+
+```csharp
+// 错：lambda 跑在线程池上，_associate / _contextMenu 是 Avalonia 控件
+await Task.Run(() => _service.Install(_plan, source, _associate.IsChecked == true, ...));
+
+// 对：控件状态在 UI 线程上先读成局部变量，后台只碰数据
+var associate = _associate.IsChecked == true;
+var contextMenu = _contextMenu.IsChecked == true;
+await Task.Run(() => _service.Install(_plan, source, associate, contextMenu));
+```
+
+文件复制确实该在后台跑（不然界面卡住），问题不在用了后台线程，而在把控件一起带了过去。
+其余 9 处 `Task.Run` 扫过，传的都是路径 / `ArchiveSettings` / `CancellationToken` 这类纯数据。
+
+### 为什么没被拦住
+
+安装器那 5 条测试全是绕开界面直接调 `InstallationService.Install(plan, …)`，参数是普通 bool ——
+"服务是对的"于是被当成了"功能是通的"，**控件到服务之间那一段没有任何测试走过**。
+1.8.1 的发版记录里也明确写了"没验证：勾上两个开关后的完整安装"。
+
+### 测试
+
+- 界面 87 → **88**、合计 **1099** 条断言全绿。
+- 新增 `InstallerTests.ClickingInstallActuallyInstallsAndReportsOnTheUi`：建窗口 → 找按钮 →
+  真的 `Click` → 等异步跑完 → 断言程序文件与 `.lnk` 落地、界面写着"已安装"、
+  并且界面上不许出现 `invalid thread`。把修法改回去它立刻红，失败消息里打出的界面文案
+  与用户截图一字不差。`InstallerWindow` 因此多了一个可选的落点参数（测试传临时目录 +
+  探针注册表键，于是这条不碰开发机的关联表与注册表）。
+
 ## [1.8.1] - 2026-10-13（修复：主框体那圈圆角阴影不自然 —— 描边去掉、影子收进窗口边界、圆角放大）
 
 > 版本号 1.8.0 → **1.8.1**（修 bug 动第三位）。

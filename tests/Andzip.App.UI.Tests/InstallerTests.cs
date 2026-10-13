@@ -142,6 +142,52 @@ public class InstallerTests : IDisposable
         Assert.Equal(installedOnThisMachine, uninstall.IsVisible);
     }
 
+    /// <summary>
+    /// 真的点一次「安装」。
+    /// <para>1.8.1 装不上就是这个形状：安装跑在后台线程上，而后台线程里读的是
+    /// <c>SettingToggle.IsChecked</c>（背后是 Avalonia 的 <c>ToggleButton</c>）——
+    /// 跨线程碰控件属性直接抛 "Call from invalid thread"，界面上只剩这一行英文。
+    /// 上面那几条都是绕开界面直接调 <c>InstallationService</c> 的，所以拦不住；
+    /// 这一条走的是用户那条路：按按钮 → 等异步跑完 → 看界面上写了什么。</para>
+    /// <para>两个开关在这里关掉：关联与右键菜单会动开发机的真实配置，
+    /// 而这条要钉的是"按钮到落盘这条线通不通"，不是那两条注册表逻辑（上面已单独测）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ClickingInstallActuallyInstallsAndReportsOnTheUi()
+    {
+        var lang = TestLang.Chinese();
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        foreach (var row in VisualQuery.Of<SettingToggle>(window))
+        {
+            row.IsChecked = false;
+        }
+
+        var install = VisualQuery.Of<Button>(window)
+            .Single(b => Equals(b.Content?.ToString(), lang.Label("TEXT_BTN_INSTALL")));
+        Clicker.Invoke(install);
+
+        // 等的是<strong>界面自己把话说完</strong>，不是"目标文件出现了"：
+        // File.Exists 在复制刚开始（文件被创建出来）就为真，那样等于在测一个半成品。
+        var deadline = Environment.TickCount64 + 20_000;
+        var shown = string.Empty;
+        while (Environment.TickCount64 < deadline)
+        {
+            UiWait.Pump(50);
+            shown = string.Join("|", VisualQuery.VisibleTexts(window));
+            if (!shown.Contains(lang.Label("TEXT_INSTALLER_WORKING"), StringComparison.Ordinal))
+            {
+                break;
+            }
+        }
+
+        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_DONE"), StringComparison.Ordinal),
+            $"点完安装，界面没有回话「{lang.Label("TEXT_INSTALLER_DONE")}」，实际是：{shown}");
+        Assert.DoesNotContain("invalid thread", shown, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(_plan.ExecutablePath), "界面说装好了，可安装目录里没有程序文件。");
+        Assert.True(File.Exists(_plan.StartMenuShortcut), "界面说装好了，可开始菜单没有快捷方式。");
+    }
+
     private InstallationService Service() => new(TestLang.Chinese());
 
     /// <summary>一个"够用像 exe"的源文件：安装器复制的是字节，不看内容。</summary>

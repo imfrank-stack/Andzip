@@ -31,11 +31,13 @@ public sealed class InstallerWindow : Window
     private readonly Button _install;
     private readonly Button _uninstall;
 
-    public InstallerWindow(LangCatalog lang)
+    /// <param name="plan">落点。默认按这台机器的真实目录算；测试传一份临时目录 + 探针注册表键，
+    /// 于是"点安装真的会跑一遍"这件事可以在不碰开发机配置的前提下验证。</param>
+    public InstallerWindow(LangCatalog lang, InstallPlan? plan = null)
     {
         _lang = lang;
         _service = new InstallationService(lang);
-        _plan = _service.CurrentPlan();
+        _plan = plan ?? _service.CurrentPlan();
 
         Title = lang.Label("TEXT_TITLE_INSTALLER");
         Width = 520;
@@ -140,8 +142,13 @@ public sealed class InstallerWindow : Window
                 var source = Environment.ProcessPath
                     ?? throw new InvalidOperationException("拿不到自己的 exe 路径，无法复制。");
 
-                var outcome = await Task.Run(() => _service.Install(
-                    _plan, source, _associate.IsChecked == true, _contextMenu.IsChecked == true));
+                // 开关的状态必须在<strong>进后台线程之前</strong>读出来：
+                // SettingToggle 背后是 Avalonia 的 ToggleButton，在别的线程上碰它的属性
+                // 直接抛 "Call from invalid thread"（1.8.1 装不上就是栽在这一行）。
+                var associate = _associate.IsChecked == true;
+                var contextMenu = _contextMenu.IsChecked == true;
+
+                var outcome = await Task.Run(() => _service.Install(_plan, source, associate, contextMenu));
 
                 var message = _lang.Label("TEXT_INSTALLER_DONE");
                 Show(outcome.BlockedExtensions.Count > 0
