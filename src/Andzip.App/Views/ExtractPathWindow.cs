@@ -56,8 +56,7 @@ public sealed class ExtractPathWindow : Window
         MinWidth = 560;
         MinHeight = 280;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 14;
+        this.WindowSurface();
 
         // ---- 目标路径（可编辑下拉 + 系统文件夹选择）----
         var initialDestination = _remembered?.DestinationPath
@@ -70,9 +69,9 @@ public sealed class ExtractPathWindow : Window
             ItemsSource = new List<string>(),
             Text = initialDestination,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
+        }.Picker();
 
-        var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
+        var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 }.Ghost();
         browseButton.Click += async (_, _) => await BrowseAsync();
 
         // ---- 快捷位置：横向一行，等宽 ----
@@ -95,7 +94,7 @@ public sealed class ExtractPathWindow : Window
             IsEnabled = false, // 压缩包视图（M3）提供选中上下文后启用
             GroupName = "extract-scope",
         };
-        var newFolderButton = new Button { Content = lang.Label("TEXT_BTN_NEW_FOLDER"), MinWidth = 120 };
+        var newFolderButton = new Button { Content = lang.Label("TEXT_BTN_NEW_FOLDER"), MinWidth = 120 }.Ghost();
         newFolderButton.Click += (_, _) => CreateFolder();
 
         var scopeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto") };
@@ -133,15 +132,15 @@ public sealed class ExtractPathWindow : Window
 
         _hint = new TextBlock
         {
-            Foreground = new SolidColorBrush(Color.Parse("#C42B1C")),
+            Foreground = Design.Semantic.Danger,
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
 
         // ---- 确定 / 取消 ----
-        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 }.Accent();
         okButton.Click += (_, _) => Confirm();
-        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 }.Ghost();
         cancelButton.Click += (_, _) => Close(false);
 
         var buttons = new StackPanel

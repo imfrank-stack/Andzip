@@ -23,8 +23,7 @@ public sealed class DuplicateFileWindow : Window
         SizeToContent = SizeToContent.Height;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 14;
+        this.WindowSurface();
 
         var message = new TextBlock
         {
@@ -38,11 +37,11 @@ public sealed class DuplicateFileWindow : Window
             TextWrapping = TextWrapping.Wrap,
         };
 
-        var renameButton = new Button { Content = lang.Label("TEXT_BTN_RENAME"), MinWidth = 96, IsDefault = true };
+        var renameButton = new Button { Content = lang.Label("TEXT_BTN_RENAME"), MinWidth = 96, IsDefault = true }.Accent();
         renameButton.Click += (_, _) => Choose(DuplicateDecision.Rename);
-        var overwriteButton = new Button { Content = lang.Label("TEXT_BTN_OVERWRITE"), MinWidth = 96 };
+        var overwriteButton = new Button { Content = lang.Label("TEXT_BTN_OVERWRITE"), MinWidth = 96 }.Ghost();
         overwriteButton.Click += (_, _) => Choose(DuplicateDecision.Overwrite);
-        var skipButton = new Button { Content = lang.Label("TEXT_BTN_SKIP"), MinWidth = 96, IsCancel = true };
+        var skipButton = new Button { Content = lang.Label("TEXT_BTN_SKIP"), MinWidth = 96, IsCancel = true }.Ghost();
         skipButton.Click += (_, _) => Choose(DuplicateDecision.Skip);
 
         var buttons = new StackPanel

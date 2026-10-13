@@ -92,14 +92,13 @@ public sealed class NewArchiveWindow : Window
         MinWidth = 760;
         MinHeight = 560;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 14;
+        this.WindowSurface();
 
         // ---- 列表与按钮 ----
-        _deleteButton = new Button { Content = lang.Label("TEXT_BTN_DELETE"), IsEnabled = false, MinWidth = 96 };
+        _deleteButton = new Button { Content = lang.Label("TEXT_BTN_DELETE"), IsEnabled = false, MinWidth = 96 }.Ghost();
         _deleteButton.Click += (_, _) => RemoveSelected();
 
-        var addButton = new Button { Content = lang.Label("TEXT_BTN_ADD"), MinWidth = 96 };
+        var addButton = new Button { Content = lang.Label("TEXT_BTN_ADD"), MinWidth = 96 }.Ghost();
         var addFilesItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FILES") };
         addFilesItem.Click += async (_, _) => await AddFilesAsync();
         var addFolderItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FOLDER") };
@@ -115,15 +114,16 @@ public sealed class NewArchiveWindow : Window
             SelectionMode = SelectionMode.Multiple,
             ItemTemplate = new FuncDataTemplate<ArchiveInputItem>((item, _) => BuildRow(item!), supportsRecycling: true),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.Parse("#C8C8C8")),
+            BorderBrush = Design.Line.Strong,
+            CornerRadius = Design.Radius.Sm,
         };
         _list.SelectionChanged += (_, _) => _deleteButton.IsEnabled = _list.SelectedItems?.Count > 0;
 
         // ---- 压缩文件设置 ----
-        _fileNameBox = new TextBox { Text = DefaultOutputPath(), VerticalAlignment = VerticalAlignment.Center };
+        _fileNameBox = new TextBox { Text = DefaultOutputPath(), VerticalAlignment = VerticalAlignment.Center }.Field();
         _fileNameBox.TextChanged += (_, _) => RefreshState();
 
-        var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
+        var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 }.Ghost();
         browseButton.Click += async (_, _) => await BrowseAsync();
 
         _formatCombo = new ComboBox
@@ -135,7 +135,7 @@ public sealed class NewArchiveWindow : Window
         };
         _formatCombo.SelectionChanged += (_, _) => OnFormatChanged();
 
-        _passwordButton = new Button { Content = lang.Label("TEXT_BTN_SET_PASSWORD"), MinWidth = 150 };
+        _passwordButton = new Button { Content = lang.Label("TEXT_BTN_SET_PASSWORD"), MinWidth = 150 }.Ghost();
         _passwordButton.Click += async (_, _) => await SetPasswordAsync();
 
         _levelCombo = new ComboBox
@@ -160,12 +160,12 @@ public sealed class NewArchiveWindow : Window
         };
         _volumeCombo.SelectionChanged += async (_, _) => await OnVolumeChangedAsync();
 
-        _hint = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#C42B1C")), TextWrapping = TextWrapping.Wrap, IsVisible = false };
+        _hint = new TextBlock { Foreground = Design.Semantic.Danger, TextWrapping = TextWrapping.Wrap, IsVisible = false };
 
-        _startButton = new Button { Content = lang.Label("TEXT_BTN_START"), MinWidth = 96, IsDefault = true };
+        _startButton = new Button { Content = lang.Label("TEXT_BTN_START"), MinWidth = 96, IsDefault = true }.Accent();
         _startButton.Click += async (_, _) => await StartAsync();
 
-        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), MinWidth = 96, IsCancel = true };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), MinWidth = 96, IsCancel = true }.Ghost();
         cancelButton.Click += (_, _) => Close();
 
         _testAfterCheck = new CheckBox
@@ -238,7 +238,7 @@ public sealed class NewArchiveWindow : Window
             IsVisible = false,
             Width = 320,
             BorderThickness = new Thickness(1, 0, 0, 0),
-            BorderBrush = new SolidColorBrush(Color.Parse("#E0E0E0")),
+            BorderBrush = Design.Line.Subtle,
             Margin = new Thickness(8, 16, 16, 16),
             Padding = new Thickness(14, 0, 0, 0),
             Child = new StackPanel
@@ -288,7 +288,7 @@ public sealed class NewArchiveWindow : Window
         AddRow(grid, 1, BuildColumnHeader(), 3);
         AddRow(grid, 2, _list, 3);
         AddRow(grid, 3, RightAligned(addButton, _deleteButton), 3);
-        AddRow(grid, 4, new Border { BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = new SolidColorBrush(Color.Parse("#E0E0E0")), Margin = new Thickness(0, 10, 0, 10) }, 3);
+        AddRow(grid, 4, new Border { BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = Design.Line.Subtle, Margin = new Thickness(0, Design.Space.X3, 0, Design.Space.X3) }, 3);
         AddRow(grid, 5, SectionTitle(lang.Label("TEXT_SECTION_ARCHIVE_SETTINGS")), 3);
         AddRow(grid, 6, BuildFieldRow(lang.Label("TEXT_LABEL_FILE_NAME"), _fileNameBox, browseButton));
         AddRow(grid, 7, BuildFieldRow(lang.Label("TEXT_LABEL_FORMAT"), _formatCombo, _passwordButton));
@@ -371,7 +371,7 @@ public sealed class NewArchiveWindow : Window
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,120,280") };
         var name = new TextBlock { Text = item.Name, TextTrimming = TextTrimming.CharacterEllipsis };
         var size = new TextBlock { Text = FormatSize(item.Size) };
-        var path = new TextBlock { Text = item.FullPath, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = new SolidColorBrush(Color.Parse("#6B6B6B")) };
+        var path = new TextBlock { Text = item.FullPath, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Design.Ink.Secondary };
         Grid.SetColumn(name, 0);
         Grid.SetColumn(size, 1);
         Grid.SetColumn(path, 2);

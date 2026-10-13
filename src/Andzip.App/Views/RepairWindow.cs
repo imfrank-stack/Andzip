@@ -43,13 +43,12 @@ public sealed class RepairWindow : Window
         SizeToContent = SizeToContent.Height;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 13;
+        this.WindowSurface();
 
         _modeHint = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Color.Parse("#555555")),
+            Foreground = Design.Ink.Secondary,
             Margin = new Thickness(20, 0, 20, 12),
         };
 
@@ -92,9 +91,9 @@ public sealed class RepairWindow : Window
             Text = suggestedOutput,
             Margin = new Thickness(0, 0, 8, 0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
+        }.Field();
 
-        var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 96 };
+        var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 96 }.Ghost();
         browse.Click += async (_, _) => await PickOutputAsync();
 
         _okButton = new Button
@@ -102,7 +101,7 @@ public sealed class RepairWindow : Window
             Content = lang.Label("TEXT_REPAIR_START"),
             IsDefault = true,
             MinWidth = 110,
-        };
+        }.Accent();
         _okButton.Click += (_, _) => Confirm();
 
         var cancelButton = new Button
@@ -110,10 +109,10 @@ public sealed class RepairWindow : Window
             Content = lang.Label("TEXT_BTN_CANCEL"),
             IsCancel = true,
             MinWidth = 96,
-        };
+        }.Ghost();
         cancelButton.Click += (_, _) => Close(false);
 
-        var panel = new StackPanel { Margin = new Thickness(20, 16, 20, 16) };
+        var panel = new StackPanel { Margin = new Thickness(Design.Space.X5, Design.Space.X4, Design.Space.X5, Design.Space.X4) };
         panel.Children.Add(new TextBlock
         {
             Text = lang.Label("TEXT_REPAIR_INTRO"),
@@ -145,7 +144,7 @@ public sealed class RepairWindow : Window
             Text = lang.Format("TEXT_REPAIR_SOURCE", ("file", Path.GetFileName(archivePath))),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0),
-            Foreground = new SolidColorBrush(Color.Parse("#777777")),
+            Foreground = Design.Ink.Secondary,
         });
 
         panel.Children.Add(new StackPanel

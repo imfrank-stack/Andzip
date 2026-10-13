@@ -1,0 +1,151 @@
+using System.Text;
+using Andzip.App;
+using Andzip.App.Views;
+using Andzip.Core.Settings;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
+
+namespace Andzip.App.UiTests;
+
+/// <summary>
+/// 界面规范（<c>docs/界面设计规范.md</c>）里那两条"禁止"的守门用例。
+/// <para>规则写在文档里只会在"恰好想起来"的那次生效 —— 版本号规则就是这么失守过一次
+/// （<c>0.13.0</c>，见开发记录第七节第 25 条）。所以能机器检查的都不留给自觉。</para>
+/// </summary>
+public class DesignTokenTests
+{
+    /// <summary>
+    /// 视图代码里不许再出现字面色值：颜色只能来自 <c>Design.cs</c>。
+    /// <para>散落的 <c>Color.Parse("#...")</c> 是这次改版的主要债务来源 —— 23 个色值分布在
+    /// 10 个文件里，改一处配色就要全仓搜替换。</para>
+    /// </summary>
+    [Fact]
+    public void NoHardcodedColorsOutsideTheDesignTokens()
+    {
+        var offenders = OffendingLines("Color.Parse", "Brushes.White", "Brushes.Black");
+
+        Assert.True(offenders.Count == 0, "界面里出现了字面色值，规范说颜色只能来自 Design.cs：\n    "
+            + string.Join("\n    ", offenders));
+    }
+
+    /// <summary>
+    /// 工具栏按钮的悬停态必须<strong>真的看得见</strong>。
+    /// <para>这是改版前最大的缺口：蓝色带上的按钮悬停时一个像素都不变，用户只能靠点下去
+    /// 才知道这里能不能点。规范第二条原则就是"每个可点的元素都要有反馈"。</para>
+    /// <para>断言方式是量像素：把真指针移到按钮上，同一个点的颜色必须变浅（叠加层是半透明白）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ToolBarButtonsShowAHoverState()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+
+        var button = VisualQuery.Of<Button>(window).First(b => b.Content is Avalonia.Controls.StackPanel);
+        var probe = button.TranslatePoint(new Point(6, 6), window)!.Value;
+
+        var rest = Sample(window, probe);
+        window.MouseMove(probe);
+        Dispatcher.UIThread.RunJobs();
+        var hovered = Sample(window, probe);
+
+        Assert.False(Same(rest, hovered), $"悬停时按钮底色没变（前后都是 {Hex(rest)}）：交互态丢了。");
+        Assert.True(Luminance(hovered) > Luminance(rest), "悬停应当是「浮亮」（半透明白叠加），不是变暗。");
+    }
+
+    /// <summary>对话框主按钮是实心品牌蓝 —— 主/次按钮的分量差靠这个建立。</summary>
+    [AvaloniaFact]
+    public void DialogPrimaryButtonIsFilledWithTheBrandColor()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new MessageWindow(lang, "标题", "正文", "TEXT_BTN_OK", "TEXT_BTN_CANCEL").Shown();
+
+        var ok = VisualQuery.Of<Button>(dialog).Single(b => Equals(b.Content?.ToString(), lang.Label("TEXT_BTN_OK")));
+        var at = (ok.TranslatePoint(new Point(4, 4), dialog) ?? default);
+
+        Assert.True(Same(Sample(dialog, at), BrandColor),
+            $"主按钮底色不是品牌蓝（实测 {Hex(Sample(dialog, at))}）。");
+    }
+
+    private static readonly Color BrandColor = Color.FromRgb(0x0F, 0x6C, 0xBD);
+
+    private static List<string> OffendingLines(params string[] needles)
+    {
+        var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");
+        var found = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(file) == "Design.cs"
+                || file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            {
+                continue;
+            }
+
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (needles.Any(n => lines[i].Contains(n, StringComparison.Ordinal)))
+                {
+                    found.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {lines[i].Trim()}");
+                }
+            }
+        }
+
+        return found;
+    }
+
+    private static string RepositoryRoot()
+    {
+        // 要的是仓库根，不是"任何含 langs/ 的目录"：测试输出目录里也有一份 langs/ 拷贝，
+        // 所以还得同时有 src/Andzip.App 才算。
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "langs"))
+                && Directory.Exists(Path.Combine(dir.FullName, "src", "Andzip.App")))
+            {
+                return dir.FullName;
+            }
+        }
+
+        throw new InvalidOperationException("找不到仓库根目录。");
+    }
+
+    private static Color Sample(Window window, Point at)
+    {
+        var frame = window.CaptureRenderedFrame() ?? throw new InvalidOperationException("没有画面");
+        using (frame)
+        {
+            var scale = (double)frame.PixelSize.Width / window.Bounds.Width;
+            var buffer = Bytes(frame);
+            var stride = frame.PixelSize.Width * 4;
+            var x = Math.Clamp((int)(at.X * scale), 0, frame.PixelSize.Width - 1);
+            var y = Math.Clamp((int)(at.Y * scale), 0, frame.PixelSize.Height - 1);
+            var offset = y * stride + x * 4;
+            return Color.FromRgb(buffer[offset + 2], buffer[offset + 1], buffer[offset]);
+        }
+    }
+
+    private static byte[] Bytes(WriteableBitmap frame)
+    {
+        using var locked = frame.Lock();
+        var buffer = new byte[locked.RowBytes * frame.PixelSize.Height];
+        System.Runtime.InteropServices.Marshal.Copy(locked.Address, buffer, 0, buffer.Length);
+        return buffer;
+    }
+
+    private static double Luminance(Color c) => 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+
+    /// <summary>帧缓冲在这个 headless 后端里不是 Bgra32，逐通道比会假阴性，排序后比即可。</summary>
+    private static bool Same(Color a, Color b)
+    {
+        static int[] Sort(Color c) => [.. new[] { (int)c.R, c.G, c.B }.OrderBy(v => v)];
+        return Sort(a).SequenceEqual(Sort(b));
+    }
+
+    private static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+}

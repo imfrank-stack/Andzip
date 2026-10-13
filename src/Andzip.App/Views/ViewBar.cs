@@ -1,14 +1,14 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
-using ShapePath = Avalonia.Controls.Shapes.Path;
 
 namespace Andzip.App.Views;
 
 /// <summary>
 /// 视图底部栏（首页与压缩包视图共用）：浅灰一条，右侧依次是视图切换按钮与状态文字。
+/// <para>层级靠底色差（内容白、这条浅灰）+ 1px 上边线表达 —— SimpleTheme 用不了阴影，
+/// 见规范第七节。按钮命中区按规范第八节抬到 30×26 以上。</para>
 /// </summary>
 internal static class ViewBar
 {
@@ -18,7 +18,9 @@ internal static class ViewBar
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 3,
+            Spacing = Design.Space.X1,
+            Margin = new Thickness(0, 0, Design.Space.X2, 0),
+            VerticalAlignment = VerticalAlignment.Center,
         };
 
         foreach (var item in rightItems)
@@ -28,10 +30,10 @@ internal static class ViewBar
 
         return new Border
         {
-            Height = 30,
-            Background = new SolidColorBrush(Color.Parse("#F0F0F0")),
+            Height = 34,
+            Background = Design.Surface.Muted,
             BorderThickness = new Thickness(0, 1, 0, 0),
-            BorderBrush = new SolidColorBrush(Color.Parse("#D0D0D0")),
+            BorderBrush = Design.Line.Subtle,
             Child = right,
         };
     }
@@ -41,24 +43,14 @@ internal static class ViewBar
     {
         var button = new Button
         {
-            Content = new ShapePath
-            {
-                Data = Geometry.Parse(geometry),
-                Stroke = new SolidColorBrush(Color.Parse("#3C3C3C")),
-                StrokeThickness = 1.3,
-                Stretch = Stretch.Uniform,
-                Width = 15,
-                Height = 15,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-            Width = 26,
-            Height = 23,
-            Padding = new Thickness(4),
-            Margin = new Thickness(0, 0, 0, 3),
-            VerticalAlignment = VerticalAlignment.Bottom,
+            Content = Icons.Line(geometry, Design.IconSize.Inline, Design.Icon.Glyph, 1.3),
+            Width = 30,
+            Height = 26,
+            Padding = new Thickness(Design.Space.X1),
+            VerticalAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
+            CornerRadius = Design.Radius.Sm,
             IsEnabled = onClick is not null,
         };
 
@@ -69,22 +61,27 @@ internal static class ViewBar
             button.Click += (_, _) => onClick();
         }
 
+        // 这三个按钮的"当前生效"是由 Highlight 事后改底色的，所以悬停态不能像 Chrome 那样
+        // 记住调用时的静止色 —— 那样一悬停就把选中高亮冲掉了。状态一律从 Tag 现算。
+        button.PointerEntered += (_, _) => Paint(button, hover: true);
+        button.PointerExited += (_, _) => Paint(button, hover: false);
+        Paint(button, hover: false);
         return button;
     }
 
     /// <summary>当前生效的视图按钮画成按下态。</summary>
     public static void Highlight(Button button, bool active)
     {
-        button.Background = active ? new SolidColorBrush(Color.Parse("#CBE6FA")) : Brushes.Transparent;
-        button.BorderThickness = new Thickness(active ? 1 : 0);
-        button.BorderBrush = new SolidColorBrush(Color.Parse("#8FBEE8"));
+        button.Tag = active;
+        Paint(button, hover: button.IsPointerOver);
     }
-}
 
-/// <summary>底部栏三个视图按钮的线稿图标。</summary>
-internal static class ViewIcon
-{
-    public const string List = "M0,1.5 h2 v2 h-2 z M4,2 h11 M0,6 h2 v2 h-2 z M4,6.5 h11 M0,10.5 h2 v2 h-2 z M4,11 h11";
-    public const string Grid = "M0,0 h6 v6 h-6 z M9,0 h6 v6 h-6 z M0,9 h6 v6 h-6 z M9,9 h6 v6 h-6 z";
-    public const string Folder = "M0,3 h5 l1.4,2 H14 V13 H0 z";
+    private static void Paint(Button button, bool hover)
+    {
+        var active = Equals(button.Tag, true);
+
+        button.Background = active ? Design.Brand.Soft : hover && button.IsEnabled ? Design.Surface.Base : Brushes.Transparent;
+        button.BorderBrush = active ? Design.Brand.Line : hover && button.IsEnabled ? Design.Line.Subtle : Brushes.Transparent;
+        button.BorderThickness = new Thickness(active || hover && button.IsEnabled ? 1 : 0);
+    }
 }

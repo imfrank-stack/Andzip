@@ -69,7 +69,12 @@ public sealed class MainWindow : Window
         MinWidth = 640;
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = new SolidColorBrush(Color.Parse("#208CFB"));
+
+        // 窗口底色回到白：以前整窗是品牌蓝，蓝色从工具栏的缝隙里漏出来，
+        // 内容区一有留白就变成"蓝底上贴了张表"。现在蓝只待在工具栏那一条里（规范 5.1）。
+        Background = Design.Surface.Base;
+        FontFamily = Design.Font;
+        FontSize = Design.Type.Body;
 
         _homeContent = HomeView.Create(lang);
 
@@ -94,8 +99,20 @@ public sealed class MainWindow : Window
 
         _menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles));
-        DockPanel.SetDock(_menuBar, Dock.Top);
-        root.Children.Add(_menuBar);
+
+        // 菜单与工具栏之间那条 1px 线是层级的一部分：SimpleTheme 用不了阴影，
+        // 层级就靠底色差和这根线表达（规范 5.1）。
+        // 注意 Dock.Top 必须设在<strong>这层 Border</strong>上 —— 设在 _menuBar 上没用，
+        // DockPanel 只看自己直接子元素的值，那样菜单栏会变成左边一整列。
+        var menuHost = new Border
+        {
+            Child = _menuBar,
+            Background = Design.Surface.Base,
+            BorderBrush = Design.Line.Subtle,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+        };
+        DockPanel.SetDock(menuHost, Dock.Top);
+        root.Children.Add(menuHost);
 
         // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
         _toolBar = MainToolBar.Create(_lang, new MainToolBarActions(

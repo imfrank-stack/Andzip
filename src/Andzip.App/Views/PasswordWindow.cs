@@ -32,8 +32,7 @@ public sealed class PasswordWindow : Window
         SizeToContent = SizeToContent.Height;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 14;
+        this.WindowSurface();
 
         _passwordBox = new TextBox
         {
@@ -51,14 +50,14 @@ public sealed class PasswordWindow : Window
             : null;
         _hint = new TextBlock
         {
-            Foreground = new SolidColorBrush(Color.Parse("#C42B1C")),
+            Foreground = Design.Semantic.Danger,
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
 
-        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), IsDefault = true, MinWidth = 96 }.Accent();
         okButton.Click += (_, _) => Confirm();
-        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 };
+        var cancelButton = new Button { Content = lang.Label("TEXT_BTN_CANCEL"), IsCancel = true, MinWidth = 96 }.Ghost();
         cancelButton.Click += (_, _) => Close(false);
 
         var buttons = new StackPanel

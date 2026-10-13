@@ -18,53 +18,64 @@ namespace Andzip.App.Views;
 /// </summary>
 internal static class MainToolBar
 {
-    private static readonly IBrush Normal = Brushes.White;
-    private static readonly IBrush Dimmed = new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
-
     public static Control Create(LangCatalog lang, MainToolBarActions actions)
     {
         var items = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 2,
-            Margin = new Thickness(10, 6, 10, 8),
+            Spacing = Design.Space.X1,
+            Margin = new Thickness(Design.Space.X3, Design.Space.X2, Design.Space.X3, Design.Space.X3),
             VerticalAlignment = VerticalAlignment.Bottom,
         };
 
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), ToolBarIcon.Open, actions.OpenArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_EXTRACT"), ToolBarIcon.Extract, actions.ExtractArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), Icons.Open, actions.OpenArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_EXTRACT"), Icons.Extract, actions.ExtractArchive));
 
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_NEW"), ToolBarIcon.New, actions.NewArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_ADD"), ToolBarIcon.Add, actions.AddFiles));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_DELETE"), ToolBarIcon.Delete, actions.DeleteFiles));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_TEST"), ToolBarIcon.Test, actions.TestArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_SCAN"), ToolBarIcon.Scan, actions.ScanArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_VIEW"), ToolBarIcon.View, actions.ToggleViewStyle));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_NEW"), Icons.New, actions.NewArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_ADD"), Icons.Add, actions.AddFiles));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_DELETE"), Icons.Delete, actions.DeleteFiles));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_TEST"), Icons.Test, actions.TestArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_SCAN"), Icons.Scan, actions.ScanArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_VIEW"), Icons.View, actions.ToggleViewStyle));
 
         // 当前语言：切换语言尚未实现，所以这里只是一个展示用的禁用按钮。
         items.Children.Add(CreateButton(
             "[" + lang.GetLanguageDisplayName(lang.CurrentLanguage) + "]",
-            ToolBarIcon.None,
+            string.Empty,
             null));
 
-        return new Border { MinHeight = 96, Child = items };
+        // 品牌蓝只出现在这一条带上（规范 3.1 / 5.1）。带子下沿留 1px 更深的边，
+        // 让它与内容区之间有一条清楚的界，而不是"颜色渐变过去"。
+        return new Border
+        {
+            MinHeight = 96,
+            Background = Design.Brand.Base,
+            BorderBrush = Design.Brand.Deep,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = items,
+        };
     }
 
     private static Button CreateButton(string text, string icon, Action? run)
     {
+        var enabled = run is not null;
+
         var content = new StackPanel
         {
             Orientation = Orientation.Vertical,
             Children =
             {
-                CreateIcon(icon, run is null ? Dimmed : Normal),
+                // 禁用态图标与文字同降 —— 只淡图标会读成"这个功能有，只是暂时不能点"，
+                // 而事实是整条命令都不可用。
+                CreateIcon(icon, enabled ? Design.Ink.OnBrand : Design.Ink.OnBrandDisabled),
                 new TextBlock
                 {
                     Text = text,
-                    FontSize = 14,
-                    Foreground = run is null ? Dimmed : Normal,
+                    FontSize = Design.Type.Body,
+                    Foreground = enabled ? Design.Ink.OnBrand : Design.Ink.OnBrandDisabled,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 5, 0, 0),
+                    Margin = new Thickness(0, Design.Space.X2 - 1, 0, 0),
+                    TextAlignment = TextAlignment.Center,
                 },
             },
         };
@@ -74,18 +85,21 @@ internal static class MainToolBar
             Content = content,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(13, 5, 13, 5),
-            MinWidth = 66,
-            IsEnabled = run is not null,
+            Padding = new Thickness(Design.Space.X3 + 2, Design.Space.X2, Design.Space.X3 + 2, Design.Space.X2),
+            MinWidth = 68,
+            FontFamily = Design.Font,
+            IsEnabled = enabled,
         };
 
-        if (run is not null)
+        if (run is { } action)
         {
             button.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
-            button.Click += (_, _) => run();
+            button.Click += (_, _) => action();
         }
 
-        return button;
+        // 圆角 + 悬停/按下叠加层。禁用时 Chrome 的事件根本不会触发（收不到指针事件），
+        // 所以静止态保持透明，不会在带子上留一块"亮着的死按钮"。
+        return button.OnBrand();
     }
 
     private static Control CreateIcon(string geometry, IBrush stroke)
@@ -93,19 +107,10 @@ internal static class MainToolBar
         if (string.IsNullOrEmpty(geometry))
         {
             // 语言按钮没有图标，占一个等高位保持基线一致。
-            return new Border { Width = 40, Height = 40 };
+            return new Border { Width = Design.IconSize.ToolBar, Height = Design.IconSize.ToolBar };
         }
 
-        return new Path
-        {
-            Data = Geometry.Parse(geometry),
-            Stroke = stroke,
-            StrokeThickness = 1.5,
-            Stretch = Stretch.Uniform,
-            Width = 40,
-            Height = 40,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
+        return Icons.Line(geometry, Design.IconSize.ToolBar, stroke);
     }
 }
 
@@ -120,32 +125,3 @@ internal sealed record MainToolBarActions(
     Action? ScanArchive = null,
     Action? ToggleViewStyle = null);
 
-/// <summary>工具栏线稿图标（24×24 视框，白色描边）。</summary>
-internal static class ToolBarIcon
-{
-    public const string None = "";
-
-    /// <summary>打开：文件夹 + 向右箭头。</summary>
-    public const string Open = "M2,5 h7 l2,2 h11 v13 h-20 z M9,14 h7 M13,11 l3.4,3 -3.4,3";
-
-    /// <summary>解压：抽屉 + 向下箭头（把内容取出来）。</summary>
-    public const string Extract = "M3,13 h18 v9 h-18 z M12,2 v9 M8,7.5 l4,4 4,-4 M7,16 h4 M14,16 h3";
-
-    /// <summary>新建：带拉链的空白压缩包。</summary>
-    public const string New = "M5,3 h14 v19 h-14 z M12,3 v19 M12,7 h2.6 M9.4,10 h2.6 M12,13 h2.6 M9.4,16 h2.6";
-
-    /// <summary>添加：文件 + 加号。</summary>
-    public const string Add = "M5,3 h10 v19 h-10 z M15,3 v5 h5 M17.5,12 v7 M14,15.5 h7";
-
-    /// <summary>删除：文件 + 减号。</summary>
-    public const string Delete = "M5,3 h10 v19 h-10 z M15,3 v5 h5 M14,16 h7";
-
-    /// <summary>测试：闪电（快速校验）。</summary>
-    public const string Test = "M13.5,2 L6,13 h5 l-1.5,9 L18,10 h-5 z";
-
-    /// <summary>扫描：盾牌 + 对勾。</summary>
-    public const string Scan = "M12,2 L4,5 v7 c0,5 3.4,8.4 8,10 c4.6,-1.6 8,-5 8,-10 v-7 z M8,12 l3,3 l5.5,-6";
-
-    /// <summary>查看：列表线条。</summary>
-    public const string View = "M3,5 h3 v3 h-3 z M9,6 h12 M3,11 h3 v3 h-3 z M9,12 h12 M3,17 h3 v3 h-3 z M9,18 h12";
-}

@@ -46,8 +46,8 @@ internal sealed class ArchiveView : IDisposable
     private static readonly string[] ImageExtensions =
         [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff"];
 
-    private static readonly IBrush PrimaryText = new SolidColorBrush(Color.Parse("#1F1F1F"));
-    private static readonly IBrush SecondaryText = new SolidColorBrush(Color.Parse("#6B6B6B"));
+    private static readonly IBrush PrimaryText = Design.Ink.Primary;
+    private static readonly IBrush SecondaryText = Design.Ink.Secondary;
 
     private readonly LangCatalog _lang;
     private readonly ArchiveListing _listing;
@@ -58,18 +58,27 @@ internal sealed class ArchiveView : IDisposable
     private readonly ViewDefaults _view;
 
     private readonly TreeView _tree = new();
-    private readonly Border _treePane = new() { Background = Brushes.White };
+
+    // 树所在的面板比内容区深一档（Sunken），分隔条两侧靠底色差就能看出边界，
+    // 不需要描边 —— 这是规范 5.1 里"层级靠底色差"的主要落点。
+    private readonly Border _treePane = new() { Background = Design.Surface.Sunken };
     private readonly GridSplitter _splitter = new()
     {
         Width = 4,
-        Background = new SolidColorBrush(Color.Parse("#D6D6D6")),
+        Background = Design.Line.Strong,
         HorizontalAlignment = HorizontalAlignment.Stretch,
         VerticalAlignment = VerticalAlignment.Stretch,
         ResizeDirection = GridResizeDirection.Columns,
         ResizeBehavior = GridResizeBehavior.PreviousAndNext,
     };
     private readonly ContentControl _detailHost = new();
-    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 4, 0) };
+    private readonly TextBlock _status = new()
+    {
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(Design.Space.X3, 0, Design.Space.X3, 0),
+        FontSize = Design.Type.Caption,
+        Foreground = Design.Ink.Secondary,
+    };
     private readonly Button _listToggle;
     private readonly Button _iconToggle;
     private readonly Button _locateButton;
@@ -95,9 +104,9 @@ internal sealed class ArchiveView : IDisposable
         _current = _root;
         _columns = BuildColumns(lang);
 
-        _listToggle = ViewBar.Toggle(ViewIcon.List, lang.Label("TEXT_VIEW_DETAILS"), () => SetIconView(false));
-        _iconToggle = ViewBar.Toggle(ViewIcon.Grid, lang.Label("TEXT_VIEW_ICONS"), () => SetIconView(true));
-        _locateButton = ViewBar.Toggle(ViewIcon.Folder, lang.Label("TEXT_OPEN_ARCHIVE_LOCATION"), () => RevealArchive());
+        _listToggle = ViewBar.Toggle(Icons.ListMode, lang.Label("TEXT_VIEW_DETAILS"), () => SetIconView(false));
+        _iconToggle = ViewBar.Toggle(Icons.IconMode, lang.Label("TEXT_VIEW_ICONS"), () => SetIconView(true));
+        _locateButton = ViewBar.Toggle(Icons.Locate, lang.Label("TEXT_OPEN_ARCHIVE_LOCATION"), () => RevealArchive());
 
         // 图标视图要在建树之前定下来：Render() 会按它生成详情区内容。
         _iconView = _view.IconViewByDefault;
@@ -117,7 +126,7 @@ internal sealed class ArchiveView : IDisposable
     {
         _treePane.Child = _tree;
 
-        var detailPane = new Border { Background = Brushes.White, Child = _detailHost };
+        var detailPane = new Border { Background = Design.Surface.Base, Child = _detailHost };
 
         // 关掉树的时候把两列宽度一起归零，只藏控件不够 —— Grid 仍会给 300px 与 4px 留位置，
         // 结果是一条拖不动也点不到的空白。
@@ -170,7 +179,7 @@ internal sealed class ArchiveView : IDisposable
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 5,
-                Children = { Glyph(FolderGeometry, 16), new TextBlock { Text = header, VerticalAlignment = VerticalAlignment.Center } },
+                Children = { Icons.Folder(Design.IconSize.Inline), new TextBlock { Text = header, VerticalAlignment = VerticalAlignment.Center } },
             },
             Tag = node,
         };
@@ -285,7 +294,10 @@ internal sealed class ArchiveView : IDisposable
         var headerHost = new Border
         {
             ClipToBounds = true,
-            Height = 24,
+            Height = 32,
+            Background = Design.Surface.Muted,
+            BorderBrush = Design.Line.Subtle,
+            BorderThickness = new Thickness(0, 0, 0, 1),
             Child = header,
         };
 
@@ -294,7 +306,7 @@ internal sealed class ArchiveView : IDisposable
             ItemsSource = CurrentRows(),
             SelectionMode = SelectionMode.Multiple,
             ItemTemplate = new FuncDataTemplate<ArchiveEntryInfo>((entry, _) => BuildRow(entry!), supportsRecycling: true),
-            Background = Brushes.White,
+            Background = Design.Surface.Base,
             BorderThickness = new Thickness(0),
         };
 
@@ -346,15 +358,18 @@ internal sealed class ArchiveView : IDisposable
                 Content = new TextBlock
                 {
                     Text = _columns[i].Title,
-                    FontSize = 13,
+                    FontSize = Design.Type.Body,
+                    FontWeight = Design.Type.Semibold,
                     Foreground = PrimaryText,
                     TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
-                Background = new SolidColorBrush(Color.Parse("#FAFAFA")),
-                BorderThickness = new Thickness(0, 0, 1, 1),
-                BorderBrush = new SolidColorBrush(Color.Parse("#DCDCDC")),
-                Padding = new Thickness(6, 0, 2, 0),
+                // 表头是贴边的，圆角会在角上露出底色缝 —— 规范 4.1 里明写的两处例外之一。
+                Background = Design.Surface.Muted,
+                BorderThickness = new Thickness(0, 0, 1, 0),
+                BorderBrush = Design.Line.Subtle,
+                Padding = new Thickness(Design.Space.X2, 0, Design.Space.X1, 0),
+                CornerRadius = Design.Radius.None,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalContentAlignment = VerticalAlignment.Center,
@@ -477,7 +492,7 @@ internal sealed class ArchiveView : IDisposable
         var row = new Grid
         {
             ColumnDefinitions = BuildColumnDefinitions(),
-            Margin = new Thickness(0, 2, 0, 2),
+            Height = 28,
         };
 
         for (var i = 0; i < _columns.Length; i++)
@@ -485,7 +500,8 @@ internal sealed class ArchiveView : IDisposable
             var text = new TextBlock
             {
                 Text = _columns[i].Text(entry),
-                FontSize = 13,
+                FontSize = Design.Type.Body,
+                LineHeight = Design.Type.BodyLineHeight,
                 Foreground = i == 0 ? PrimaryText : SecondaryText,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -497,8 +513,10 @@ internal sealed class ArchiveView : IDisposable
                 // 名称列是「图标 + 文字」。这里必须用 Grid 而不是 StackPanel：StackPanel 测量
                 // 子项时给的是无限宽度，TextBlock 因此永远不会被约束，长名字会直接压到隔壁列上。
                 var name = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-                var glyph = entry.IsDirectory ? Glyph(FolderGeometry, 14) : Glyph(FileGeometry, 14);
-                glyph.Margin = new Thickness(0, 0, 5, 0);
+                var glyph = entry.IsDirectory
+                    ? Icons.Folder(Design.IconSize.Row)
+                    : Icons.File(Design.IconSize.Row);
+                glyph.Margin = new Thickness(0, 0, Design.Space.X2 - 2, 0);
                 name.Children.Add(glyph);
                 Grid.SetColumn(text, 1);
                 name.Children.Add(text);
@@ -519,7 +537,11 @@ internal sealed class ArchiveView : IDisposable
         var rows = CurrentRows();
         var allowThumbnails = rows.Count <= ThumbnailEntryLimit;
 
-        var panel = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(6) };
+        var panel = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(Design.Space.X2),
+        };
         foreach (var row in rows)
         {
             panel.Children.Add(BuildIconCell(row, allowThumbnails));
@@ -530,25 +552,28 @@ internal sealed class ArchiveView : IDisposable
             Content = panel,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Background = Brushes.White,
+            Background = Design.Surface.Base,
         };
     }
 
     private Control BuildIconCell(ArchiveEntryInfo entry, bool allowThumbnails)
     {
         var placeholder = entry.IsDirectory
-            ? Glyph(FolderGeometry, 72)
-            : Glyph(FileGeometry, 72);
+            ? Icons.Folder(Design.IconSize.Tile)
+            : Icons.File(Design.IconSize.Tile);
         placeholder.HorizontalAlignment = HorizontalAlignment.Center;
         placeholder.VerticalAlignment = VerticalAlignment.Center;
 
         var image = new Image { Width = 96, Height = 96, Stretch = Stretch.Uniform };
 
+        // 缩略图区自己一层圆角（Sm），卡片外层再一层（Md）—— 内层必须比外层小，
+        // 否则两级圆角看着一样大，会显出"双层边"（规范 4.1）。
         var frame = new Border
         {
             Width = 100,
             Height = 100,
-            Background = Brushes.White,
+            Background = Design.Surface.Sunken,
+            CornerRadius = Design.Radius.Sm,
             Child = new Panel { Children = { placeholder, image } },
         };
 
@@ -561,16 +586,19 @@ internal sealed class ArchiveView : IDisposable
         {
             Orientation = Orientation.Vertical,
             Width = 126,
-            Margin = new Thickness(4, 4, 4, 10),
+            Margin = new Thickness(Design.Space.X2, Design.Space.X2, Design.Space.X2, Design.Space.X4),
+            Spacing = Design.Space.X2,
             Children =
             {
                 frame,
                 new TextBlock
                 {
                     Text = entry.Name,
-                    FontSize = 13,
+                    FontSize = Design.Type.Caption,
+                    Foreground = PrimaryText,
                     TextAlignment = TextAlignment.Center,
                     TextWrapping = TextWrapping.Wrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     MaxHeight = 38,
                 },
             },
@@ -759,25 +787,7 @@ internal sealed class ArchiveView : IDisposable
         return string.Join(", ", new[] { os, unicode }.Where(s => !string.IsNullOrEmpty(s)));
     }
 
-    // ---------- 图标 ----------
-
-    private const string FolderGeometry = "M0,2 h6 l1.6,2.2 H16 V15 H0 z";
-    private const string FileGeometry = "M0,0 h9 l5,5 V16 H0 z";
-
-    private static ShapePath Glyph(string geometry, double size) => new()
-    {
-        Data = Geometry.Parse(geometry),
-        Fill = geometry == FolderGeometry
-            ? new SolidColorBrush(Color.Parse("#F7C948"))
-            : new SolidColorBrush(Color.Parse("#F2F2F2")),
-        Stroke = geometry == FolderGeometry
-            ? new SolidColorBrush(Color.Parse("#D9A61F"))
-            : new SolidColorBrush(Color.Parse("#9A9A9A")),
-        StrokeThickness = Math.Max(0.7, size / 24),
-        Width = size * (geometry == FolderGeometry ? 1 : 0.875),
-        Height = size,
-        Stretch = Stretch.Fill,
-    };
+    // 图标几何已经收进 Icons.cs（规范 6.2：路径只有一个来源）。
 
     public void Dispose()
     {

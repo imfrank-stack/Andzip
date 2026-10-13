@@ -56,8 +56,7 @@ public sealed class ProgressWindow : Window
         CanResize = false;
         ShowInTaskbar = standalone;
         WindowStartupLocation = standalone ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 14;
+        this.WindowSurface();
 
         _text = new TextBlock
         {
@@ -70,7 +69,8 @@ public sealed class ProgressWindow : Window
         {
             Minimum = 0,
             Maximum = 100,
-            Height = 14,
+            Height = 8,
+            CornerRadius = Design.Radius.Pill,
             IsIndeterminate = true,
         };
 
@@ -79,7 +79,7 @@ public sealed class ProgressWindow : Window
             Content = lang.Label("TEXT_BTN_CANCEL"),
             MinWidth = 88,
             HorizontalAlignment = HorizontalAlignment.Right,
-        };
+        }.Ghost();
         _cancel.Click += (_, _) => Cancel();
 
         if (cancelViaEsc)
@@ -96,8 +96,8 @@ public sealed class ProgressWindow : Window
 
         Content = new StackPanel
         {
-            Margin = new Thickness(18),
-            Spacing = 14,
+            Margin = new Thickness(Design.Space.X6),
+            Spacing = Design.Space.X4,
             Children = { _text, _bar, _cancel },
         };
     }

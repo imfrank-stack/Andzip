@@ -32,13 +32,27 @@ public sealed class MessageWindow : Window
         SizeToContent = SizeToContent.Height;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
-        FontSize = 14;
+        Background = Design.Surface.Base;
+        FontFamily = Design.Font;
+        FontSize = Design.Type.Body;
 
+        // 错误与危险动作带一个图标：颜色之外再多一条通道，色弱用户也读得出"这条不是普通提示"
+        // （规范第八节：不只靠颜色）。
+        var dangerous = okKey == "TEXT_BTN_DELETE";
         var text = new TextBlock
         {
             Text = MnemonicText.Strip(message),
             TextWrapping = TextWrapping.Wrap,
+            Foreground = Design.Ink.Primary,
+            LineHeight = Design.Type.BodyLineHeight,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var body = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = Design.Space.X3,
+            Children = { Badge(dangerous), text },
         };
 
         var okButton = new Button
@@ -51,11 +65,19 @@ public sealed class MessageWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         okButton.Click += (_, _) => Close(true);
+        if (dangerous)
+        {
+            okButton.Danger();
+        }
+        else
+        {
+            okButton.Accent();
+        }
 
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 10,
+            Spacing = Design.Space.X3,
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         buttons.Children.Add(okButton);
@@ -67,18 +89,37 @@ public sealed class MessageWindow : Window
                 Content = lang.Label(cancelKey),
                 IsCancel = true,
                 MinWidth = 96,
-            };
+            }.Ghost();
             cancelButton.Click += (_, _) => Close(false);
             buttons.Children.Add(cancelButton);
         }
 
         Content = new StackPanel
         {
-            Margin = new Thickness(18),
-            Spacing = 16,
-            Children = { text, buttons },
+            Margin = new Thickness(Design.Space.X6),
+            Spacing = Design.Space.X6,
+            Children = { body, buttons },
         };
     }
+
+    /// <summary>提示框左侧那枚圆形图标底。叫 Badge 而不是 Icon —— <c>Window.Icon</c> 已经被占了。</summary>
+    private static Control Badge(bool dangerous) => new Border
+    {
+        Width = 40,
+        Height = 40,
+        CornerRadius = Design.Radius.Pill,
+        Background = dangerous ? Design.Semantic.DangerTint : Design.Brand.Tint,
+        Child = new Panel
+        {
+            Children =
+            {
+                Icons.Line(
+                    dangerous ? Icons.Warning : Icons.Info,
+                    Design.IconSize.Dialog,
+                    dangerous ? Design.Semantic.Danger : Design.Brand.Base),
+            },
+        },
+    };
 
     /// <summary>
     /// 两钮确认框：确定 → true，取消或关掉窗口 → false。

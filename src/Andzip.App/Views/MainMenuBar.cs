@@ -22,10 +22,11 @@ internal static class MainMenuBar
     {
         var menu = new Menu
         {
-            Background = Brushes.White,
-            Foreground = new SolidColorBrush(Color.Parse("#1F1F1F")),
-            FontSize = 14,
-            Padding = new Avalonia.Thickness(6, 3, 6, 3),
+            Background = Design.Surface.Base,
+            Foreground = Design.Ink.Primary,
+            FontFamily = Design.Font,
+            FontSize = Design.Type.Body,
+            Padding = new Avalonia.Thickness(Design.Space.X2, Design.Space.X1 + 1, Design.Space.X2, Design.Space.X1 + 1),
         };
 
         foreach (var top in MainMenuModel.Create())

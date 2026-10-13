@@ -24,11 +24,9 @@ public sealed class SettingsWindow : Window
     /// <summary>设置里保存「已勾选哪些关联」的键名。</summary>
     public const string AssociationSettingKey = "file_associations";
 
-    private static readonly IBrush NavBlue = new SolidColorBrush(Color.Parse("#208CFB"));
-    private static readonly IBrush NavBlueSelected = new SolidColorBrush(Color.Parse("#1668C8"));
-    private static readonly IBrush PageText = new SolidColorBrush(Color.Parse("#1F1F1F"));
-    private static readonly IBrush LinkBlue = new SolidColorBrush(Color.Parse("#1A6FD4"));
-    private static readonly IBrush HintText = new SolidColorBrush(Color.Parse("#6B6B6B"));
+    private static readonly IBrush PageText = Design.Ink.Primary;
+    private static readonly IBrush LinkBlue = Design.Brand.Base;
+    private static readonly IBrush HintText = Design.Ink.Secondary;
 
     private readonly ContentControl _pageHost = new();
     private readonly Dictionary<string, Button> _navButtons = new(StringComparer.Ordinal);
@@ -43,8 +41,7 @@ public sealed class SettingsWindow : Window
         MinWidth = 720;
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = new SolidColorBrush(Color.Parse("#F0F0F0"));
-        FontSize = 14;
+        this.WindowSurface();
 
         // 导航顺序与参考软件一致。
         var navKeys = new[]
@@ -73,7 +70,11 @@ public sealed class SettingsWindow : Window
             new LanguagePage(lang, settings, settingsPath),
         ];
 
-        var nav = new StackPanel { Spacing = 2, Margin = new Thickness(0, 14, 0, 0) };
+        var nav = new StackPanel
+        {
+            Spacing = Design.Space.X1,
+            Margin = new Thickness(Design.Space.X2, Design.Space.X3, Design.Space.X2, Design.Space.X3),
+        };
         for (var i = 0; i < navKeys.Length; i++)
         {
             var index = i;
@@ -82,11 +83,18 @@ public sealed class SettingsWindow : Window
             nav.Children.Add(button);
         }
 
-        var navPane = new Border { Background = NavBlue, Child = nav, Width = 190 };
+        // 导航条是"位置"不是"命令"，所以从整条实心蓝改成浅灰底 + 一根右分隔线（规范 5.8）。
+        var navPane = new Border
+        {
+            Background = Design.Surface.Muted,
+            BorderBrush = Design.Line.Subtle,
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Child = nav,
+            Width = 200,
+        };
         var contentPane = new Border
         {
-            Background = Brushes.White,
-            Margin = new Thickness(0, 14, 14, 0),
+            Background = Design.Surface.Base,
             Child = _pageHost,
         };
 
@@ -96,21 +104,27 @@ public sealed class SettingsWindow : Window
         body.Children.Add(navPane);
         body.Children.Add(contentPane);
 
-        var resetButton = new Button { Content = lang.Label("TEXT_BTN_RESET"), MinWidth = 120 };
+        var resetButton = new Button { Content = lang.Label("TEXT_BTN_RESET"), MinWidth = 120 }.Ghost();
         resetButton.Click += (_, _) => _currentPage?.Reload();
-        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), MinWidth = 120, IsDefault = true };
+        var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), MinWidth = 120, IsDefault = true }.Accent();
         okButton.Click += (_, _) => AcceptAndClose();
 
         var footer = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 10,
-            Margin = new Thickness(14, 10, 0, 12),
+            Spacing = Design.Space.X3,
+            Margin = new Thickness(Design.Space.X4, Design.Space.X3, Design.Space.X4, Design.Space.X3),
             Children = { resetButton, okButton },
         };
 
         var root = new DockPanel();
-        var footerBar = new Border { Background = new SolidColorBrush(Color.Parse("#F0F0F0")), Child = footer };
+        var footerBar = new Border
+        {
+            Background = Design.Surface.Muted,
+            BorderBrush = Design.Line.Subtle,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = footer,
+        };
         DockPanel.SetDock(footerBar, Dock.Bottom);
         root.Children.Add(footerBar);
         root.Children.Add(body);
@@ -126,28 +140,51 @@ public sealed class SettingsWindow : Window
 
         foreach (var (key, button) in _navButtons)
         {
-            button.Background = key == page.NavKey ? NavBlueSelected : NavBlue;
+            PaintNav(button, key == page.NavKey);
         }
 
         page.Reload();
         _pageHost.Content = page.Root;
     }
 
+    /// <summary>
+    /// 左侧导航项。以前整条导航是蓝底白字，改版后按规范 5.8 换成浅底 + 选中项淡蓝 + 左侧 3px 标记条：
+    /// 蓝色留给"动作"（按钮），导航是"位置"，用实心蓝会把位置读成可点的主命令。
+    /// </summary>
     private Button NavButton(string text, Action onClick)
     {
         var button = new Button
         {
             Content = text,
-            Foreground = Brushes.White,
-            Background = NavBlue,
+            Foreground = Design.Ink.Primary,
+            Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Left,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(22, 11, 10, 11),
-            FontSize = 15,
+            Padding = new Thickness(Design.Space.X3, Design.Space.X2 + 2, Design.Space.X2, Design.Space.X2 + 2),
+            FontSize = Design.Type.Body,
+            CornerRadius = Design.Radius.Sm,
         };
         button.Click += (_, _) => onClick();
+
+        // 选中态由 PaintNav 决定，悬停只是"浮一下"：两者叠在一起时选中必须赢，
+        // 否则鼠标划过当前项会让它看起来被取消选中了。
+        button.PointerEntered += (_, _) => PaintNav(button, Equals(button.Tag, true), hover: true);
+        button.PointerExited += (_, _) => PaintNav(button, Equals(button.Tag, true), hover: false);
         return button;
+    }
+
+    private static void PaintNav(Button button, bool selected, bool hover = false)
+    {
+        button.Tag = selected;
+        button.Background = selected
+            ? Design.Brand.Soft
+            : hover ? Design.Surface.Muted : Brushes.Transparent;
+        button.BorderBrush = selected ? Design.Brand.Base : Design.Line.Subtle;
+        button.BorderThickness = selected
+            ? new Thickness(3, 0, 0, 0)
+            : hover ? new Thickness(1) : new Thickness(0);
+        button.CornerRadius = Design.Radius.Sm;
     }
 
     private void AcceptAndClose()
@@ -160,8 +197,8 @@ public sealed class SettingsWindow : Window
     private static TextBlock SectionTitle(string text) => new()
     {
         Text = text,
-        FontSize = 17,
-        FontWeight = FontWeight.Bold,
+        FontSize = Design.Type.Title,
+        FontWeight = Design.Type.Semibold,
         Foreground = PageText,
     };
 
@@ -169,15 +206,16 @@ public sealed class SettingsWindow : Window
     private static TextBlock Hint(string text) => new()
     {
         Text = text,
+        FontSize = Design.Type.Caption,
         Foreground = HintText,
         TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(24, 4, 0, 0),
+        Margin = new Thickness(Design.Space.X4, Design.Space.X1, 0, 0),
     };
 
     /// <summary>带"改动就重新算要不要允许应用"回调的复选框。好几个页面都要这个形状。</summary>
     private static CheckBox Check(string label, Action onToggled)
     {
-        var box = new CheckBox { Content = label, Margin = new Thickness(0, 6, 0, 0) };
+        var box = new CheckBox { Content = label, Margin = new Thickness(0, Design.Space.X2, 0, 0) };
         box.IsCheckedChanged += (_, _) => onToggled();
         return box;
     }
@@ -414,7 +452,7 @@ public sealed class SettingsWindow : Window
 
             _shadowHint = new TextBlock
             {
-                Foreground = new SolidColorBrush(Color.Parse("#C42B1C")),
+                Foreground = Design.Semantic.Danger,
                 TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsVisible = false,
@@ -703,7 +741,7 @@ public sealed class SettingsWindow : Window
         {
             Margin = new Thickness(0, 8, 0, 2),
             BorderThickness = new Thickness(0, 0, 0, 1),
-            BorderBrush = new SolidColorBrush(Color.Parse("#C8DCF0")),
+            BorderBrush = Design.Brand.Line,
             Child = new TextBlock
             {
                 Text = text,
@@ -1259,7 +1297,7 @@ public sealed class SettingsWindow : Window
             _settingsPath = settingsPath;
 
             _fullPathTitle = Check(lang.Label("TEXT_SETTINGS_TITLE_FULL_PATH"), UpdateApplyState);
-            _tempFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            _tempFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left }.Field();
             _tempFolder.TextChanged += (_, _) => UpdateApplyState();
 
             var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE_TEMP"), MinWidth = 110 };
@@ -1564,7 +1602,7 @@ public sealed class SettingsWindow : Window
             _preallocate = Check(lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC"), UpdateApplyState);
             _shareSources = Check(lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES"), UpdateApplyState);
 
-            _excludePatterns = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            _excludePatterns = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left }.Field();
             _excludePatterns.TextChanged += (_, _) => UpdateApplyState();
 
             _outputLast = new RadioButton { Content = lang.Label("TEXT_SETTINGS_COMPRESS_OUTPUT_LAST"), IsChecked = true };
@@ -1572,7 +1610,7 @@ public sealed class SettingsWindow : Window
             _outputLast.IsCheckedChanged += (_, _) => { RefreshOutputFolderEnabled(); UpdateApplyState(); };
             _outputFixed.IsCheckedChanged += (_, _) => { RefreshOutputFolderEnabled(); UpdateApplyState(); };
 
-            _outputFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            _outputFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left }.Field();
             _outputFolder.TextChanged += (_, _) => UpdateApplyState();
 
             var pickFolder = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };

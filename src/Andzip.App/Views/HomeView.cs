@@ -21,17 +21,19 @@ internal static class HomeView
     {
         var body = new Grid { ColumnDefinitions = new ColumnDefinitions("300,4,*") };
 
-        var left = new Border { Background = Brushes.White };
+        // 与压缩包视图同一套底色差：左栏 Sunken、右栏 Base。首页两块都是空的，
+        // 但骨架的层级必须一眼延续过去 —— 打开包之后不该换个样子。
+        var left = new Border { Background = Design.Surface.Sunken };
         var splitter = new GridSplitter
         {
             Width = 4,
-            Background = new SolidColorBrush(Color.Parse("#D6D6D6")),
+            Background = Design.Line.Strong,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             ResizeDirection = GridResizeDirection.Columns,
             ResizeBehavior = GridResizeBehavior.PreviousAndNext,
         };
-        var right = new Border { Background = Brushes.White };
+        var right = new Border { Background = Design.Surface.Base };
 
         Grid.SetColumn(left, 0);
         Grid.SetColumn(splitter, 1);
@@ -41,8 +43,8 @@ internal static class HomeView
         body.Children.Add(right);
 
         var bar = ViewBar.Create(
-            ViewBar.Toggle(ViewIcon.List, lang.Label("TEXT_VIEW_DETAILS"), null),
-            ViewBar.Toggle(ViewIcon.Grid, lang.Label("TEXT_VIEW_ICONS"), null));
+            ViewBar.Toggle(Icons.ListMode, lang.Label("TEXT_VIEW_DETAILS"), null),
+            ViewBar.Toggle(Icons.IconMode, lang.Label("TEXT_VIEW_ICONS"), null));
 
         var panel = new DockPanel();
         DockPanel.SetDock(bar, Dock.Bottom);
