@@ -128,6 +128,15 @@ foreach ($step in $Steps) {
             Save-Rect $b.X $b.Y $b.Width $b.Height (Join-Path $OutDir "$rest.png")
         }
         'wait' { Start-Sleep -Milliseconds ([int]$rest) }
+        # move: park the cursor without clicking. Needed to tell "hover" and "held" apart --
+        # after a press/release round trip the cursor is already on the control, so an idle
+        # shot is really a hover shot and the two states look identical in the pictures.
+        'move' {
+            $xy = $rest.Split(',')
+            $r = Rect
+            [void][P]::SetCursorPos($r.L + [int]$xy[0], $r.T + [int]$xy[1])
+            Write-Host ("  move +{0},+{1}" -f $xy[0], $xy[1])
+        }
         'click' {
             $xy = $rest.Split(',')
             $r = Rect

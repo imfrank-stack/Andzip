@@ -165,7 +165,7 @@ internal sealed class TitleBar : Border
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
             CornerRadius = Design.Radius.None,
-        };
+        }.PinFace();   // 小圆片在底下，面皮必须一直是透明的（主题的 :pressed 会涂一块深灰，1.8.8）
 
         var chip = new Border
         {

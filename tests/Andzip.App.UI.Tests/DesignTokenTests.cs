@@ -145,6 +145,72 @@ public class DesignTokenTests
             + string.Join("\n    ", offenders));
     }
 
+    /// <summary>
+    /// 每一颗按钮都要把主题那份 <c>:pressed</c> 挡在面皮外（<c>Chrome.PinFace</c>）。
+    /// <para>为什么必须一个个接线点接：<strong>主题按下的那块深灰涂在模板子元素
+    /// <c>PART_ContentPresenter</c> 上，应用层样式压不过它，只有给那枚子元素写局部值才压得过</strong>
+    /// （规范 §二那条实测）。所以这件事没有"装一次全局就好"的写法 ——
+    /// 而漏一处的代价就是一次点击：用户 1.8.8 的截图正是「打开」按下去整块 <c>#686868</c>，
+    /// 并且说"好多地方"都一样。</para>
+    /// <para>为什么扫源码而不是运行时遍历窗口：<c>ChromeCapabilityTests</c> 那条像素用例已经能在
+    /// headless 里量到那块灰（合成按住真的会触发伪类），但它只能盯住它当场构造出来的那颗控件;
+    /// 设置窗口那九个「应用」按钮、表头、快捷方式行……都要构造一遍既不划算也不好维护。
+    /// 扫源码证明的是"没有漏接"，两者加起来才把这类问题封住。</para>
+    /// <para>只查 <c>Button</c> 与 <c>ToggleButton</c>：<c>CheckBox</c> 的量测显示主题的伪类不碰它，
+    /// <c>ComboBox</c> 自己那块也不碰（它的问题是内嵌的箭头 —— 那是另一枚 ToggleButton，
+    /// 见规范 §二末行，这一项是已知未修的残留）。</para>
+    /// </summary>
+    [Fact]
+    public void EveryButtonPinsItsTemplateFace()
+    {
+        var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");
+        string[] pinned = [".Ghost(", ".Accent(", ".Danger(", ".Lift(", ".ToggleSwitch(", ".PinFace("];
+        var offenders = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(file) == "Chrome.cs"
+                || file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            {
+                continue;
+            }
+
+            var lines = File.ReadAllLines(file);
+            var creates = Enumerable.Range(0, lines.Length)
+                .Where(i => lines[i].Contains("new Button", StringComparison.Ordinal)
+                            || lines[i].Contains("new ToggleButton", StringComparison.Ordinal))
+                .ToList();
+
+            for (var c = 0; c < creates.Count; c++)
+            {
+                var i = creates[c];
+
+                // 写法一：接法就写在这一颗自己的范围内 —— 到下一颗建控件那一行为止
+                // （再远就会把邻居的接法算到它头上），且不超过 24 行。
+                var stop = Math.Min(c + 1 < creates.Count ? creates[c + 1] : lines.Length, i + 24);
+                if (lines.Skip(i).Take(stop - i).Any(l => pinned.Any(p => l.Contains(p, StringComparison.Ordinal))))
+                {
+                    continue;
+                }
+
+                // 写法二：先建控件、在别处才包药丸 —— 视图栏那一列就是这种（按钮交出去给外面包）。
+                var name = System.Text.RegularExpressions.Regex.Match(lines[i], @"(\w+)\s*=\s*new (Button|ToggleButton)");
+                if (name.Success && lines.Any(l => l.Contains($"{name.Groups[1].Value}.", StringComparison.Ordinal)
+                        && pinned.Any(p => l.Contains(p, StringComparison.Ordinal))))
+                {
+                    continue;
+                }
+
+                offenders.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {lines[i].Trim()}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "这些控件建出来却没人钉面皮，一按就整块发黑（Chrome.PinFace / Ghost / Accent / Lift）：\n    "
+            + string.Join("\n    ", offenders));
+    }
+
     private static List<string> OffendingLines(params string[] needles)
     {
         var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");

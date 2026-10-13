@@ -217,7 +217,7 @@ public sealed class ExtractPathWindow : Window
             Margin = new Thickness(0, 0, 8, 0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
-        };
+        }.PinFace();
         button.Click += (_, _) => _pathCombo.Text = path;
         panel.Children.Add(button);
     }

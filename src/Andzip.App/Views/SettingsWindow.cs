@@ -208,7 +208,7 @@ public sealed class SettingsWindow : Window
                 PaintNav(button, Equals(button.Tag, true));
             }
         };
-        return button;
+        return button.PinFace();   // 主题那份 :pressed 的深灰也不能从药丸底下透出来
     }
 
     /// <summary>
@@ -459,7 +459,7 @@ public sealed class SettingsWindow : Window
                 BorderThickness = new Thickness(0),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Padding = new Thickness(6, 0, 0, 0),
-            };
+            }.PinFace();
             defaultAppsLink.Click += (_, _) => OpenWindowsDefaultAppSettings(null);
             Grid.SetColumn(defaultAppsLink, 1);
             titleRow.Children.Add(defaultAppsLink);
@@ -487,7 +487,7 @@ public sealed class SettingsWindow : Window
                 Margin = new Thickness(10, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
                 IsVisible = false,
-            };
+            }.Ghost();
             _setDefaultButton.Click += (_, _) => OpenWindowsDefaultAppSettings(_shadowed.FirstOrDefault());
 
             var shadowRow = new Grid
@@ -528,9 +528,9 @@ public sealed class SettingsWindow : Window
                 list.Children.Add(items);
             }
 
-            var selectAll = new Button { Content = lang.Label("TEXT_BTN_SELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) };
+            var selectAll = new Button { Content = lang.Label("TEXT_BTN_SELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) }.Ghost();
             selectAll.Click += (_, _) => SetAll(true);
-            var deselectAll = new Button { Content = lang.Label("TEXT_BTN_DESELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) };
+            var deselectAll = new Button { Content = lang.Label("TEXT_BTN_DESELECT_ALL"), MinWidth = 150, Margin = new Thickness(0, 0, 0, 8) }.Ghost();
             deselectAll.Click += (_, _) => SetAll(false);
 
             _applyButton = new Button
@@ -539,7 +539,7 @@ public sealed class SettingsWindow : Window
                 MinWidth = 150,
                 IsEnabled = false,
                 VerticalAlignment = VerticalAlignment.Bottom,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var side = new DockPanel { Margin = new Thickness(14, 0, 0, 0) };
@@ -853,7 +853,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, Design.Space.X2, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel();
@@ -1021,7 +1021,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, Design.Space.X2, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel();
@@ -1140,7 +1140,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, Design.Space.X2, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel();
@@ -1262,7 +1262,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, 20, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var row = new StackPanel
@@ -1376,7 +1376,7 @@ public sealed class SettingsWindow : Window
             _tempFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left }.Field();
             _tempFolder.TextChanged += (_, _) => UpdateApplyState();
 
-            var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE_TEMP"), MinWidth = 110 };
+            var browse = new Button { Content = lang.Label("TEXT_BTN_BROWSE_TEMP"), MinWidth = 110 }.Ghost();
             browse.Click += async (_, _) => await PickFolderAsync();
 
             _applyButton = new Button
@@ -1386,7 +1386,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var export = new Button
@@ -1396,7 +1396,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, 10, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             export.Click += async (_, _) => await ExportAsync();
 
             var panel = new StackPanel();
@@ -1544,7 +1544,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, 8, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _clearButton.Click += (_, _) => { Session.Passwords.Clear(); RefreshRemembered(); };
 
             _applyButton = new Button
@@ -1554,7 +1554,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel();
@@ -1694,7 +1694,7 @@ public sealed class SettingsWindow : Window
             _outputFolder = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left }.Field();
             _outputFolder.TextChanged += (_, _) => UpdateApplyState();
 
-            var pickFolder = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 };
+            var pickFolder = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 }.Ghost();
             pickFolder.Click += async (_, _) => await PickFolderAsync();
 
             _applyButton = new Button
@@ -1704,7 +1704,7 @@ public sealed class SettingsWindow : Window
                 IsEnabled = false,
                 Margin = new Thickness(0, 24, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Ghost();
             _applyButton.Click += (_, _) => Apply();
 
             var panel = new StackPanel();

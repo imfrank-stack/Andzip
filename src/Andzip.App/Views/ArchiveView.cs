@@ -371,7 +371,7 @@ internal sealed class ArchiveView : IDisposable
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalContentAlignment = VerticalAlignment.Center,
-            };
+            }.PinFace();
 
             if (_columns[i].Compare is not null)
             {

@@ -6,10 +6,12 @@ using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace Andzip.App;
@@ -18,8 +20,10 @@ namespace Andzip.App;
 /// 交互状态（悬停 / 按下 / 焦点）。
 /// <para>为什么不用应用层样式 <c>Style(x =&gt; x.OfType&lt;Button&gt;().Class(":pointerover"))</c>：
 /// 实测压不过 SimpleTheme 内部 <c>ControlTheme</c> 的 setter —— 注入悬停底色后中心像素一个字节都没变
-/// （结论钉在 <c>ChromeCapabilityTests</c>）。所以状态由这里接 <see cref="Control.PointerEntered"/>
-/// 等事件来驱动，好处是这套东西<strong>可以在 headless 里用真指针输入验证</strong>。</para>
+/// （结论钉在 <c>ChromeCapabilityTests</c>）。所以状态由这里驱动，好处是这套东西
+/// <strong>可以在 headless 里用真指针输入量出来</strong>（悬停与按住都能复现，见同一组用例）。</para>
+/// <para>驱动时机只认 <c>IsPointerOver</c> / <c>IsPressed</c> 这两个<strong>属性</strong>，
+/// 不认指针事件 —— 事件跑在置位之前，当场读到的还是旧状态（<see cref="Lift"/> 里那条实测）。</para>
 /// </summary>
 internal static class Chrome
 {
@@ -85,12 +89,36 @@ internal static class Chrome
             pill.BoxShadow = shadow;
         }
 
-        control.PointerEntered += (_, _) => Paint(Design.Surface.Muted, Design.Shadow.Lift);
-        control.PointerExited += (_, _) => Paint(Brushes.Transparent, default);
-        control.PointerPressed += (_, _) => Paint(Design.Line.Subtle, Design.Shadow.Pill);
-        control.PointerReleased += (_, _) => Paint(
-            control.IsPointerOver ? Design.Surface.Muted : Brushes.Transparent,
-            control.IsPointerOver ? Design.Shadow.Lift : default);
+        // 状态**现读现画**，而且只由状态自己说话 —— 重画挂在 IsPressed / IsPointerOver 这两个属性上，
+        // 不挂在指针事件上。挂在事件上会错两次，都是真机量出来的（1.8.8）：
+        //   1) 按下去的那一刻指针被捕获，紧接着还会补一次 PointerExited，
+        //      按"哪个事件最后到"决定就把药丸清成了透明 —— 按住瞬间屏幕上是 #FFFFFF；
+        //   2) 改读属性之后仍错一次：Button 的 PointerPressed 事件跑在 `IsPressed = true` **之前**
+        //      （OnPointerPressed 里先 OnEvent 后置位），当场读还是 false，
+        //      按住那一刻只剩悬停那一档 #F6F8FA。等属性变了再读，才拿得到真的那一档。
+        void Repaint()
+        {
+            var pressed = control is Button { IsPressed: true };
+            var over = control.IsPointerOver;
+
+            Paint(pressed ? Design.Surface.Pressed : over ? Design.Surface.Muted : Brushes.Transparent,
+                pressed ? Design.Shadow.Pill : over ? Design.Shadow.Lift : default);
+        }
+
+        control.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == InputElement.IsPointerOverProperty || e.Property == Button.IsPressedProperty)
+            {
+                Repaint();
+            }
+        };
+
+        // 药丸在底下，控件自己必须一直是透明的 —— 但 SimpleTheme 的 :pressed 会绕过这句话，
+        // 直接给模板面皮涂一块 #686868（用户 1.8.8 的截图）。把那份"应当是透明"钉到面皮上。
+        if (control is TemplatedControl templated)
+        {
+            templated.PinFace();
+        }
 
         return new Panel { Children = { pill, control } };
     }
@@ -234,7 +262,7 @@ internal static class Chrome
         button.BorderThickness = new Avalonia.Thickness(1);
         button.CornerRadius = Design.Radius.Sm;
         button.Padding = new Avalonia.Thickness(Design.Space.X3, Design.Space.X2, Design.Space.X3, Design.Space.X2);
-        return TrackStates(button, Design.Surface.Muted, Design.Line.Subtle);
+        return TrackStates(button, Design.Surface.Muted, Design.Surface.Pressed);
     }
 
     /// <summary>危险动作的主按钮（永久删除）。红色只出现在这里和错误提示上，见规范 3.3。</summary>
@@ -353,7 +381,9 @@ internal static class Chrome
 
         Paint();
         toggle.IsCheckedChanged += (_, _) => Paint();
-        return toggle;
+        // 轨道在自绘的 Border 上，但控件本体那枚面皮仍会被主题的伪类涂到（1.8.8 同一件事）：
+        // 按住开关的瞬时整块发黑，从轨道底下透出来。钉成我们那份透明。
+        return toggle.PinFace();
     }
 
     /// <summary>带文字标签的开关行：左边说明、右边开关。标签同时挂成自动化名，读屏才说得出这一行是什么。</summary>
@@ -412,12 +442,69 @@ internal static class Chrome
     {
         var rest = control.Background;
 
-        control.PointerEntered += (_, _) => control.Background = hover;
-        control.PointerExited += (_, _) => control.Background = rest;
-        control.PointerPressed += (_, _) => control.Background = pressed;
-        control.PointerReleased += (_, _) => control.Background =
-            control.IsPointerOver ? hover : rest;
+        // 同 Lift：由 IsPressed / IsPointerOver 这两个属性触发，当场读这两个状态。
+        // 挂在指针事件上会漏掉按住那一档（Button 先发事件后置位），见 Lift 那段注释。
+        void Repaint() => control.Background =
+            control is Button { IsPressed: true } ? pressed
+            : control.IsPointerOver ? hover : rest;
 
+        control.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == InputElement.IsPointerOverProperty || e.Property == Button.IsPressedProperty)
+            {
+                Repaint();
+            }
+        };
+
+        return control.PinFace();
+    }
+
+    /// <summary>
+    /// 把控件自己的底色/描边/圆角<strong>钉到模板里那枚面皮上</strong>，让主题的伪类写不上来。
+    /// <para>为什么需要这一层（1.8.8，用户截图：工具栏「打开」按下去整块变 <c>#686868</c>）：
+    /// <c>SimpleTheme</c> 的 <c>:pressed</c> 不是设在控件身上，而是设在模板子元素
+    /// <c>PART_ContentPresenter</c> 上的一整块深灰。应用层给<strong>控件</strong>写局部值压不过它
+    /// （规范 §二第一条那条实测就是这个道理），但给<strong>模板子元素</strong>写局部值压得过 ——
+    /// 1.8.3 接管菜单栏高亮用的正是这一招。</para>
+    /// <para>每一次都<strong>推迟一帧</strong>（<c>Render</c> 优先级）再抄：调用点往往正处在状态换档的
+    /// 中途（<c>TrackStates</c> 自己就是在 <c>PropertyChanged</c> 里改底色的），当场抄会抄到改之前那个值；
+    /// 构造期更是连模板都还没有，那时问 <c>PART_ContentPresenter</c> 只有 null。</para>
+    /// <para>headless 能量到这件事（1.8.8 补测，纠正早先"复现不了"的判断）：合成按住真的会让裸按钮
+    /// 露出那块 <c>#686868</c>，接了这里的则露出 <c>Surface.Pressed</c> —— 两条一起钉在
+    /// <c>ChromeCapabilityTests</c>。"漏接一处"这种扫不出像素的，交给
+    /// <c>DesignTokenTests.EveryButtonPinsItsTemplateFace</c>。</para>
+    /// </summary>
+    public static T PinFace<T>(this T control) where T : TemplatedControl
+    {
+        void Sync()
+        {
+            if (control.GetTemplateChildren().OfType<ContentPresenter>()
+                    .FirstOrDefault(face => face.Name == "PART_ContentPresenter") is not { } skin)
+            {
+                return;   // 模板还没建起来：下一次事件或换主题时会再抄一遍
+            }
+
+            skin.SetValue(TemplatedControl.BackgroundProperty, control.Background);
+            skin.SetValue(TemplatedControl.BorderBrushProperty, control.BorderBrush);
+            skin.SetValue(TemplatedControl.BorderThicknessProperty, control.BorderThickness);
+            skin.SetValue(TemplatedControl.CornerRadiusProperty, control.CornerRadius);
+        }
+
+        void Later() => Dispatcher.UIThread.Post(Sync, DispatcherPriority.Render);
+
+        control.AttachedToVisualTree += (_, _) => Later();
+        control.ActualThemeVariantChanged += (_, _) => Later();
+        control.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TemplatedControl.BackgroundProperty || e.Property == TemplatedControl.BorderBrushProperty
+                || e.Property == TemplatedControl.BorderThicknessProperty || e.Property == TemplatedControl.CornerRadiusProperty)
+            {
+                Later();
+            }
+        };
+
+        // 不需要另外接按下/抬起：伪类改的是 IsPressed，而它的下一跳就是上面这四个属性之一
+        // （TrackStates / Lift 把那一档翻译成底色），四个属性的 PropertyChanged 已经把每一次换档都接住了。
         return control;
     }
 

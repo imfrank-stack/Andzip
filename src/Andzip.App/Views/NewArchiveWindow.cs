@@ -231,7 +231,7 @@ public sealed class NewArchiveWindow : Window
             Content = lang.Label("TEXT_BTN_ADVANCED_SETTINGS"),
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Ghost();
 
         _advancedPanel = new Border
         {
