@@ -19,9 +19,14 @@ $root = $PSScriptRoot
 
 # 1) Version (must be valid before packaging, see requirements §11.2)
 $ini = Get-Content (Join-Path $root "VersionNo.ini") -Raw
-$version = [regex]::Match($ini, '(?m)^\s*Version\s*=\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$').Groups[1].Value
+$version = [regex]::Match($ini, '(?m)^\s*Version\s*=\s*([0-9]\.[0-9]\.[0-9])\s*$').Groups[1].Value
 $buildNo = [regex]::Match($ini, '(?m)^\s*BuildNo\s*=\s*(\d+)\s*$').Groups[1].Value
-if (-not $version -or -not $buildNo) { throw "VersionNo.ini is missing Version / BuildNo; packaging refused." }
+if (-not $version -or -not $buildNo) {
+    # The numbering rule is "three parts, each a SINGLE decimal digit 0-9, carry left".
+    # A two-digit part (0.13.0, 0.9.10) is that rule being misread, so say so here --
+    # VersionInfo.Parse enforces the same thing on the managed side.
+    throw "VersionNo.ini: Version must be A.B.C with each part a single digit 0-9 (carry left when a part passes 9: 0.9.9 -> 1.0.0, not 0.10.0); BuildNo must be a number. Packaging refused."
+}
 Write-Host "[1/4] Version: $version (Build $buildNo)"
 
 # 2) Unit test gate (§11.1: no green, no package)

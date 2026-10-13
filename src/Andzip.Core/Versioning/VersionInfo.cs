@@ -59,9 +59,12 @@ public sealed record VersionInfo(string Version, int BuildNo, bool Update)
             }
         }
 
-        if (string.IsNullOrWhiteSpace(version) || !System.Version.TryParse(version, out _))
+        if (string.IsNullOrWhiteSpace(version) || !IsValidNumbering(version))
         {
-            throw new FormatException("VersionNo.ini 缺少合法的 Version（语义化版本，如 0.1.0）。");
+            throw new FormatException(
+                $"VersionNo.ini 的 Version 必须是 A.B.C 三段、每段一个十进制位（0-9），当前是「{version}」。"
+                + "这不是语义化版本：某一位满 9 就向左边进一，所以 0.9.9 之后是 1.0.0，"
+                + "既不是 0.10.0 也不是 0.9.10。");
         }
 
         if (buildNo is null)
@@ -73,4 +76,19 @@ public sealed record VersionInfo(string Version, int BuildNo, bool Update)
     }
 
     public static VersionInfo LoadFile(string path) => Parse(File.ReadAllText(path));
+
+    /// <summary>
+    /// 编号规则（用户 2026-10-12 定的）：三段 <c>A.B.C</c>，<strong>每一位都是 0-9 的一个十进制位</strong>。
+    /// <para>修 bug 动 C，小功能动 B 并把 C 清零，大版本动 A 并把 B、C 清零；任何一位满 9 就向左边进一。
+    /// 所以 <c>0.9.9</c> 之后是 <c>1.0.0</c> —— <c>0.10.0</c> 那种写法根本不该出现，
+    /// 它把"第二位加一"写成了两位数字。规则以前只活在文档里，2026-10-13 就出过一次
+    /// <c>0.13.0</c>（应为 <c>1.3.0</c>），于是挪到这里由 <c>Parse</c> 把关。</para>
+    /// </summary>
+    private static bool IsValidNumbering(string version)
+    {
+        var parts = version.Split('.');
+
+        return parts.Length == 3
+            && parts.All(part => part.Length == 1 && char.IsAsciiDigit(part[0]));
+    }
 }
