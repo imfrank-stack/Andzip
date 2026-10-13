@@ -1055,6 +1055,8 @@ public sealed class SettingsWindow : Window
         private readonly CheckBox _tree;
         private readonly CheckBox _iconDefault;
         private readonly CheckBox _autoExpand;
+        private readonly ComboBox _theme;
+        private readonly TextBlock _themeHint;
         private readonly Button _applyButton;
 
         private ViewDefaults _live = ViewDefaults.Fallback;
@@ -1069,6 +1071,36 @@ public sealed class SettingsWindow : Window
             _tree = Check(lang.Label("TEXT_SETTINGS_VIEW_TREE"), UpdateApplyState);
             _iconDefault = Check(lang.Label("TEXT_SETTINGS_VIEW_ICON_DEFAULT"), UpdateApplyState);
             _autoExpand = Check(lang.Label("TEXT_SETTINGS_VIEW_AUTO_EXPAND"), UpdateApplyState);
+
+            // 主题用下拉而不是三个单选钮：它是"多选一"而不是三个独立开关，
+            // 而且"跟随系统"与"浅色/深色"是同一维度的三种取值。
+            _theme = new ComboBox
+            {
+                Width = 260,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                ItemsSource = new[]
+                {
+                    lang.Label("TEXT_SETTINGS_VIEW_THEME_SYSTEM"),
+                    lang.Label("TEXT_SETTINGS_VIEW_THEME_LIGHT"),
+                    lang.Label("TEXT_SETTINGS_VIEW_THEME_DARK"),
+                },
+            }.Picker();
+            _theme.SelectionChanged += (_, _) => UpdateApplyState();
+            _themeHint = Hint(lang.Label("TEXT_SETTINGS_VIEW_THEME_HINT"));
+
+            var themeRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = Design.Space.X3,
+                Margin = new Thickness(0, Design.Space.X5, 0, 0),
+            };
+            themeRow.Children.Add(new TextBlock
+            {
+                Text = lang.Label("TEXT_SETTINGS_VIEW_THEME"),
+                Foreground = PageText,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            themeRow.Children.Add(_theme);
 
             _applyButton = new Button
             {
@@ -1087,6 +1119,8 @@ public sealed class SettingsWindow : Window
             panel.Children.Add(_tree);
             panel.Children.Add(_iconDefault);
             panel.Children.Add(_autoExpand);
+            panel.Children.Add(themeRow);
+            panel.Children.Add(_themeHint);
             panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_VIEW_APPLY_HINT")));
             panel.Children.Add(_applyButton);
 
@@ -1105,6 +1139,7 @@ public sealed class SettingsWindow : Window
             _tree.IsChecked = _live.ShowTree;
             _iconDefault.IsChecked = _live.IconViewByDefault;
             _autoExpand.IsChecked = _live.AutoExpandTree;
+            _theme.SelectedIndex = (int)_live.Theme;
             UpdateApplyState();
         }
 
@@ -1121,7 +1156,10 @@ public sealed class SettingsWindow : Window
             _statusBar.IsChecked == true,
             _tree.IsChecked == true,
             _iconDefault.IsChecked == true,
-            _autoExpand.IsChecked == true);
+            _autoExpand.IsChecked == true,
+            // 下拉的顺序就是 ThemeMode 的声明顺序（System / Light / Dark），
+            // 所以这里直接转 —— 加新值时要一起看这里。
+            (ThemeMode)Math.Clamp(_theme.SelectedIndex, 0, 2));
 
         private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
 

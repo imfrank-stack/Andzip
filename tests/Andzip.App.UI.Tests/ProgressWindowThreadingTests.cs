@@ -27,6 +27,7 @@ namespace Andzip.App.UiTests;
 /// 0.9.11 那 14 条界面测试全绿而真机闪退，差的就是这一层。
 /// </para>
 /// </summary>
+[Collection("界面状态")]
 public class ProgressWindowThreadingTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("andzip-progress-").FullName;

@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Avalonia.Threading;
 
 // 块式命名空间而不是 file-scoped：assembly 特性和 file-scoped namespace 放一起，
@@ -182,6 +183,56 @@ namespace Andzip.App.UiTests
                 Dispatcher.UIThread.RunJobs();
                 Thread.Sleep(5);
             }
+        }
+    }
+
+    /// <summary>
+    /// 从窗口画面上取一个点的实际颜色。规范里"这个状态看得见"这类断言只能靠它 ——
+    /// 读控件的属性只能证明"代码写了什么"，证明不了"画出来没有"。
+    /// </summary>
+    internal static class Pixels
+    {
+        public static Color At(Window window, Point at)
+        {
+            var frame = window.CaptureRenderedFrame()
+                ?? throw new InvalidOperationException("窗口没有画面可取。");
+
+            using (frame)
+            {
+                var scale = (double)frame.PixelSize.Width / window.Bounds.Width;
+                var stride = frame.PixelSize.Width * 4;
+                var buffer = new byte[stride * frame.PixelSize.Height];
+                using (var locked = frame.Lock())
+                {
+                    System.Runtime.InteropServices.Marshal.Copy(locked.Address, buffer, 0, buffer.Length);
+                }
+
+                var x = Math.Clamp((int)(at.X * scale), 0, frame.PixelSize.Width - 1);
+                var y = Math.Clamp((int)(at.Y * scale), 0, frame.PixelSize.Height - 1);
+                var at2 = y * stride + x * 4;
+
+                // 实测这个 headless 后端的帧缓冲是 R,G,B,A 顺序（不是文档里默认的 Bgra32）：
+                // 深色底 #1F2328 读回来是 [1F,23,28]。按 Bgra 读会得到 #28231F，
+                // 那会让"颜色对不对"的断言全部假阴性 —— 所以这里按实测的顺序取。
+                return Color.FromRgb(buffer[at2], buffer[at2 + 1], buffer[at2 + 2]);
+            }
+        }
+
+        public static Color At(Window window, Control control, double offsetX = 6, double offsetY = 6)
+            => At(window, control.TranslatePoint(new Point(offsetX, offsetY), window)!.Value);
+
+        public static string Name(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+
+        /// <summary>令牌是画刷，量出来的是颜色，两边都要能报成同一个十六进制串。</summary>
+        public static string Name(IBrush brush) => brush is ISolidColorBrush solid
+            ? Name(solid.Color)
+            : throw new InvalidOperationException($"这个令牌不是纯色画刷（{brush.GetType().Name}）。");
+
+        /// <summary>通道排序后比较：帧缓冲的字节序在不同后端不一致，比"是不是这个颜色"就够了。</summary>
+        public static bool Same(Color a, Color b)
+        {
+            static int[] Sort(Color c) => [.. new[] { (int)c.R, c.G, c.B }.OrderBy(v => v)];
+            return Sort(a).SequenceEqual(Sort(b));
         }
     }
 

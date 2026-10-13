@@ -1,3 +1,4 @@
+using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Media;
 
@@ -7,74 +8,126 @@ namespace Andzip.App;
 /// 界面设计令牌：颜色、圆角、间距、字号的<strong>唯一</strong>来源。
 /// <para>规范见 <c>docs/界面设计规范.md</c>；那边的每个数值都能在这里找到，
 /// 反过来也成立 —— 界面上不该出现任何一处字面色值或"看着合适"的边距。
-/// 这条由界面测试钉住（<c>ThemeTokenTests</c>），因为上一轮"规则只写在文档里"
+/// 这条由界面测试钉住（<c>DesignTokenTests</c>），因为上一轮"规则只写在文档里"
 /// 就出过 <c>0.13.0</c> 那种事。</para>
 /// <para>为什么是 C# 常量而不是资源字典：本工程没有 XAML，控件全在代码里 new，
 /// 资源字典只会变成第二套没人同步的真相。</para>
+/// <para><strong>颜色为什么是属性而不是字段</strong>：浅色/深色两套调色板要能整体切换
+/// （<see cref="Use"/>），字段会在类型初始化时就固化成浅色的那一份。
+/// 圆角、间距、字号与主题无关，所以它们仍是常量。</para>
 /// </summary>
 internal static class Design
 {
+    /// <summary>当前生效的调色板。所有颜色属性都是从它转发出去的。</summary>
+    public static Palette Active { get; private set; } = Palette.Light;
+
+    /// <summary>用户的偏好（"跟随系统"与"当前是深色"是两件事，前者在这里）。</summary>
+    public static ThemeMode Mode { get; private set; } = ThemeMode.System;
+
+    /// <summary>调色板换了。已经建好的控件不会自己重画，听到这个事件的一方要重建自己那部分界面。</summary>
+    public static event Action? ActiveChanged;
+
+    /// <summary>
+    /// 按偏好把界面切到浅色/深色：既翻我们自己的调色板，也告诉 Avalonia 要哪个主题变体。
+    /// <para>两件事都要做。只翻调色板，SimpleTheme 自己画的那一小半（勾选框内部、下拉列表、
+    /// 提示气泡）还停在浅色；只改变体，我们的表面色一点不动 —— 实测 SimpleTheme 并没有深色
+    /// 表面色，所以深浅主要靠前者，后者是补齐。</para>
+    /// </summary>
+    public static void Apply(ThemeMode mode)
+    {
+        Mode = mode;
+
+        var app = Avalonia.Application.Current;
+        if (app is not null)
+        {
+            app.RequestedThemeVariant = mode switch
+            {
+                ThemeMode.Light => Avalonia.Styling.ThemeVariant.Light,
+                ThemeMode.Dark => Avalonia.Styling.ThemeVariant.Dark,
+                _ => Avalonia.Styling.ThemeVariant.Default,
+            };
+        }
+
+        // 系统读数只能在 RequestedThemeVariant 是 Default 时才代表系统；
+        // 显式选了浅/深时它代表的是"我们自己的选择"，但那不影响结果 —— 那时 mode 已经决定了深浅。
+        Use(mode.PrefersDark(app?.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark));
+    }
+
+    /// <summary>切到某个主题；没变化时不触发事件（避免设置页每次刷新都把界面重建一遍）。</summary>
+    public static void Use(bool dark)
+    {
+        var next = dark ? Palette.Dark : Palette.Light;
+        if (ReferenceEquals(next, Active))
+        {
+            return;
+        }
+
+        Active = next;
+        ActiveChanged?.Invoke();
+    }
+
     /// <summary>品牌蓝。工具栏带、主按钮、选中态、链接。</summary>
     internal static class Brand
     {
-        public static readonly IBrush Tint = Brush(0xF2, 0xF7, 0xFD);   // Brand.50
-        public static readonly IBrush Soft = Brush(0xE1, 0xEE, 0xFB);   // Brand.100
-        public static readonly IBrush Line = Brush(0xBF, 0xD9, 0xF4);   // Brand.200
-        public static readonly IBrush Bright = Brush(0x2E, 0x86, 0xD6); // Brand.500，只用于大字/图标
-        public static readonly IBrush Base = Brush(0x0F, 0x6C, 0xBD);   // Brand.600，主色
-        public static readonly IBrush Deep = Brush(0x0C, 0x5A, 0xA0);   // Brand.700，按下
-        public static readonly IBrush Hover = Brush(0x4A, 0x9B, 0xE8);  // Brand.400，分隔条/描边悬停
+        public static IBrush Tint => Active.BrandTint;
+        public static IBrush Soft => Active.BrandSoft;
+        public static IBrush Line => Active.BrandLine;
+        public static IBrush Bright => Active.BrandBright;
+        public static IBrush Base => Active.BrandBase;
+        public static IBrush Deep => Active.BrandDeep;
+        public static IBrush Hover => Active.BrandHover;
 
-        /// <summary>叠在品牌蓝带上的半透明白：悬停 12%、按下 20%。</summary>
-        public static readonly IBrush OnBrandHover = Brush(0x1F, 0xFF, 0xFF, 0xFF);
-        public static readonly IBrush OnBrandPressed = Brush(0x33, 0xFF, 0xFF, 0xFF);
+        /// <summary>叠在品牌蓝带上的半透明白：悬停 12%、按下 20%。两套主题下都用白叠加。</summary>
+        public static IBrush OnBrandHover => Active.OnBrandHover;
+
+        public static IBrush OnBrandPressed => Active.OnBrandPressed;
     }
 
     /// <summary>文字与描边的中性色。</summary>
     internal static class Ink
     {
-        public static readonly IBrush Primary = Brush(0x1F, 0x23, 0x28);   // 对白底 15.4:1
-        public static readonly IBrush Secondary = Brush(0x5B, 0x64, 0x70); // 5.6:1
-        public static readonly IBrush Disabled = Brush(0x9A, 0xA3, 0xAE);  // 只允许出现在禁用内容上
-        public static readonly IBrush OnBrand = Brush(0xFF, 0xFF, 0xFF);
-        public static readonly IBrush OnBrandDisabled = Brush(0x99, 0xFF, 0xFF, 0xFF);
+        public static IBrush Primary => Active.InkPrimary;
+        public static IBrush Secondary => Active.InkSecondary;
+        public static IBrush Disabled => Active.InkDisabled;
+        public static IBrush OnBrand => Active.InkOnBrand;
+        public static IBrush OnBrandDisabled => Active.InkOnBrandDisabled;
     }
 
     /// <summary>面板底色。层级靠底色差表达 —— SimpleTheme 用不了阴影。</summary>
     internal static class Surface
     {
-        public static readonly IBrush Base = Brush(0xFF, 0xFF, 0xFF);
-        public static readonly IBrush Muted = Brush(0xF6, 0xF8, 0xFA);
-        public static readonly IBrush Sunken = Brush(0xFA, 0xFB, 0xFC);
-        public static readonly IBrush RowAlt = Brush(0xFA, 0xFB, 0xFC);
+        public static IBrush Base => Active.SurfaceBase;
+        public static IBrush Muted => Active.SurfaceMuted;
+        public static IBrush Sunken => Active.SurfaceSunken;
+        public static IBrush RowAlt => Active.SurfaceRowAlt;
     }
 
     internal static class Line
     {
-        public static readonly IBrush Subtle = Brush(0xE6, 0xE9, 0xEC);
-        public static readonly IBrush Strong = Brush(0xC9, 0xCE, 0xD6);
+        public static IBrush Subtle => Active.LineSubtle;
+        public static IBrush Strong => Active.LineStrong;
     }
 
     /// <summary>语义色。规范里写着"不许当装饰"：红只用于错误/危险，绿只用于成功。</summary>
     internal static class Semantic
     {
-        public static readonly IBrush Danger = Brush(0xC4, 0x2B, 0x1C);
-        public static readonly IBrush DangerTint = Brush(0xFD, 0xEC, 0xEA);
-        public static readonly IBrush Success = Brush(0x1A, 0x7F, 0x37);
-        public static readonly IBrush WarningText = Brush(0x8A, 0x61, 0x00);
-        public static readonly IBrush WarningTint = Brush(0xFF, 0xF6, 0xDE);
-        public static readonly IBrush WarningIcon = Brush(0xD9, 0xA6, 0x1F);
+        public static IBrush Danger => Active.Danger;
+        public static IBrush DangerTint => Active.DangerTint;
+        public static IBrush Success => Active.Success;
+        public static IBrush WarningText => Active.WarningText;
+        public static IBrush WarningTint => Active.WarningTint;
+        public static IBrush WarningIcon => Active.WarningIcon;
     }
 
     /// <summary>文件夹图标的面与边。内容区唯一允许填充的图标。</summary>
     internal static class Icon
     {
-        public static readonly IBrush Face = Brush(0xF7, 0xC9, 0x48);
-        public static readonly IBrush Edge = Brush(0xD9, 0xA6, 0x1F);
-        public static readonly IBrush Glyph = Brush(0x5B, 0x64, 0x70);
+        public static IBrush Face => Active.FolderFace;
+        public static IBrush Edge => Active.FolderEdge;
+        public static IBrush Glyph => Active.IconGlyph;
     }
 
-    /// <summary>圆角只有这 5 档（规范 4.1）。</summary>
+    /// <summary>圆角只有这 5 档（规范 4.1）。与主题无关，所以是常量。</summary>
     internal static class Radius
     {
         public static readonly CornerRadius None = new(0);
@@ -130,6 +183,135 @@ internal static class Design
         public const double ToolBar = 40;
         public const double Tile = 72;
     }
+}
+
+/// <summary>
+/// 一套完整的调色板：28 个画刷，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
+/// <para>深色那一份刻意<strong>不用纯黑</strong>：底色停在 <c>#17191C</c>~<c>#262B31</c> 这一带，
+/// 纯黑配高对比文字会在暗环境里产生"光晕"，眼睛要不停重新对焦。
+/// 品牌蓝在深色下反而要<strong>压深</strong>（<c>#1B5E9E</c>）而不是提亮：
+/// 它是白字的底，提亮会把白字的对比度打到 AA 以下。</para>
+/// <para>每个"文字色 / 底色"配对的对比度由 <c>PaletteContrastTests</c> 按 WCAG 公式实算，
+/// 规范表里那些数字就是那条测试报出来的。</para>
+/// </summary>
+internal sealed class Palette
+{
+    private Palette(string name) => Name = name;
+
+    public string Name { get; }
+
+    public required IBrush BrandTint { get; init; }
+    public required IBrush BrandSoft { get; init; }
+    public required IBrush BrandLine { get; init; }
+    public required IBrush BrandBright { get; init; }
+    public required IBrush BrandBase { get; init; }
+    public required IBrush BrandDeep { get; init; }
+    public required IBrush BrandHover { get; init; }
+    public required IBrush OnBrandHover { get; init; }
+    public required IBrush OnBrandPressed { get; init; }
+
+    public required IBrush InkPrimary { get; init; }
+    public required IBrush InkSecondary { get; init; }
+    public required IBrush InkDisabled { get; init; }
+    public required IBrush InkOnBrand { get; init; }
+    public required IBrush InkOnBrandDisabled { get; init; }
+
+    public required IBrush SurfaceBase { get; init; }
+    public required IBrush SurfaceMuted { get; init; }
+    public required IBrush SurfaceSunken { get; init; }
+    public required IBrush SurfaceRowAlt { get; init; }
+
+    public required IBrush LineSubtle { get; init; }
+    public required IBrush LineStrong { get; init; }
+
+    public required IBrush Danger { get; init; }
+    public required IBrush DangerTint { get; init; }
+    public required IBrush Success { get; init; }
+    public required IBrush WarningText { get; init; }
+    public required IBrush WarningTint { get; init; }
+    public required IBrush WarningIcon { get; init; }
+
+    public required IBrush FolderFace { get; init; }
+    public required IBrush FolderEdge { get; init; }
+    public required IBrush IconGlyph { get; init; }
+
+    public static Palette Light { get; } = new("light")
+    {
+        BrandTint = Brush(0xF2, 0xF7, 0xFD),
+        BrandSoft = Brush(0xE1, 0xEE, 0xFB),
+        BrandLine = Brush(0xBF, 0xD9, 0xF4),
+        BrandBright = Brush(0x2E, 0x86, 0xD6),
+        BrandBase = Brush(0x0F, 0x6C, 0xBD),
+        BrandDeep = Brush(0x0C, 0x5A, 0xA0),
+        BrandHover = Brush(0x4A, 0x9B, 0xE8),
+        OnBrandHover = Brush(0x1F, 0xFF, 0xFF, 0xFF),
+        OnBrandPressed = Brush(0x33, 0xFF, 0xFF, 0xFF),
+
+        InkPrimary = Brush(0x1F, 0x23, 0x28),
+        InkSecondary = Brush(0x5B, 0x64, 0x70),
+        InkDisabled = Brush(0x9A, 0xA3, 0xAE),
+        InkOnBrand = Brush(0xFF, 0xFF, 0xFF),
+        InkOnBrandDisabled = Brush(0x99, 0xFF, 0xFF, 0xFF),
+
+        SurfaceBase = Brush(0xFF, 0xFF, 0xFF),
+        SurfaceMuted = Brush(0xF6, 0xF8, 0xFA),
+        SurfaceSunken = Brush(0xFA, 0xFB, 0xFC),
+        SurfaceRowAlt = Brush(0xFA, 0xFB, 0xFC),
+
+        LineSubtle = Brush(0xE6, 0xE9, 0xEC),
+        LineStrong = Brush(0xC9, 0xCE, 0xD6),
+
+        Danger = Brush(0xC4, 0x2B, 0x1C),
+        DangerTint = Brush(0xFD, 0xEC, 0xEA),
+        Success = Brush(0x1A, 0x7F, 0x37),
+        WarningText = Brush(0x8A, 0x61, 0x00),
+        WarningTint = Brush(0xFF, 0xF6, 0xDE),
+        WarningIcon = Brush(0xD9, 0xA6, 0x1F),
+
+        FolderFace = Brush(0xF7, 0xC9, 0x48),
+        FolderEdge = Brush(0xD9, 0xA6, 0x1F),
+        IconGlyph = Brush(0x5B, 0x64, 0x70),
+    };
+
+    public static Palette Dark { get; } = new("dark")
+    {
+        // 选中/信息类的蓝色要能压住深底，所以比浅色那份更亮一点；
+        // 而"带子/主按钮"那种白字底反而要更深 —— 两者不是一回事。
+        BrandTint = Brush(0x17, 0x29, 0x3B),
+        BrandSoft = Brush(0x1E, 0x3A, 0x52),
+        BrandLine = Brush(0x2F, 0x5C, 0x86),
+        BrandBright = Brush(0x5C, 0xA8, 0xE8),
+        BrandBase = Brush(0x1B, 0x5E, 0x9E),
+        BrandDeep = Brush(0x14, 0x4A, 0x80),
+        BrandHover = Brush(0x3D, 0x86, 0xC8),
+        OnBrandHover = Brush(0x26, 0xFF, 0xFF, 0xFF),
+        OnBrandPressed = Brush(0x3D, 0xFF, 0xFF, 0xFF),
+
+        InkPrimary = Brush(0xE7, 0xEB, 0xF0),
+        InkSecondary = Brush(0xA7, 0xB0, 0xBA),
+        InkDisabled = Brush(0x6B, 0x74, 0x80),
+        InkOnBrand = Brush(0xFF, 0xFF, 0xFF),
+        InkOnBrandDisabled = Brush(0x8C, 0xFF, 0xFF, 0xFF),
+
+        SurfaceBase = Brush(0x1F, 0x23, 0x28),
+        SurfaceMuted = Brush(0x26, 0x2B, 0x31),
+        SurfaceSunken = Brush(0x1A, 0x1E, 0x22),
+        SurfaceRowAlt = Brush(0x22, 0x27, 0x2C),
+
+        LineSubtle = Brush(0x2E, 0x34, 0x3A),
+        LineStrong = Brush(0x45, 0x4D, 0x56),
+
+        Danger = Brush(0xF2, 0x8B, 0x82),
+        DangerTint = Brush(0x3A, 0x1F, 0x1D),
+        Success = Brush(0x7F, 0xDC, 0xA4),
+        WarningText = Brush(0xF5, 0xD2, 0x7A),
+        WarningTint = Brush(0x3A, 0x31, 0x17),
+        WarningIcon = Brush(0xE8, 0xB9, 0x3C),
+
+        FolderFace = Brush(0xD9, 0xA6, 0x1F),
+        FolderEdge = Brush(0x8A, 0x61, 0x00),
+        IconGlyph = Brush(0xA7, 0xB0, 0xBA),
+    };
 
     private static IBrush Brush(int gray) => new SolidColorBrush(Color.FromRgb((byte)gray, (byte)gray, (byte)gray));
 

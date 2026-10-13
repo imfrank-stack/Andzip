@@ -42,11 +42,16 @@ public sealed class MainWindow : Window
 
     private readonly LangCatalog _lang;
     private readonly ContentControl _contentHost = new();
-    private readonly Control _homeContent;
+
+    /// <summary>首页那份内容。换主题时要重做一份 —— 它的底色是构造时固化上去的。</summary>
+    private Control _homeContent;
     private readonly Control _toolBar;
 
     /// <summary>菜单条。留着是为了按命令找到某几项、在没有包可操作时把它们置灰。</summary>
     private readonly Menu _menuBar;
+
+    /// <summary>菜单条外面那层 Border（那条 1px 下边线归它画），换主题时要重画。</summary>
+    private readonly Border _menuHost;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
     private readonly AppSettings _settings;
@@ -111,6 +116,7 @@ public sealed class MainWindow : Window
             BorderBrush = Design.Line.Subtle,
             BorderThickness = new Thickness(0, 0, 0, 1),
         };
+        _menuHost = menuHost;
         DockPanel.SetDock(menuHost, Dock.Top);
         root.Children.Add(menuHost);
 
@@ -130,6 +136,50 @@ public sealed class MainWindow : Window
         ApplyViewDefaults();
         RegisterShortcuts(commands);
         AcceptFileDrops();
+
+        // 主题放在最后：它要重画上面已经建好的那一套外壳，也订阅了 Design 的变化事件。
+        Design.ActiveChanged += ApplyTheme;
+        Opened += (_, _) => ApplyTheme();
+        Closed += (_, _) => Design.ActiveChanged -= ApplyTheme;
+    }
+
+    /// <summary>
+    /// 把当前调色板刷到已经建好的外壳上，并重做内容区。
+    /// <para>为什么要"重做"而不是"改属性"：本工程没有 XAML，控件的颜色是在构造时从
+    /// <see cref="Design"/> 取一次就固化到实例上的（菜单项、工具栏按钮、列表表头都是这样）。
+    /// 逐个改回去等于再写一遍构造函数，而且一定会漏掉几个 —— 所以外壳这种"只有几处底色"的
+    /// 直接改，内容那种"整棵子树都是构造期决定"的重新建一份。</para>
+    /// </summary>
+    private void ApplyTheme()
+    {
+        var dark = Design.Active.Name == "dark";
+
+        Background = Design.Surface.Base;
+        _menuHost.Background = Design.Surface.Base;
+        _menuHost.BorderBrush = Design.Line.Subtle;
+        _menuBar.Background = Design.Surface.Base;
+        _menuBar.Foreground = Design.Ink.Primary;
+
+        if (_toolBar is Border band)
+        {
+            band.Background = Design.Brand.Base;
+            band.BorderBrush = Design.Brand.Deep;
+        }
+
+        _homeContent = HomeView.Create(_lang);
+
+        // 正看着包就重建那个包的视图，否则重建首页。位置（首页 / 内容）要保住，
+        // 不然用户改个主题就被扔回首页。
+        if (_listing is { } listing)
+        {
+            ShowArchiveView(listing);
+        }
+        else
+        {
+            ShowHome();
+        }
+
+        WindowTheme.Apply(this, dark);
     }
 
     // ---------- 拖拽 ----------
@@ -198,6 +248,9 @@ public sealed class MainWindow : Window
     private void ApplyViewDefaults()
     {
         _view = ViewDefaults.Load(_settings);
+
+        // 主题也在这一组里：换了偏好就翻调色板，Design 的事件会带回 ApplyTheme 重画外壳与内容。
+        Design.Apply(_view.Theme);
         _toolBar.IsVisible = _view.ShowToolBar;
         _titleShowsFullPath = _settings.GetBool(SettingKeys.TitleBarFullPath, fallback: false);
 

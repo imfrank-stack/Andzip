@@ -23,6 +23,18 @@ public sealed class App : Application
             // 设置要先读：语言页存的那一项决定界面用什么语言，而语言包一旦建成就到处引用。
             var settings = AppSettings.Load(AppSettings.DefaultFilePath);
 
+            // 主题要在建窗口之前定下来：建完再翻，用户会先看见一帧浅色首页再跳成深色。
+            Design.Apply(SettingKeys.ParseThemeMode(settings.GetString(SettingKeys.ViewTheme)));
+
+            // 「跟随系统」得能在运行中也跟着变（系统深浅是通过这个事件报上来的）。
+            ActualThemeVariantChanged += (_, _) =>
+            {
+                if (Design.Mode == ThemeMode.System)
+                {
+                    Design.Apply(ThemeMode.System);
+                }
+            };
+
             // 「设置 → 高级」里那两项是进程级的，在这里一次性接上 —— 比让每个用到它的地方
             // 各自去读设置文件要难漏得多。
             ArchiveEngine.TempDirectory = settings.GetString(SettingKeys.TempDirectory);

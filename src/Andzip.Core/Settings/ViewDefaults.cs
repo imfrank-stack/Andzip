@@ -13,19 +13,26 @@ public sealed record ViewDefaults(
     bool ShowStatusBar,
     bool ShowTree,
     bool IconViewByDefault,
-    bool AutoExpandTree)
+    bool AutoExpandTree,
+
+    /// <summary>有默认值是有意的：主题这一维是后加的，让既有的构造点（含测试）不必全部改一遍。
+    /// 设置页永远显式传值，所以这个默认只在"没提到主题"的调用点上生效。</summary>
+    ThemeMode Theme = ThemeMode.System)
 {
     /// <summary>
     /// 缺省值 = 引入这一页之前的界面：骨架全都在、默认是详情列表。
-    /// <para>唯一的例外是<strong>树默认不展开</strong>（2026-10-13 改的）：以前一打开就把整棵
-    /// 目录摊平，深包的树长得比窗口还高，第一屏看到的全是文件夹名而不是内容。</para>
+    /// <para>两个刻意的例外：<strong>树默认不展开</strong>（2026-10-13 改的）——
+    /// 以前一打开就把整棵目录摊平，深包的树长得比窗口还高，第一屏看到的全是文件夹名而不是内容；
+    /// 以及<strong>主题默认跟随系统</strong> —— 一台把系统设成深色的机器，
+    /// 装上一个刺眼的浅色窗口不是保守，是没跟上。</para>
     /// </summary>
     public static ViewDefaults Fallback { get; } = new(
         ShowToolBar: true,
         ShowStatusBar: true,
         ShowTree: true,
         IconViewByDefault: false,
-        AutoExpandTree: false);
+        AutoExpandTree: false,
+        Theme: ThemeMode.System);
 
     public static ViewDefaults Load(AppSettings settings)
     {
@@ -36,7 +43,8 @@ public sealed record ViewDefaults(
             settings.GetBool(SettingKeys.ViewShowStatusBar, fallback: true),
             settings.GetBool(SettingKeys.ViewShowTree, fallback: true),
             settings.GetBool(SettingKeys.ViewIconByDefault, fallback: false),
-            settings.GetBool(SettingKeys.ViewAutoExpandTree, fallback: false));
+            settings.GetBool(SettingKeys.ViewAutoExpandTree, fallback: false),
+            SettingKeys.ParseThemeMode(settings.GetString(SettingKeys.ViewTheme)));
     }
 
     public void Save(AppSettings settings)
@@ -48,5 +56,6 @@ public sealed record ViewDefaults(
         settings.SetBool(SettingKeys.ViewShowTree, ShowTree);
         settings.SetBool(SettingKeys.ViewIconByDefault, IconViewByDefault);
         settings.SetBool(SettingKeys.ViewAutoExpandTree, AutoExpandTree);
+        settings.SetString(SettingKeys.ViewTheme, Theme.ToStorage());
     }
 }

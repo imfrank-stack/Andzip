@@ -17,6 +17,7 @@ namespace Andzip.App.UiTests;
 /// </list>
 /// 两条都是<strong>量像素</strong>量出来的，不是"控件属性等于某个值"那种自我确认。
 /// </summary>
+[Collection("界面状态")]
 public class ChromeCapabilityTests
 {
     private static readonly Color Fill = Color.FromRgb(0x0F, 0x6C, 0xBD);

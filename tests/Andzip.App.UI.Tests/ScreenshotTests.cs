@@ -17,6 +17,7 @@ namespace Andzip.App.UiTests;
 /// 字体与窗口边框是 headless 渲染，真实外观仍以桌面截图为准。
 /// </para>
 /// </summary>
+[Collection("界面状态")]
 public class ScreenshotTests
 {
     private static string OutputDirectory =>

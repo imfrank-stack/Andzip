@@ -17,6 +17,7 @@ namespace Andzip.App.UiTests;
 /// 不去直接调用 internal 的工厂 —— 工厂能造出正确控件，不代表装进窗口之后还对。
 /// </para>
 /// </summary>
+[Collection("界面状态")]
 public class UiFeatureWiringTests
 {
     // ------------------------------------------------ 主窗口：测试按钮与两项菜单

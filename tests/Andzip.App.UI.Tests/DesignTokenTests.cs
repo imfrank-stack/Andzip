@@ -17,6 +17,7 @@ namespace Andzip.App.UiTests;
 /// <para>规则写在文档里只会在"恰好想起来"的那次生效 —— 版本号规则就是这么失守过一次
 /// （<c>0.13.0</c>，见开发记录第七节第 25 条）。所以能机器检查的都不留给自觉。</para>
 /// </summary>
+[Collection("界面状态")]
 public class DesignTokenTests
 {
     /// <summary>
@@ -115,37 +116,12 @@ public class DesignTokenTests
         throw new InvalidOperationException("找不到仓库根目录。");
     }
 
-    private static Color Sample(Window window, Point at)
-    {
-        var frame = window.CaptureRenderedFrame() ?? throw new InvalidOperationException("没有画面");
-        using (frame)
-        {
-            var scale = (double)frame.PixelSize.Width / window.Bounds.Width;
-            var buffer = Bytes(frame);
-            var stride = frame.PixelSize.Width * 4;
-            var x = Math.Clamp((int)(at.X * scale), 0, frame.PixelSize.Width - 1);
-            var y = Math.Clamp((int)(at.Y * scale), 0, frame.PixelSize.Height - 1);
-            var offset = y * stride + x * 4;
-            return Color.FromRgb(buffer[offset + 2], buffer[offset + 1], buffer[offset]);
-        }
-    }
-
-    private static byte[] Bytes(WriteableBitmap frame)
-    {
-        using var locked = frame.Lock();
-        var buffer = new byte[locked.RowBytes * frame.PixelSize.Height];
-        System.Runtime.InteropServices.Marshal.Copy(locked.Address, buffer, 0, buffer.Length);
-        return buffer;
-    }
-
     private static double Luminance(Color c) => 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
 
-    /// <summary>帧缓冲在这个 headless 后端里不是 Bgra32，逐通道比会假阴性，排序后比即可。</summary>
-    private static bool Same(Color a, Color b)
-    {
-        static int[] Sort(Color c) => [.. new[] { (int)c.R, c.G, c.B }.OrderBy(v => v)];
-        return Sort(a).SequenceEqual(Sort(b));
-    }
+    // 取样与比较都在 Pixels 里（UiHarness.cs），这里不再重复一份读帧缓冲的代码。
+    private static Color Sample(Window window, Point at) => Pixels.At(window, at);
 
-    private static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+    private static bool Same(Color a, Color b) => Pixels.Same(a, b);
+
+    private static string Hex(Color c) => Pixels.Name(c);
 }

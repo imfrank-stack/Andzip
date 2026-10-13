@@ -11,6 +11,7 @@ namespace Andzip.App.UiTests;
 /// <para>它管的是<strong>别人构造出来的那棵树</strong>，所以断言只能从装配好的视图往下读
 /// <c>TreeViewItem.IsExpanded</c> —— 相信"代码里赋了值"就是这次 bug 的成因。</para>
 /// </summary>
+[Collection("界面状态")]
 public class TreeExpansionTests
 {
     [AvaloniaFact]

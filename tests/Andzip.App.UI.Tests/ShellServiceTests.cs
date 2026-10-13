@@ -13,6 +13,7 @@ namespace Andzip.App.UiTests;
 /// 只在用户点下去那一刻静默失效 —— 或者更糟，把"还能反悔"的那一条悄悄变成不可反悔。
 /// 所以这里真的调用一次，然后看文件系统的实际状态。
 /// </summary>
+[Collection("界面状态")]
 public class ShellServiceTests
 {
     private const string ProbeFileName = "andzip-recycle-probe.txt";

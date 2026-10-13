@@ -11,6 +11,20 @@ public enum ArchiveDoubleClick
 }
 
 /// <summary>
+/// 界面主题。默认 <see cref="System"/>：一台把系统设成深色的机器，
+/// 装上一个刺眼的浅色窗口不是"保守"，是没跟上。
+/// </summary>
+public enum ThemeMode
+{
+    /// <summary>跟着系统的深浅走（系统读数拿不到时按浅色）。</summary>
+    System,
+
+    Light,
+
+    Dark,
+}
+
+/// <summary>
 /// 设置键名与取值解析。集中一处，免得键名在各处拼字符串拼歪。
 /// </summary>
 public static class SettingKeys
@@ -111,6 +125,14 @@ public static class SettingKeys
     /// <summary>树形目录里的文件夹是否预先展开。</summary>
     public const string ViewAutoExpandTree = "view_auto_expand_tree";
 
+    /// <summary>
+    /// 界面主题：浅色 / 深色 / 跟随系统。取值见 <see cref="Core.Settings.ThemeMode"/>。
+    /// <para>键名不叫 <c>ThemeMode</c> —— 那会和同名的枚举撞车（<c>ThemeMode.Light</c>
+    /// 在类里会被解析成"这个字符串成员的 Light"），编译器报的还是"string 没有 Light 定义"，
+    /// 完全看不出根因。</para>
+    /// </summary>
+    public const string ViewTheme = "theme_mode";
+
     // ------------------------------------------------------------- 语言页
 
     /// <summary>
@@ -174,4 +196,36 @@ public static class SettingKeys
     /// </summary>
     public static bool ShouldExtractDirectly(string? storedSetting)
         => ParseDoubleClick(storedSetting) == ArchiveDoubleClick.ExtractDirectly;
+
+    /// <summary>认不出来回落到 <see cref="ThemeMode.System"/> —— 那是这一项首次出现时的默认。</summary>
+    public static ThemeMode ParseThemeMode(string? stored)
+        => stored?.Trim().ToLowerInvariant() switch
+        {
+            "light" => ThemeMode.Light,
+            "dark" => ThemeMode.Dark,
+            _ => ThemeMode.System,
+        };
+
+    /// <summary>枚举存成稳定的小写标识，理由同 <see cref="ToStorage(ArchiveDoubleClick)"/>。</summary>
+    public static string ToStorage(this ThemeMode mode)
+        => mode switch
+        {
+            ThemeMode.Light => "light",
+            ThemeMode.Dark => "dark",
+            _ => "system",
+        };
+
+    /// <summary>
+    /// 把设置折算成"到底用哪套颜色"。<paramref name="systemIsDark"/> 是系统的深浅读数。
+    /// <para>单独拆出来是因为这一层判断要跟"系统读数从哪来"分开测：
+    /// Avalonia 在 headless 下报什么、Windows 上改了系统主题会不会推事件，
+    /// 都不是这条规则该操心的事。</para>
+    /// </summary>
+    public static bool PrefersDark(this ThemeMode mode, bool systemIsDark)
+        => mode switch
+        {
+            ThemeMode.Light => false,
+            ThemeMode.Dark => true,
+            _ => systemIsDark,
+        };
 }
