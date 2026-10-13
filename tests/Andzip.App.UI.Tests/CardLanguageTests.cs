@@ -81,6 +81,49 @@ public class CardLanguageTests
     }
 
     /// <summary>
+    /// 阴影必须在窗口边界之内衰减干净 —— 否则屏幕上是一条齐刷刷的切痕。
+    /// <para>1.8.0 那版被用户否掉的"不自然"就是这个：阴影的弥散层能伸到 13 DIP 外，
+    /// 而透明边距只有 12 DIP，窗口边界把影子切了一刀，四个角上最明显
+    /// （角上影子本来就走斜线，切痕离面板更近）。</para>
+    /// <para>量的是 alpha：面板之外本来全透明，影子每占一格那一格就不再是 0。
+    /// 所以"紧贴面板外沿 alpha&gt;0"证明影子在，"窗口最外一圈 alpha==0"证明没被切。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void PanelShadowDecaysInsideTheWindowInsteadOfBeingCutOff()
+    {
+        Design.Use(dark: false);
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+        UiWait.Pump(50);
+
+        var panel = (Border)window.Content;
+        var edge = panel.TranslatePoint(new Point(0, panel.Bounds.Height / 2), window)!.Value;
+
+        // 面板左缘外 2px：应当有影子（alpha 不为 0）
+        var near = Pixels.AlphaAt(window, new Point(edge.X - 2, edge.Y));
+        Assert.True(near > 0, "面板外沿 2px 全透明 —— 根本没有阴影");
+
+        // 窗口最外一圈四条边：必须已经衰减干净，否则就是被切了一刀
+        var w = window.Bounds.Width;
+        var h = window.Bounds.Height;
+        var probes = new (string Where, Point At)[]
+        {
+            ("左", new Point(0, h / 2)),
+            ("右", new Point(w - 1, h / 2)),
+            ("上", new Point(w / 2, 0)),
+            ("下", new Point(w / 2, h - 1)),
+            ("左下角", new Point(1, h - 1)),
+            ("右下角", new Point(w - 2, h - 1)),
+        };
+
+        foreach (var (where, at) in probes)
+        {
+            var alpha = Pixels.AlphaAt(window, at);
+            Assert.True(alpha == 0,
+                $"{where}那一圈 alpha={alpha}：阴影被窗口边界切断了（{nameof(Design.Float)}.{nameof(Design.Float.Margin)} 装不下 {nameof(Design.Shadow)}.Floating）");
+        }
+    }
+
+    /// <summary>
     /// 深色下标题栏跟着变深 —— 这件事 1.5.0 做不到（DWM 属性返回 S_OK 但屏幕不动，
     /// 见开发记录第七节第 28 条），1.7.0 因为标题栏是我们自己画的，自然就成了。
     /// </summary>

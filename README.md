@@ -40,7 +40,7 @@ Bandizip 风格的 Windows 压缩工具。**界面是 C#（.NET 10 + Avalonia）
 | 格式能力 | 引擎报告 **60 种可读 / 7 种可写**（可写：ZIP、7Z、TAR、TGZ、GZ、BZ2、XZ） |
 | 单文件绿色版 | 约 **20.0 MB**，已确认内核被真正内嵌 |
 | 正常安装 | 同一个 exe 改名即安装器：装到 `%LOCALAPPDATA%\Programs\Andzip`，桌面 + 开始菜单快捷方式、控制面板可卸载，全程不要管理员 |
-| 测试 | 1097 项断言全绿（原生 532 + Core 410 + 界面 86 + P/Invoke 外壳 69） |
+| 测试 | 1098 项断言全绿（原生 532 + Core 410 + 界面 87 + P/Invoke 外壳 69） |
 | CI | GitHub Actions，Windows 跑与本地完全同一份门禁脚本 `ci.ps1` |
 | Linux / macOS | 内核能交叉编译、CI 有真机作业；**界面从未在这些平台运行过** |
 

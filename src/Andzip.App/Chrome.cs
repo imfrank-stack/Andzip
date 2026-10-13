@@ -260,12 +260,12 @@ internal static class Chrome
 
         window.Content = new Border
         {
-            Margin = new Thickness(Design.Space.X2 + 2),
-            CornerRadius = new CornerRadius(14),
+            Margin = new Thickness(Design.Float.Margin),
+            CornerRadius = Design.Radius.Panel,
             Background = Design.Surface.Base,
-            // 一圈比白深一点的发丝边：桌面也是浅色的时候，只有阴影分不出边界。
-            BorderBrush = Design.Line.Subtle,
-            BorderThickness = new Thickness(1),
+            // 与主窗口同一件事：不描边。参考图里那张卡片没有任何描边，
+            // 边界是"卡片比背景暗/亮一档 + 一层软影"读出来的，画一圈灰线就假了。
+            BorderThickness = new Thickness(0),
             BoxShadow = Design.Shadow.Floating,
             Child = dock,
         };

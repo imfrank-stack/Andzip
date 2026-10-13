@@ -148,15 +148,14 @@ public sealed class MainWindow : Window
 
         root.Children.Add(_contentHost);
 
-        // 整块面板：外面 12px 是透明边距（圆角与阴影要地方画），里面是同一张表面。
-        // 那一圈发丝边不能省：桌面也是浅色的时候，只有阴影分不出边界 —— 对话框那边
-        // （Chrome.Chromeless）一直有，主窗口漏了就会显得"只有它是飘着的一块白"。
+        // 整块面板：外面那一圈透明边距留给圆角与阴影（阴影伸不出去就会被窗口切一刀），
+        // 里面是同一张表面。<strong>没有描边</strong> —— 参考图里也没有：一圈均匀的灰线是画上去的，
+        // 什么光都投不出这种东西，它正是"不自然"的来源。边界由面板与背景的明暗差 + 一层软影读出来。
         _surface = new Border
         {
-            Margin = new Thickness(Design.Space.X3),
-            CornerRadius = new CornerRadius(16),
-            BorderBrush = Design.Line.Subtle,
-            BorderThickness = new Thickness(1),
+            Margin = new Thickness(Design.Float.Margin),
+            CornerRadius = Design.Radius.Panel,
+            BorderThickness = new Thickness(0),
             BoxShadow = Design.Shadow.Floating,
             Child = root,
         };
@@ -197,7 +196,6 @@ public sealed class MainWindow : Window
         // 窗口本身永远是透明的（圆角外要能看见桌面），有颜色的是那层面板。
         Background = Brushes.Transparent;
         _surface.Background = Design.Surface.Base;
-        _surface.BorderBrush = Design.Line.Subtle;
         _headerHost.BorderBrush = Design.Line.Hair;
         _titleBar.Repaint();
         _menuBar.Background = Brushes.Transparent;
@@ -230,8 +228,8 @@ public sealed class MainWindow : Window
     private void FitSurfaceToState()
     {
         var maximized = WindowState == WindowState.Maximized;
-        _surface.Margin = maximized ? new Thickness(Design.Space.X1) : new Thickness(Design.Space.X3);
-        _surface.CornerRadius = maximized ? Design.Radius.Xs : new CornerRadius(16);
+        _surface.Margin = maximized ? new Thickness(Design.Space.X1) : new Thickness(Design.Float.Margin);
+        _surface.CornerRadius = maximized ? Design.Radius.Xs : Design.Radius.Panel;
     }
 
     /// <summary>

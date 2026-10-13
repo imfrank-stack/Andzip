@@ -169,7 +169,7 @@ internal static class Design
         public static IBrush Glyph => Active.IconGlyph;
     }
 
-    /// <summary>圆角只有这 5 档（规范 4.1）。与主题无关，所以是常量。</summary>
+    /// <summary>圆角只有这 6 档（规范 4.1）。与主题无关，所以是常量。</summary>
     internal static class Radius
     {
         public static readonly CornerRadius None = new(0);
@@ -177,7 +177,25 @@ internal static class Design
         public static readonly CornerRadius Sm = new(6);
         public static readonly CornerRadius Md = new(8);
         public static readonly CornerRadius Lg = new(12);
+
+        /// <summary>
+        /// 整块窗口那张面板的圆角。单独一档而不是复用 <see cref="Lg"/>：
+        /// 面板是全屏最大的一块，同一半径在它上面读起来比在小卡片上小得多 ——
+        /// 1.8.0 之前用 16，用户的评价是角落"不自然"（量出来参考图约 22）。
+        /// </summary>
+        public static readonly CornerRadius Panel = new(22);
         public static readonly CornerRadius Pill = new(999);
+    }
+
+    /// <summary>
+    /// 面板浮起来占的那一圈空间。
+    /// <para><strong>这个数必须不小于 <see cref="Shadow"/> 能伸出去的最远距离</strong>，
+    /// 否则阴影会被窗口的边界切掉一刀 —— 切痕在四个角上最明显，看起来就是"不自然"。
+    /// 这条由 <c>HoverAndPopupTests</c> 用 alpha 通道钉住（窗口最外一圈必须全透明）。</para>
+    /// </summary>
+    internal static class Float
+    {
+        public const double Margin = Space.X5;
     }
 
     /// <summary>4px 栅格（规范 4.2）。要边距请从这里取，不要现场写数字。</summary>
@@ -316,8 +334,11 @@ internal sealed class Palette
         ToggleKnob = Brush(0xFF, 0xFF, 0xFF),
 
         // 影子的颜色不是黑的，是品牌深墨蓝：灰黑影子在白底上发脏，带一点冷的墨色才干净。
-        // 两层 —— 一层贴地的接触影（小而实）+ 一层弥散的环境影（大而虚）。
-        ShadowFloating = Shadows("0 2 6 0 #1F0B1E33, 0 12 32 0 #2E0B1E33"),
+        // 参考图（用户给的那张）量出来是"边缘外 2-4px 约 9% 暗，13px 内衰减干净"，
+        // 而且**没有描边** —— 所以这里只有一层向下偏移的软影，加一层几乎看不见的接触影。
+        // 之前那种"紧贴边缘的实影 + 1px 灰描边"投不出任何真实的光，读起来就是画上去的一圈线。
+        // 距离必须整个装得进 Float.Margin，否则窗口边界会切掉影子（角上最明显）。
+        ShadowFloating = Shadows("0 1 3 0 #120B1E33, 0 6 14 0 #1F0B1E33"),
         // 两层分工明确：第二层往下方弥散（重量），第一层不偏移但带 1px 扩散（四周那一圈接触影）。
         // 只有下方偏移的那一层，药丸<strong>上方</strong>读不出浮起 —— 实测差值只有 1/255，
         // 用户要的"带阴影的圆角框"必须一眼看得见。
@@ -370,7 +391,7 @@ internal sealed class Palette
         ToggleKnob = Brush(0xE7, 0xEB, 0xF0),
 
         // 同一套几何，不透明度提高一档：纯黑上的黑影子只有加深边缘这一种作用，太淡等于没有。
-        ShadowFloating = Shadows("0 2 6 0 #66000000, 0 12 32 0 #8C000000"),
+        ShadowFloating = Shadows("0 1 3 0 #33000000, 0 6 14 0 #59000000"),
         ShadowLift = Shadows("0 2 10 0 #73000000, 0 0 3 1 #59000000"),
         ShadowPill = Shadows("0 1 2 0 #66000000"),
 

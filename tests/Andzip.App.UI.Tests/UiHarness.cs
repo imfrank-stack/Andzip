@@ -193,6 +193,23 @@ namespace Andzip.App.UiTests
     internal static class Pixels
     {
         public static Color At(Window window, Point at)
+            => Sample(window, at, (buffer, index) =>
+                // 实测这个 headless 后端的帧缓冲是 R,G,B,A 顺序（不是文档里默认的 Bgra32）：
+                // 深色底 #1F2328 读回来是 [1F,23,28]。按 Bgra 读会得到 #28231F，
+                // 那会让"颜色对不对"的断言全部假阴性 —— 所以这里按实测的顺序取。
+                Color.FromRgb(buffer[index], buffer[index + 1], buffer[index + 2]));
+
+        /// <summary>
+        /// 一个点的 alpha。<strong>透明窗口只有靠它才量得出"阴影被切了没有"</strong>：
+        /// 面板之外是透明的，阴影每往外交一寸，那一寸就不再是全透明。
+        /// 窗口最外一圈只要有一个像素 alpha&gt;0，就说明阴影没在边界内衰减干净 ——
+        /// 屏幕上看到的是一条齐刷刷的切痕，四个角最明显。
+        /// </summary>
+        public static byte AlphaAt(Window window, Point at)
+            => Sample(window, at, (buffer, index) => buffer[index + 3]);
+
+        /// <summary>取一帧并按窗口坐标定位到某个像素的起始字节。</summary>
+        private static T Sample<T>(Window window, Point at, Func<byte[], int, T> pick)
         {
             var frame = window.CaptureRenderedFrame()
                 ?? throw new InvalidOperationException("窗口没有画面可取。");
@@ -209,12 +226,7 @@ namespace Andzip.App.UiTests
 
                 var x = Math.Clamp((int)(at.X * scale), 0, frame.PixelSize.Width - 1);
                 var y = Math.Clamp((int)(at.Y * scale), 0, frame.PixelSize.Height - 1);
-                var at2 = y * stride + x * 4;
-
-                // 实测这个 headless 后端的帧缓冲是 R,G,B,A 顺序（不是文档里默认的 Bgra32）：
-                // 深色底 #1F2328 读回来是 [1F,23,28]。按 Bgra 读会得到 #28231F，
-                // 那会让"颜色对不对"的断言全部假阴性 —— 所以这里按实测的顺序取。
-                return Color.FromRgb(buffer[at2], buffer[at2 + 1], buffer[at2 + 2]);
+                return pick(buffer, y * stride + x * 4);
             }
         }
 
