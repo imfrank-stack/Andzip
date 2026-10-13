@@ -118,29 +118,52 @@ internal static class Chrome
     /// 菜单栏的悬停：只轻微置灰，不要 SimpleTheme 那层 20% 品牌蓝。
     /// <para>高亮画在模板里的 <c>Border#root</c> 上，由 ControlTheme 的 setter 决定，
     /// 应用层样式压不过它（规范 §二 那条实测）。但<strong>实例上的本地值压得过 setter</strong> ——
-    /// 所以进来时把灰色写成局部值，离开时 <c>ClearValue</c> 交还给模板：
-    /// 展开子菜单时那一项的高亮仍由 SimpleTheme 自己管，我们不抢它的事。</para>
+    /// 所以要把灰色写成局部值。</para>
+    /// <para><strong>展开状态也要一起管</strong>（1.8.3）：只在指针进入时写、离开时 <c>ClearValue</c>
+    /// 的话，用户点开菜单、鼠标滑进子菜单之后那一项就退回模板自己的高亮 —— 一块<strong>直角</strong>的
+    /// 20% 蓝，正是用户说的"扫过时圆角，点击变成直角"。所以这里画的是
+    /// "指针在上面<em>或</em>子菜单开着"，两者都退去才交还给模板。</para>
+    /// <para>那枚 Border 缓存一次：子菜单打开时这一项的子树里有整份列表，
+    /// 每次指针进出都重走一遍没意义。</para>
     /// </summary>
     public static T MenuGrayHover<T>(this T item) where T : MenuItem
     {
-        item.PointerEntered += (_, _) =>
+        Border? root = null;
+
+        void Paint()
         {
-            if (Root(item) is not { } root)
+            if (root is null || root.Parent is null)
+            {
+                root = Root(item);
+            }
+
+            if (root is not { } face)
             {
                 return;
             }
 
-            root.SetValue(Border.BackgroundProperty, Design.Surface.Muted);
-            root.SetValue(Border.CornerRadiusProperty, Design.Radius.Sm);
-        };
-        item.PointerExited += (_, _) =>
-        {
-            if (Root(item) is { } root)
+            if (item.IsPointerOver || item.IsSubMenuOpen)
             {
-                root.ClearValue(Border.BackgroundProperty);
-                root.ClearValue(Border.CornerRadiusProperty);
+                face.SetValue(Border.BackgroundProperty, Design.Surface.Muted);
+                face.SetValue(Border.CornerRadiusProperty, Design.Radius.Sm);
+            }
+            else
+            {
+                face.ClearValue(Border.BackgroundProperty);
+                face.ClearValue(Border.CornerRadiusProperty);
+            }
+        }
+
+        item.PointerEntered += (_, _) => Paint();
+        item.PointerExited += (_, _) => Paint();
+        item.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == MenuItem.IsSubMenuOpenProperty)
+            {
+                Paint();
             }
         };
+
         return item;
     }
 
@@ -163,6 +186,13 @@ internal static class Chrome
     /// 影子才有地方落；再把 <c>Popup</c> 的偏移收回同样的距离，面板就还贴在锚点上。</para>
     /// <para>只能在"已经打开"之后调：弹窗的 Child 是打开时才建出来的，所以调用点是
     /// <c>SubmenuOpened</c> / <c>DropDownOpened</c>，不是构造时。</para>
+    /// <para><strong>留白只给右下，不给左上，也不再收 <c>Popup</c> 的偏移</strong>
+    /// （1.8.3 修的就是这两件事）。实测：Avalonia 是按<strong>含 margin 的外框</strong>定位弹窗的，
+    /// 所以"四周都留 12 再把偏移收回 12"会把整块面板推到锚点身上 ——
+    /// 菜单展开时顶部那一排菜单项被弹窗自己的第一行盖住，点上去既不关菜单也传不到菜单项，
+    /// 用户看到的是"再点一次卡住"（<c>OpenSubmenuDoesNotStealClicks…</c> 量的是命中栈）。
+    /// 只往右下留白之后：面板位置与改版前逐像素相同，影子有地方落，锚点一格也没被盖住。
+    /// 光从上方来，左上那两边本来就没有影。</para>
     /// </summary>
     public static void RoundPopups(this Control owner)
     {
@@ -170,15 +200,12 @@ internal static class Chrome
         {
             // 留白本身就是"处理过了"的记号：Name 之类不能写（控件已经 styled），
             // 而这一层每次展开都会再调一次，不能累加。
-            if (popup is not { IsOpen: true } || popup.Child is not Border { Margin: { Left: < LiftRoom } } root)
+            if (popup is not { IsOpen: true } || popup.Child is not Border { Margin: { Right: 0 } } root)
             {
                 continue;
             }
 
-            root.Margin = new Thickness(LiftRoom);
-            popup.HorizontalOffset -= LiftRoom;
-            popup.VerticalOffset -= LiftRoom;
-
+            root.Margin = new Thickness(0, 0, LiftRoom, LiftRoom);
             root.CornerRadius = Design.Radius.Md;
             root.Background = Design.Surface.Base;
             root.BorderBrush = Design.Line.Subtle;

@@ -277,6 +277,81 @@ public class HoverAndPopupTests
         }
     }
 
+    /// <summary>
+    /// 弹窗那圈留给阴影的透明留白<strong>不许盖住锚点</strong>。
+    /// <para>1.8.0 给弹窗根加 <c>Margin = 12</c>（宿主按子元素尺寸裁剪，影子必须有地方画），
+    /// 再用 <c>Popup.VerticalOffset -= 12</c> 把面板推回锚点 —— 结果弹窗矩形向上多出的那 12px
+    /// 正好压在菜单栏那一排上。矩形是 light-dismiss 的判定范围：<strong>落在里面就不算"点到外面"，
+    /// 于是这一格既关不掉菜单、也传不到菜单项</strong> —— 用户看到的"再点一次卡住"。</para>
+    /// <para>这里不问"看起来对不对"，直接问命中测试：菜单展开时，鼠标停在锚点项的正中间，
+    /// 命中的必须还是那个菜单项。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void OpenSubmenuDoesNotStealClicksFromTheItemThatOpenedIt()
+    {
+        var menu = MainMenuBar.Create(TestLang.Chinese(), new Dictionary<string, System.Action>());
+        var dock = new DockPanel { LastChildFill = false };
+        DockPanel.SetDock(menu, Dock.Top);
+        dock.Children.Add(menu);
+
+        // 窗口必须装得下整份「文件」菜单（约 343×348）：放不下时 Avalonia 会把弹窗
+        // 往上挤/翻边，那时候住菜单项的是"窗口太小"这个测试环境，不是产品。
+        var window = new Window
+        {
+            Content = dock,
+            Width = 900,
+            Height = 700,
+            Background = new SolidColorBrush(Page),
+        }.Shown();
+
+        var item = (MenuItem)menu.Items[0]!;
+        item.IsSubMenuOpen = true;
+        UiWait.Pump(120);
+
+        var center = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), window)!.Value;
+        var stack = window.GetVisualsAt(center).ToList();
+
+        // GetVisualsAt 给的是"命中的可视元素"链，模板里的 AccessText / Border 在内而 MenuItem 本身不在，
+        // 所以判据是"从最上面那个往上走能不能走到这一项"，不是"栈里有没有 MenuItem 类型"。
+        var reachesTheItem = false;
+        for (Visual? at = stack.FirstOrDefault(); at is not null; at = at.GetVisualParent())
+        {
+            if (ReferenceEquals(at, item))
+            {
+                reachesTheItem = true;
+                break;
+            }
+        }
+
+        Assert.True(reachesTheItem,
+            $"菜单展开时点在打开它的那一项正中间，命中的却不是这一项（从上到下："
+            + $"{string.Join(" → ", stack.Select(v => $"{v.GetType().Name}{v.Bounds}").DefaultIfEmpty("空"))}）—— "
+            + "弹窗把锚点盖住了，这一格点了什么也不会发生");
+    }
+
+    /// <summary>
+    /// 点开菜单、鼠标滑进子菜单之后，那一项的高亮<strong>仍然是圆角的</strong>。
+    /// <para>1.8.2 及之前：高亮只在指针进入时写，指针一滑进子菜单就 <c>ClearValue</c> 交还给
+    /// SimpleTheme，模板立刻画回它自己那块<strong>直角</strong>的 20% 蓝 —— 用户看到的
+    /// "扫过时圆角，点击变成直角"就是这一格之差。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void OpenedMenuItemKeepsTheRoundedHighlightAfterThePointerLeaves()
+    {
+        var (window, _) = OpenSubmenu();
+        var item = window.GetVisualDescendants().OfType<MenuItem>().First(m => m.IsSubMenuOpen);
+        var face = window.GetVisualDescendants().OfType<Border>().First(b => b.Name == "root" && b.Parent == item);
+
+        // 把指针挪到弹窗外面（既不在项上、也不在高亮上）
+        window.MouseMove(new Point(window.Bounds.Width - 20, window.Bounds.Height - 20));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(item.IsPointerOver, "指针这时不该还在那一项上");
+        Assert.True(item.IsSubMenuOpen, "指针移开把子菜单关掉了，测不到展开态");
+        Assert.True(face.CornerRadius.TopLeft >= 4,
+            $"展开中的菜单项退回成直角高亮（{face.CornerRadius}）—— 那就是用户说的\"点击变成直角\"");
+    }
+
     private static (Window Window, Border Root) OpenSubmenu()
     {
         var menu = MainMenuBar.Create(TestLang.Chinese(), new Dictionary<string, System.Action>());
