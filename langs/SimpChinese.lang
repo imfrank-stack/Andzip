@@ -316,6 +316,7 @@ TEXT_INSTALLER_CONTEXT_HINT              = 解压与压缩两组命令，同样�
 TEXT_INSTALLER_WORKING                   = 正在安装……
 TEXT_INSTALLER_REMOVING                  = 正在卸载……
 TEXT_INSTALLER_DONE                      = 已安装。桌面与开始菜单的快捷方式已创建。
+TEXT_INSTALLER_DONE_NO_DESKTOP           = 已安装。开始菜单的快捷方式已创建；桌面那一个跳过了（这台机器取不到桌面目录）。
 TEXT_INSTALLER_REMOVED                   = 已卸载。
 TEXT_INSTALLER_LEFT                      = 程序文件当时还在运行，已安排在退出后删除：${dir}
 TEXT_INSTALLER_BLOCKED                   = 这些扩展名被系统的默认应用挡住，请到系统设置里再指定一次：

@@ -317,6 +317,7 @@ TEXT_INSTALLER_CONTEXT_HINT              = Extract and compress commands, curren
 TEXT_INSTALLER_WORKING                   = Installing...
 TEXT_INSTALLER_REMOVING                  = Uninstalling...
 TEXT_INSTALLER_DONE                      = Installed. Desktop and Start Menu shortcuts created.
+TEXT_INSTALLER_DONE_NO_DESKTOP           = Installed. The Start Menu shortcut was created; the desktop one was skipped (this machine has no resolvable desktop folder).
 TEXT_INSTALLER_REMOVED                   = Uninstalled.
 TEXT_INSTALLER_LEFT                      = The program file was still running; it is scheduled for deletion on exit: ${dir}
 TEXT_INSTALLER_BLOCKED                   = These extensions are blocked by the system default-app setting, point them there: 

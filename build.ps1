@@ -27,11 +27,11 @@ if (-not $version -or -not $buildNo) {
     # VersionInfo.Parse enforces the same thing on the managed side.
     throw "VersionNo.ini: Version must be A.B.C with each part a single digit 0-9 (carry left when a part passes 9: 0.9.9 -> 1.0.0, not 0.10.0); BuildNo must be a number. Packaging refused."
 }
-Write-Host "[1/5] Version: $version (Build $buildNo)"
+Write-Host "[1/6] Version: $version (Build $buildNo)"
 
 # 2) Unit test gate (§11.1: no green, no package)
 if (-not $SkipTests) {
-    Write-Host "[2/5] Running unit tests (abort on failure)..."
+    Write-Host "[2/6] Running unit tests (abort on failure)..."
     dotnet test (Join-Path $root "Andzip.slnx") -c Release --nologo
     if ($LASTEXITCODE -ne 0) { throw "Unit tests failed; packaging aborted (requirements §11.1)." }
 
@@ -42,11 +42,11 @@ if (-not $SkipTests) {
     dotnet run --project $shellProj -c Release --no-build
     if ($LASTEXITCODE -ne 0) { throw "Native shell checks failed; packaging aborted (requirements §11.1)." }
 } else {
-    Write-Host "[2/5] Tests skipped (-SkipTests; debug only)."
+    Write-Host "[2/6] Tests skipped (-SkipTests; debug only)."
 }
 
 # 3) Publish
-Write-Host "[3/5] Publishing $Rid (single-file + trim + compress)..."
+Write-Host "[3/6] Publishing $Rid (single-file + trim + compress)..."
 $stage = Join-Path $root "dist\staging-$Rid"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 
@@ -104,7 +104,25 @@ $setup = Join-Path $root "dist\Andzip-Setup-v$version-$Rid.exe"
 if (Test-Path $setup) { Remove-Item $setup -Force }
 Copy-Item $artifact $setup
 
+# 6) Run the install round-trip INSIDE the shipped artifact.
+# Unit tests run the untrimmed Andzip.dll; the thing users run is trimmed + single-file +
+# compressed, and some failures only exist there. 1.8.3 shipped an installer that could not
+# create a .lnk because trimming removes .NET's built-in COM support -- all 1101 assertions
+# were green while the packaged exe was broken. This gate is what closes that gap.
+# (It installs into a temp directory with a probe registry key; real associations untouched.)
+Write-Host "[6/6] Self-test on the packaged artifact (/selftest)..."
+$selfOut = Join-Path $env:TEMP "andzip-selftest.log"
+if (Test-Path $selfOut) { Remove-Item $selfOut -Force }
+# -Wait, not $proc.WaitForExit(): with redirected output the unsynced Process object
+# hands back an EMPTY ExitCode, and "empty -ne 0" reads as a failure on a passing run.
+# (Windows PowerShell 5.1, measured 2026-10-14 -- the self-test had already printed PASS.)
+$proc = Start-Process -FilePath $artifact -ArgumentList '/selftest' `
+    -RedirectStandardOutput $selfOut -Wait -PassThru -WindowStyle Hidden
+Get-Content $selfOut -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $_" }
+$code = $proc.ExitCode
+if ($code -ne 0) { throw "Artifact self-test failed (exit code $code); packaging aborted." }
+
 $sizeMb = [math]::Round((Get-Item $artifact).Length / 1MB, 2)
-Write-Host "[5/5] Artifacts ($sizeMb MB each):"
+Write-Host "      Artifacts ($sizeMb MB each):"
 Write-Host "      $artifact"
 Write-Host "      $setup"

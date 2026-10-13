@@ -9,8 +9,9 @@ using Microsoft.Win32;
 
 namespace Andzip.App.Services;
 
-/// <summary>一次安装/卸载实际做了什么，用来在界面上如实报告（不写"成功"如果只做成一半）。</summary>
-internal sealed record InstallOutcome(bool Changed, string ExecutablePath, IReadOnlyList<string> BlockedExtensions);
+/// <summary>一次安装实际做了什么，用来在界面上如实报告（不写"成功"如果只做成一半）。</summary>
+/// <param name="DesktopShortcut">桌面那一个快捷方式到底建了没有。为 false 时界面不能说"桌面已创建"。</param>
+internal sealed record InstallOutcome(string ExecutablePath, IReadOnlyList<string> BlockedExtensions, bool DesktopShortcut);
 
 /// <summary>
 /// 「正常安装」这条路径：把绿色版那一个 exe 变成桌面上有图标、开始菜单里有项、
@@ -53,9 +54,14 @@ internal sealed class InstallationService
 
         var description = _lang.Label("TEXT_INSTALLER_SHORTCUT_HINT");
         ShellLink.Create(plan.StartMenuShortcut, plan.ExecutablePath, null, description);
+
+        // 桌面那一个可能整个没有落点（DesktopFolder 取不到）—— 这不是"建好了"，
+        // 所以把它作为一个事实带回去给界面说，而不是悄悄少做一件事。
+        var desktopMade = false;
         if (plan.DesktopShortcut is { } desktop)
         {
             ShellLink.Create(desktop, plan.ExecutablePath, null, description);
+            desktopMade = true;
         }
 
         WriteUninstallEntry(plan, associate, contextMenu);
@@ -85,7 +91,7 @@ internal sealed class InstallationService
             menu.NotifyChanged();
         }
 
-        return new InstallOutcome(true, plan.ExecutablePath, blocked);
+        return new InstallOutcome(plan.ExecutablePath, blocked, desktopMade);
     }
 
     /// <summary>
@@ -219,7 +225,14 @@ internal sealed class InstallationService
 
     // ------------------------------------------------------ 桌面目录
 
-    private static readonly Guid FolderIdDesktop = new("B4BFCC3A-DB25-4554-B0CE-9B755845BEE4");
+    /// <summary>
+    /// <c>FOLDERID_Desktop</c>。<strong>这个值必须从文档抄，不能凭记忆写</strong>：
+    /// GUID 写错时 <c>SHGetKnownFolderPath</c> 只回一个 <c>0x80070002</c>，
+    /// 我们把它当成"这台机器没有桌面目录"，于是桌面快捷方式<strong>静默地永远不建</strong> ——
+    /// 1.8.4 之前正是这样，而全部单元测试都是绿的（它们传的是临时目录，压根不经过这一层）。
+    /// 现在 <c>InstallerTests</c> 与 <c>/selftest</c> 都直接量这个函数。
+    /// </summary>
+    private static readonly Guid FolderIdDesktop = new("B4BFCC3A-DB2C-424C-B029-7FE99A87C641");
 
     [DllImport("shell32.dll")]
     private static extern int SHGetKnownFolderPath(ref Guid folderId, uint flags, IntPtr token, out IntPtr path);
@@ -230,6 +243,8 @@ internal sealed class InstallationService
     /// <summary>
     /// 真实的桌面目录。<c>Environment.SpecialFolder.Desktop</c> 在 OneDrive 接管过的机器上
     /// 会指到没在桌面上显示的那个旧路径，所以走已知文件夹接口。
+    /// <para>返回 null 只该发生在"这台机器真的取不到桌面"，此时<strong>界面必须说桌面那一个没建</strong>
+    /// （见 <see cref="InstallOutcome.DesktopShortcut"/>）—— 静默少做一件事比明说更糟。</para>
     /// </summary>
     public static string? DesktopFolder()
     {

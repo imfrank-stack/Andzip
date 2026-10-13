@@ -26,6 +26,7 @@ public sealed class InstallerWindow : Window
     private readonly InstallationService _service;
     private readonly InstallPlan _plan;
     private readonly TextBlock _status;
+    private readonly TextBlock _installedState;
     private readonly SettingToggle _associate;
     private readonly SettingToggle _contextMenu;
     private readonly Button _install;
@@ -69,15 +70,14 @@ public sealed class InstallerWindow : Window
             TextWrapping = TextWrapping.Wrap,
         });
 
-        body.Children.Add(new TextBlock
+        _installedState = new TextBlock
         {
-            Text = installed
-                ? lang.Format("TEXT_INSTALLER_ALREADY", ("dir", _plan.ExecutablePath))
-                : lang.Label("TEXT_INSTALLER_NOT_YET"),
             Foreground = Design.Ink.Secondary,
             FontSize = Design.Type.Body,
             TextWrapping = TextWrapping.Wrap,
-        });
+        };
+        ShowInstalledState(installed);
+        body.Children.Add(_installedState);
 
         _associate = SettingRow.Toggle(lang, "TEXT_INSTALLER_ASSOCIATE", "TEXT_INSTALLER_ASSOCIATE_HINT", () => { });
         _contextMenu = SettingRow.Toggle(lang, "TEXT_INSTALLER_CONTEXT", "TEXT_INSTALLER_CONTEXT_HINT", () => { });
@@ -150,7 +150,9 @@ public sealed class InstallerWindow : Window
 
                 var outcome = await Task.Run(() => _service.Install(_plan, source, associate, contextMenu));
 
-                var message = _lang.Label("TEXT_INSTALLER_DONE");
+                var message = _lang.Label(outcome.DesktopShortcut
+                    ? "TEXT_INSTALLER_DONE"
+                    : "TEXT_INSTALLER_DONE_NO_DESKTOP");
                 Show(outcome.BlockedExtensions.Count > 0
                     ? message + "\n" + _lang.Label("TEXT_INSTALLER_BLOCKED") + string.Join("  ", outcome.BlockedExtensions)
                     : message);
@@ -175,7 +177,19 @@ public sealed class InstallerWindow : Window
         _install.IsEnabled = true;
         _uninstall.IsVisible = installed;
         _uninstall.IsEnabled = installed;
+        ShowInstalledState(installed);
     }
+
+    /// <summary>
+    /// "装没装"这一句跟着磁盘上的实际状态重算。
+    /// <para>它原本只在构造时算一次：卸完之后红色按钮按事实消失了，那一句却还写着
+    /// "这台机器上已经装过 C:\…\Andzip.exe" —— 真机截图里就这个矛盾。同一件事的两个说法，
+    /// 一个跟着状态走一个不走，比两个都不走更容易骗到人。</para>
+    /// </summary>
+    private void ShowInstalledState(bool installed)
+        => _installedState.Text = installed
+            ? _lang.Format("TEXT_INSTALLER_ALREADY", ("dir", _plan.ExecutablePath))
+            : _lang.Label("TEXT_INSTALLER_NOT_YET");
 
     private void Show(string text)
     {

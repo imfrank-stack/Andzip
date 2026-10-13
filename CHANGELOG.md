@@ -2,6 +2,76 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [1.8.4] - 2026-10-14（修复：装不上的两条根因；从此每次打包都要过真产物 + 真屏幕）
+
+> 版本号 1.8.3 → **1.8.4**（修 bug 动第三位）。
+
+### 用户报的是同一句话：「无法安装成功」，底下是三件事
+
+前两件都**只在真产物 + 真机器上现形**，1101 条断言一条都没红；第三件是真机截图里看到的：
+
+1. **裁剪把 COM 的 vtable 删错位**。先报 `Built-in COM has been disabled via a feature switch`
+   —— 发布默认关掉 built-in COM，补 `<BuiltInComInteropSupport>true</BuiltInComInteropSupport>`
+   之后变成 `ArgumentException`（`E_INVALIDARG`）在 `IShellLinkW.SetPath` 上。
+   真正的原因：`IShellLinkW` 18 个方法只用得到 6 个，裁剪器把没调用的当死代码删掉，
+   而 **COM 早绑定是按"方法在接口里的序号"算槽位的** —— 序号前移，`SetPath` 打到隔壁槽。
+   修法是在 `ShellLink.Create` 上挂三条 `DynamicDependency(All, …)`，把三个 COM 类型的成员整个保住。
+   （先试过 XML 裁剪描述符，**没生效**：描述符里嵌套类型要写 `Outer/Inner`，
+   按 C# 习惯写 `Outer+Inner` 匹配不上，而匹配不上只是静默无效，一个字都不报。）
+2. **桌面快捷方式从来没被建出来过**。`FOLDERID_Desktop` 的 GUID 是我凭记忆写的
+   （`B4BFCC3A-DB25-4554-B0CE-9B755845BEE4`），`SHGetKnownFolderPath` 对它的回答是
+   `0x80070002`，于是桌面路径解析成 null、那一枚 `.lnk` 被静默跳过 ——
+   而界面上写死了一句"桌面与开始菜单的快捷方式已创建"。
+   换成文档核对过的 `{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}`；
+   `InstallOutcome` 带上"桌面那枚到底建了没有"，界面按事实改口（新增一条文案键）。
+3. 顺着截图又看到第三处：**卸完之后那句"这台机器上已经装过：…\Andzip.exe"还留在屏幕上**。
+   红色卸载按钮是按下之后按磁盘状态重算的，那句文字却是构造时算一次就不再动 ——
+   同一件事的两个说法，一个跟着状态走一个不走。现在两处走同一次重算。
+
+### 新增：打包门禁对**产物自己**跑一遍安装往返
+
+`Andzip.exe /selftest`（`src/Andzip.App/SelfTest.cs`）在临时目录 + 探针注册表键里
+真装一次真卸一次，12 项逐条打 `ok` / `FAIL`，非零退出就拒绝出包。
+它量的是单元测试量不到的两件事：**裁剪后的产物**（COM 那条只有在这里才炸）与
+**这台机器的真实 shell**（桌面目录解析这一条现在也在这里，只读不写）。
+`build.ps1` 第 6 步跑它。顺带修了这一步自己的一个假失败：
+`Start-Process -PassThru` + 重定向输出时 `$proc.ExitCode` 是**空的**，
+`$null -ne 0` 读起来像失败 —— 产物已经打印了 `selftest: PASS` 却被门禁拦下；改成 `-Wait`。
+
+### 界面核对成为固定动作
+
+新增 `tests/gui-probe.ps1`：真的启动 `dist/Andzip-Setup-*.exe`、真的把鼠标点到屏幕坐标上
+（`SetCursorPos` + `mouse_event`）、真的截窗口那块像素（`CopyFromScreen`，
+`PrintWindow` 在 Avalonia 的 GPU 表面上是一片黑）。这一轮就是它抓到桌面图标的。
+以后每次发布：产物门禁 + 真屏幕核对，两步都过才算过。
+
+### 测试
+
+- 界面 90 → **93**、合计 **1104** 条断言全绿（原生 532 + Core 410 + 界面 93 + 外壳 69）。
+- `DesktopFolderResolvesToTheFolderTheShellItselfShows`：拿另一个独立 API
+  （`SHGetFolderPath` / CSIDL，也就是 .NET `GetFolderPath` 走的那条）对桌面目录，
+  **把 GUID 改回凭记忆写的那个，它红在 `Assert.NotNull()` 上** —— 先红后绿。
+- `UiStopsClaimingTheDesktopShortcutWhenThereIsNoDesktopFolder`：传一份"没有桌面目录"的落点，
+  界面上必须换成那句不提桌面的回话。把消息改回写死的那句，它红，
+  失败信息里正好打出 `已安装。桌面与开始菜单的快捷方式已创建。` —— 就是用户看到的那句谎话。
+- `UiStopsClaimingInstalledAfterUninstallingFromTheUi`：从界面上卸完，屏幕上不许还留着
+  "这台机器上已经装过 …"。把 `RunAsync` 末尾那次重算删掉，它红，
+  失败信息里就是那句残留：`…|这台机器上已经装过：C:\Users\frank\AppData\Local\Temp\…\Andzip.exe|…|已卸载。|…`。
+- 顺手修了一条**门禁里偶发红的旧测试**：`RecycleBinDeleteLeavesTheFileRecoverable`
+  扫回收站时用 `File.ReadAllBytes` 独占打开别人的 `$I`，撞上资源管理器自己占着那个文件就抛
+  `IOException: … is being used by another process`。改成共享读 + 重试到扫出结果为止
+  （`$I` 是异步落盘的，删完立刻扫一次本来就太急）。
+- 真机核对（`dist/Andzip-Setup-v1.8.4-win-x64.exe`，两个开关都取消后跑完整一趟）：
+  点「安装」→ `%LOCALAPPDATA%\Programs\Andzip\Andzip.exe` 与源**逐字节相同**
+  （SHA-256 一致，21,050,420 字节）、开始菜单 `Andzip.lnk` 出现、
+  **桌面 `D:\Users\frank\Desktop\Andzip.lnk` 这次真的出现了**（这台机器的桌面被重定向到 D 盘，
+  正是过去被 null 掉的那一步）、卸载表那条带 `/uninstall` 且 `AndzipAssociate=0` / `AndzipContextMenu=0`
+  （没勾的就是没做过）；界面回话是那句"桌面与开始菜单的快捷方式已创建" —— 这句现在是真的。
+  shell 从装好的 exe 里读到的图标量出来是 `32x32 Format32bppArgb`、**四角 alpha 全 0**，
+  即桌面上那枚确实是带透明通道的圆角图，不是白底方砖。
+  再点「卸载」→ 程序文件、两枚 `.lnk`、卸载表那条全部收回，界面上那句改口成"还没有安装。"，
+  红色按钮同时消失。
+
 ## [1.8.3] - 2026-10-13（修复：菜单栏点开就变直角、再点像卡住 —— 弹窗盖住了打开它的那一项）
 
 > 版本号 1.8.2 → **1.8.3**（修 bug 动第三位）。

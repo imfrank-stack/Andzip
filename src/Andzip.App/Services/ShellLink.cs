@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
@@ -13,11 +14,22 @@ namespace Andzip.App.Services;
 /// 去读 exe 里那张 ICO，而那张 ICO 是从带透明通道的 <c>assets/andzip.png</c> 裁出来的 ——
 /// 桌面上的图标因此是圆角带透明的，不是带一圈白底的方块。
 /// 这条由 <c>InstallerTests</c> 读回快捷方式的图标字段核对。</para>
+/// <para><strong>三个 COM 类型整个保住，一个方法都不许删</strong>：COM 早绑定调用是按
+/// 【方法在接口里的序号】算 vtable 槽位的，而我们只用到 18 个方法里的 6 个。裁剪器把没被
+/// 调用的那些当死代码删掉之后，序号整体前移，<c>SetPath</c> 就打到隔壁槽上，
+/// 得到 <c>E_INVALIDARG</c>（"Value does not fall within the expected range"）。
+/// 未裁剪的测试进程里一切正常，所以这个坑只能在产物上量到 ——
+/// 见 build.ps1 的 <c>/selftest</c> 门禁。
+/// 保留声明挂在 <see cref="Create"/> 上而不是 XML 描述符里：描述符那套嵌套类型要写
+/// <c>Outer/Inner</c>，按 C# 习惯写成 <c>Outer+Inner</c> 匹配不上，而匹配不上也只是静默无效。</para>
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class ShellLink
 {
     /// <param name="iconPath">图标来源；null 表示跟目标同一个文件。</param>
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ShellLinkNative))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(IShellLinkW))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(IPersistFile))]
     public static void Create(string linkPath, string targetPath, string? arguments, string? description, string? iconPath = null)
     {
         var link = new ShellLinkNative();
@@ -82,29 +94,37 @@ internal static class ShellLink
     {
     }
 
-    /// <summary>方法顺序就是 vtable 顺序，错一个位置就会调到隔壁那个函数上 —— 编译器不会报。</summary>
+    /// <summary>
+    /// 方法顺序就是 vtable 顺序，错一个位置就会调到隔壁那个函数上 —— 编译器不会报。
+    /// <para>每个字符串参数都写死 <c>LPWStr</c>：这套接口要的是 <c>PCWSTR</c>（裸宽字符指针），
+    /// 而 C# 里 <c>string</c> 走 COM 的默认封送是 <c>BSTR</c>。BSTR 的数据指针也正好指向字符开头，
+    /// 所以未裁剪时"碰巧"能用 —— 但那是运气，不是契约，别依赖。</para>
+    /// <para>裁剪产物里那个 <c>E_INVALIDARG</c> 反而跟封送无关：是接口方法被删导致序号前移，
+    /// 见类型上那段说明。<strong>这条只能由 <c>/selftest</c> 门禁在产物上量到</strong> ——
+    /// 当时全部单元测试都是绿的。</para>
+    /// </summary>
     [ComImport]
     [Guid("000214F9-0000-0000-C000-000000000046")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IShellLinkW
     {
-        void GetPath(StringBuilder pszFile, int cchMax, IntPtr pfd, uint fFlags);
+        void GetPath([MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMax, IntPtr pfd, uint fFlags);
 
         void GetIDList(out IntPtr pidl);
 
         void SetIDList(IntPtr pidl);
 
-        void GetDescription(StringBuilder pszName, int cchMax);
+        void GetDescription([MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMax);
 
-        void SetDescription(string pszName);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
 
-        void GetWorkingDirectory(StringBuilder pszDir, int cchMax);
+        void GetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMax);
 
-        void SetWorkingDirectory(string pszDir);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
 
-        void GetArguments(StringBuilder pszArgs, int cchMax);
+        void GetArguments([MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMax);
 
-        void SetArguments(string pszArgs);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
 
         void GetHotkey(out short pwHotkey);
 
@@ -114,15 +134,15 @@ internal static class ShellLink
 
         void SetShowCmd(int iShowCmd);
 
-        void GetIconLocation(StringBuilder pszIconPath, int cchMax, out int piIcon);
+        void GetIconLocation([MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchMax, out int piIcon);
 
-        void SetIconLocation(string pszIconPath, int iIcon);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
 
-        void SetRelativePath(string pszPathRel, uint dwReserved);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
 
         void Resolve(IntPtr hwnd, uint fFlags);
 
-        void SetPath(string pszFile);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
     }
 
     [ComImport]

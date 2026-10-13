@@ -36,7 +36,7 @@ public class ShellServiceTests
 
             Assert.False(File.Exists(probe), "文件还在原地：删除根本没发生。");
 
-            var entries = RecycledEntriesFor(probe);
+            var entries = WaitForRecycledEntry(probe);
             Assert.True(entries.Count > 0, "文件消失了，可回收站里没有它 —— 那是直接删掉，不是移到回收站。");
 
             foreach (var (data, metadata) in entries)
@@ -49,6 +49,27 @@ public class ShellServiceTests
         finally
         {
             root.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// 删完立刻扫一次是不够的：<c>$I</c> 那条记录由资源管理器<strong>异步</strong>落盘，
+    /// 而且它自己会短暂独占那个文件 —— 实测过 <c>IOException: … is being used by another process</c>
+    /// （门禁跑到这一条时偶发红，单跑反而稳，因为那时机器上没有别的东西在动回收站）。
+    /// 所以这里重试到扫出结果或超时，而不是把一次时序当成产品缺陷。
+    /// </summary>
+    private static IReadOnlyList<(string Data, string Metadata)> WaitForRecycledEntry(string originalPath)
+    {
+        var deadline = Environment.TickCount64 + 5_000;
+        while (true)
+        {
+            var entries = RecycledEntriesFor(originalPath);
+            if (entries.Count > 0 || Environment.TickCount64 >= deadline)
+            {
+                return entries;
+            }
+
+            Thread.Sleep(150);
         }
     }
 
@@ -81,7 +102,7 @@ public class ShellServiceTests
             {
                 // $I 的头是二进制（版本 / 大小 / 删除时间 / 路径长度），后面跟着 UTF-16 的原路径。
                 // 不解析格式，直接把整段按 UTF-16 摊开找那条路径 —— 要问的只是"有没有它"。
-                var text = System.Text.Encoding.Unicode.GetString(File.ReadAllBytes(metadata));
+                var text = System.Text.Encoding.Unicode.GetString(ReadSharedOrEmpty(metadata));
                 if (text.Contains(needle, StringComparison.OrdinalIgnoreCase))
                 {
                     var name = Path.GetFileName(metadata);
@@ -95,6 +116,27 @@ public class ShellServiceTests
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// 这一趟扫的是<strong>整个回收站</strong>，别人正在写的 <c>$I</c> 与刚被清空而消失的那一条
+    /// 都会撞上来 —— 那不是我们要找的文件，跳过就是了。独占打开（<c>File.ReadAllBytes</c>）
+    /// 会把这种擦肩而过变成一次测试失败。
+    /// </summary>
+    private static byte[] ReadSharedOrEmpty(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            var bytes = new byte[stream.Length];
+            stream.ReadExactly(bytes);
+            return bytes;
+        }
+        catch (IOException)
+        {
+            return [];
+        }
     }
 
     /// <summary>路径不存在时返回 false，而不是开个空窗口再报告成功。</summary>

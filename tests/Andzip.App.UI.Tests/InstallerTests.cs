@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using Andzip.App.Services;
 using Andzip.App.Views;
 using Andzip.Core.Installation;
+using Andzip.Core.Lang;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Microsoft.Win32;
@@ -158,14 +159,75 @@ public class InstallerTests : IDisposable
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
+        var shown = ClickInstallAndWait(window, lang);
+
+        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_DONE"), StringComparison.Ordinal),
+            $"点完安装，界面没有回话「{lang.Label("TEXT_INSTALLER_DONE")}」，实际是：{shown}");
+        Assert.DoesNotContain("invalid thread", shown, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(_plan.ExecutablePath), "界面说装好了，可安装目录里没有程序文件。");
+        Assert.True(File.Exists(_plan.StartMenuShortcut), "界面说装好了，可开始菜单没有快捷方式。");
+    }
+
+    /// <summary>
+    /// 取不到桌面目录时，界面上那句回话<strong>不能提桌面</strong>。
+    /// <para>1.8.4 真机核对抓到的就是这一类：装完显示"桌面与开始菜单的快捷方式已创建"，
+    /// 桌面上却什么也没有 —— 因为 <c>FOLDERID_Desktop</c> 的 GUID 凭记忆写错了，
+    /// 桌面路径解析成 null，那一枚快捷方式被静默跳过，而回话是写死的。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void UiStopsClaimingTheDesktopShortcutWhenThereIsNoDesktopFolder()
+    {
+        var lang = TestLang.Chinese();
+        var noDesktop = InstallLayout.Plan(
+            Path.Combine(_root, "Local"), Path.Combine(_root, "Roaming"), desktop: null)
+            with { UninstallKey = _plan.UninstallKey };
+
+        var window = new InstallerWindow(lang, noDesktop).Shown();
+        var shown = ClickInstallAndWait(window, lang);
+
+        Assert.True(File.Exists(noDesktop.StartMenuShortcut), "开始菜单那一个也没建出来，那就不是桌面目录的事了。");
+        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_DONE_NO_DESKTOP"), StringComparison.Ordinal),
+            $"界面没有照实说「{lang.Label("TEXT_INSTALLER_DONE_NO_DESKTOP")}」，实际是：{shown}");
+        Assert.DoesNotContain(lang.Label("TEXT_INSTALLER_DONE"), shown, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 桌面目录必须真的解析得出来。<strong>这条量的是这台机器上的 shell，不是我们的字符串拼接</strong>：
+    /// 上面那些测试都自己传临时目录，所以 <c>FOLDERID_Desktop</c> 写错时它们全绿。
+    /// <para>对照用的是另一条独立的路（<c>SHGetFolderPath</c> / CSIDL，.NET 的
+    /// <c>GetFolderPath</c> 走的就是它）：两个 API 都读 <c>User Shell Folders\Desktop</c>，
+    /// 其中一个返回 null 或指到别处，就说明我们那个 GUID 不对。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void DesktopFolderResolvesToTheFolderTheShellItselfShows()
+    {
+        var desktop = InstallationService.DesktopFolder();
+
+        Assert.NotNull(desktop);
+        Assert.True(Directory.Exists(desktop), $"解析出来的桌面目录并不存在：{desktop}");
+        Assert.Equal(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Path.TrimEndingDirectorySeparator(desktop!));
+    }
+
+    /// <summary>按「安装」并等界面把话说完，返回那一刻界面上所有可见文字。</summary>
+    private static string ClickInstallAndWait(InstallerWindow window, LangCatalog lang)
+    {
         foreach (var row in VisualQuery.Of<SettingToggle>(window))
         {
             row.IsChecked = false;
         }
 
-        var install = VisualQuery.Of<Button>(window)
-            .Single(b => Equals(b.Content?.ToString(), lang.Label("TEXT_BTN_INSTALL")));
-        Clicker.Invoke(install);
+        return ClickAndWait(window, lang, Button(window, lang, "TEXT_BTN_INSTALL"), lang.Label("TEXT_INSTALLER_WORKING"));
+    }
+
+    /// <summary>
+    /// 按一颗按钮并等界面把话说完（状态行不再写着"正在……"），返回那一刻的所有可见文字。
+    /// </summary>
+    private static string ClickAndWait(InstallerWindow window, LangCatalog lang, Button button, string busyText)
+    {
+        Clicker.Invoke(button);
 
         // 等的是<strong>界面自己把话说完</strong>，不是"目标文件出现了"：
         // File.Exists 在复制刚开始（文件被创建出来）就为真，那样等于在测一个半成品。
@@ -175,17 +237,41 @@ public class InstallerTests : IDisposable
         {
             UiWait.Pump(50);
             shown = string.Join("|", VisualQuery.VisibleTexts(window));
-            if (!shown.Contains(lang.Label("TEXT_INSTALLER_WORKING"), StringComparison.Ordinal))
+            if (!shown.Contains(busyText, StringComparison.Ordinal))
             {
                 break;
             }
         }
 
-        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_DONE"), StringComparison.Ordinal),
-            $"点完安装，界面没有回话「{lang.Label("TEXT_INSTALLER_DONE")}」，实际是：{shown}");
-        Assert.DoesNotContain("invalid thread", shown, StringComparison.OrdinalIgnoreCase);
-        Assert.True(File.Exists(_plan.ExecutablePath), "界面说装好了，可安装目录里没有程序文件。");
-        Assert.True(File.Exists(_plan.StartMenuShortcut), "界面说装好了，可开始菜单没有快捷方式。");
+        return shown;
+    }
+
+    private static Button Button(InstallerWindow window, LangCatalog lang, string labelKey)
+        => VisualQuery.Of<Button>(window).Single(b => Equals(b.Content?.ToString(), lang.Label(labelKey)));
+
+    /// <summary>
+    /// 从界面上卸完，那一句"这台机器上已经装过"必须跟着改口。
+    /// <para>真机截图里抓到的矛盾：红色卸载按钮按磁盘状态自己消失了，同一屏上那句
+    /// "这台机器上已经装过 C:\…\Andzip.exe" 却还留着 —— 一件事的两个说法，一个跟着状态走一个不走。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void UiStopsClaimingInstalledAfterUninstallingFromTheUi()
+    {
+        var lang = TestLang.Chinese();
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        var window = new InstallerWindow(lang, _plan).Shown();
+        var before = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.True(before.Contains(lang.Format("TEXT_INSTALLER_ALREADY", ("dir", _plan.ExecutablePath)), StringComparison.Ordinal),
+            $"刚装好时界面上没写「装过」，那这条测试的前提就没了：{before}");
+
+        var shown = ClickAndWait(window, lang,
+            Button(window, lang, "TEXT_BTN_UNINSTALL"), lang.Label("TEXT_INSTALLER_REMOVING"));
+
+        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_REMOVED"), StringComparison.Ordinal),
+            $"点完卸载，界面没有回话「{lang.Label("TEXT_INSTALLER_REMOVED")}」，实际是：{shown}");
+        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_NOT_YET"), StringComparison.Ordinal),
+            $"东西已经删干净了，界面上却还写着装过：{shown}");
     }
 
     private InstallationService Service() => new(TestLang.Chinese());
