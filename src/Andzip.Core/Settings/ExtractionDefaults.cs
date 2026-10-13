@@ -9,16 +9,24 @@ namespace Andzip.Core.Settings;
 /// <para>
 /// 缺省值一律等于引入这一页之前的行为：没动过设置的用户不该被悄悄改口味。
 /// </para>
+/// <para>
+/// <see cref="DoubleClick"/> 记的是 <c>double_click_action</c>，从 1.6.0 起归这一页管：
+/// 它选的落点规则就是下面 <see cref="SingleFileToFolder"/> 那套，摆在两处会让两个页面
+/// 抢同一个键 —— 而一个键只能有一个地方负责回显和写入。
+/// </para>
 /// </summary>
 public sealed record ExtractionDefaults(
     bool SingleFileToFolder,
     bool OpenFolderAfterExtract,
-    bool KeepProgressWindow)
+    bool KeepProgressWindow,
+    ArchiveDoubleClick DoubleClick)
 {
     public static ExtractionDefaults Fallback { get; } = new(
         SingleFileToFolder: false,
         OpenFolderAfterExtract: false,
-        KeepProgressWindow: false);
+        KeepProgressWindow: false,
+        // 与 SettingKeys.ShouldExtractDirectly 的缺省一致：认不出来就是开主窗口。
+        DoubleClick: ArchiveDoubleClick.OpenInAndzip);
 
     public static ExtractionDefaults Load(AppSettings settings)
     {
@@ -27,7 +35,8 @@ public sealed record ExtractionDefaults(
         return new ExtractionDefaults(
             settings.GetBool(SettingKeys.ExtractSingleFileToFolder, fallback: false),
             settings.GetBool(SettingKeys.ExtractOpenFolderAfter, fallback: false),
-            settings.GetBool(SettingKeys.ExtractKeepProgress, fallback: false));
+            settings.GetBool(SettingKeys.ExtractKeepProgress, fallback: false),
+            SettingKeys.ParseDoubleClick(settings.GetString(SettingKeys.DoubleClickAction)));
     }
 
     public void Save(AppSettings settings)
@@ -37,5 +46,6 @@ public sealed record ExtractionDefaults(
         settings.SetBool(SettingKeys.ExtractSingleFileToFolder, SingleFileToFolder);
         settings.SetBool(SettingKeys.ExtractOpenFolderAfter, OpenFolderAfterExtract);
         settings.SetBool(SettingKeys.ExtractKeepProgress, KeepProgressWindow);
+        settings.SetString(SettingKeys.DoubleClickAction, DoubleClick.ToStorage());
     }
 }

@@ -147,7 +147,7 @@ internal sealed class FileAssociationService
                 continue;
             }
 
-            // 默认动词一律回到 open：双击的行为由「常规 → 双击」设置决定，不靠动词区分。
+            // 默认动词一律回到 open：双击的行为由「解压 → 双击」设置决定，不靠动词区分。
             WriteCommands(progId!, executablePath, labels);
             fixedCount++;
         }
@@ -158,7 +158,7 @@ internal sealed class FileAssociationService
     /// <summary>
     /// 右键解压菜单的文字与开关（由界面从语言包取好传进来，服务层不认识语言包）。
     /// <para><see cref="ShowExtractVerbs"/> 对应「设置 → 上下文菜单 → 解压菜单项」：
-    /// 关掉之后 ProgID 里只留 open 动词，双击仍然按「常规 → 双击」设置走，不受影响。</para>
+    /// 关掉之后 ProgID 里只留 open 动词，双击仍然按「解压 → 双击」设置走，不受影响。</para>
     /// </summary>
     internal sealed record ExtractionVerbLabels(string Open, string Extract, string ExtractDelete)
     {
@@ -174,7 +174,7 @@ internal sealed class FileAssociationService
     /// <para>
     /// <strong>双击与右键「打开」是两条键，这是刻意的</strong>。<c>shell\open</c> 是双击要执行的
     /// 那条（<c>shell</c> 的默认值就是它），它<strong>不</strong>带开关，于是"双击干什么"仍然由
-    /// 「常规 → 双击打开压缩文件时」决定，改设置不用重写所有 ProgID；它带
+    /// 「解压 → 双击压缩包文件时」决定，改设置不用重写所有 ProgID；它带
     /// <c>ProgrammaticAccessOnly</c>，所以不出现在菜单上。菜单里那条「用 Andzip 打开」是
     /// <c>shell\andzip-open</c>，命令行写死 <c>/task=open</c> —— 名字承诺什么就干什么，
     /// 不受双击设置影响（0.9.12 之前两者是同一条，勾了"直接解压"的用户点「打开」得到的是解压）。

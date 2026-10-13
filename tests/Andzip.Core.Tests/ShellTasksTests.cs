@@ -43,7 +43,7 @@ public class ShellTasksTests
     [Fact]
     public void TryParse_ReportsAbsentWhenOnlyAPathIsGiven()
     {
-        // 没有任务开关 = 双击，交给「常规 → 双击行为」决定，这里不越权。
+        // 没有任务开关 = 双击，交给「解压 → 双击行为」决定，这里不越权。
         Assert.False(ShellTasks.TryParse(["C:\\a.7z"], out _));
         Assert.False(ShellTasks.TryParse(null, out _));
     }

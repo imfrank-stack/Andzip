@@ -1,6 +1,6 @@
 namespace Andzip.Core.Settings;
 
-/// <summary>双击压缩包文件时做什么（常规设置页的第一项）。</summary>
+/// <summary>双击压缩包文件时做什么（解压设置页的第一项；1.6.0 之前住在常规页）。</summary>
 public enum ArchiveDoubleClick
 {
     /// <summary>打开 Andzip 主窗口浏览内容。</summary>

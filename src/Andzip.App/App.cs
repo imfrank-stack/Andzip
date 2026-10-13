@@ -50,7 +50,7 @@ public sealed class App : Application
                 RepairStaleShellEntries(lang, settings);
             }
 
-            // 不建主窗口的两条路径：右键动词带来的 /task=，以及双击 + 「常规 → 双击 = 直接解压」。
+            // 不建主窗口的两条路径：右键动词带来的 /task=，以及双击 + 「解压 → 双击 = 直接解压」。
             // 生命周期要改成显式关闭，否则没有主窗口会让进程立刻退出。
             if (target is not null && TryResolveTask(desktop.Args, settings, out var task))
             {
@@ -90,7 +90,7 @@ public sealed class App : Application
     /// 这次启动要不要走「没有主窗口」的后台路径，以及做哪件事。
     /// <para>
     /// 右键动词在命令行里写明了 <c>/task=</c>，直接照办；双击没有开关，做什么由
-    /// 「常规 → 双击打开压缩文件时」决定 —— 行为放在设置里而不是注册表的默认动词里，
+    /// 「解压 → 双击压缩包文件时」决定 —— 行为放在设置里而不是注册表的默认动词里，
     /// 改设置才不用重写所有 ProgID。
     /// </para>
     /// <para><c>open</c> 是反例：它要的正是主窗口，交回给调用方去建。</para>

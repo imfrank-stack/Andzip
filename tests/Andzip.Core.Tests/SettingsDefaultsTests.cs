@@ -134,7 +134,10 @@ public class SettingsDefaultsTests
     public void ExtractionDefaults_RoundTripsThroughSettings()
     {
         var wanted = new ExtractionDefaults(
-            SingleFileToFolder: true, OpenFolderAfterExtract: false, KeepProgressWindow: true);
+            SingleFileToFolder: true,
+            OpenFolderAfterExtract: false,
+            KeepProgressWindow: true,
+            DoubleClick: ArchiveDoubleClick.ExtractDirectly);
 
         var settings = new AppSettings();
         wanted.Save(settings);
@@ -152,6 +155,31 @@ public class SettingsDefaultsTests
         Assert.False(loaded.SingleFileToFolder);
         Assert.False(loaded.OpenFolderAfterExtract);
         Assert.False(loaded.KeepProgressWindow);
+        Assert.Equal(ArchiveDoubleClick.OpenInAndzip, loaded.DoubleClick);
+    }
+
+    [Fact]
+    public void ExtractionDefaults_DoubleClickSharesTheKeyTheStartupPathReads()
+    {
+        // 「双击 → 直接解压」真正生效的地方是启动时那次读取（App.TryResolveTask）。
+        // 这一页写的是别的键的话，设置就只是界面上好看 —— 所以钉住键名和取值。
+        var settings = new AppSettings();
+        (ExtractionDefaults.Fallback with { DoubleClick = ArchiveDoubleClick.ExtractDirectly })
+            .Save(settings);
+
+        Assert.Equal("extract", settings.GetString(SettingKeys.DoubleClickAction));
+        Assert.True(SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)));
+    }
+
+    [Fact]
+    public void ExtractionDefaults_DoubleClickKeepsTheOldBehaviourOnAnUnreadableValue()
+    {
+        // 手改过 settings.ini、或来自更新版本的取值：宁可回到"打开主窗口"，
+        // 也不要双击就把包解压出去 —— 后者是会往磁盘上写东西的。
+        var settings = new AppSettings();
+        settings.SetString(SettingKeys.DoubleClickAction, "shrink");
+
+        Assert.Equal(ArchiveDoubleClick.OpenInAndzip, ExtractionDefaults.Load(settings).DoubleClick);
     }
 
     // ---------- ViewDefaults（设置 → 查看） ----------

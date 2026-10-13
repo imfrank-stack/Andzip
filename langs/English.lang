@@ -200,11 +200,8 @@ TEXT_BTN_SELECT_ALL                     = Select all
 TEXT_BTN_DESELECT_ALL                   = Deselect all
 TEXT_SETTINGS_WINDOWS_DEFAULT_APPS      = Windows - Set default programs
 TEXT_SETTINGS_GENERAL_TITLE             = General settings
-TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = When double-clicking an archive
-TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = Open Andzip
-TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = Extract directly
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This only changes what the program itself does; it does not rewrite registry verbs, so it takes effect at once for every associated format. "Extract directly" follows the same destination rules as the right-click Extract entry, shows only the progress bar, and closes when it finishes.
 TEXT_SETTINGS_ESC_CANCEL                = Allow cancelling extraction with Esc
+TEXT_SETTINGS_ESC_CANCEL_HINT           = The Cancel button is always there; this entry is only about the keyboard. Switching it off stops the progress window from reacting to Esc, so a mis-hit can't throw away a large extraction that is half done. Compress, test and repair windows follow the same setting.
 TEXT_SETTINGS_NOT_IMPLEMENTED           = This settings page is not implemented yet; it will come in a later version.
 TEXT_SETTINGS_ASSOC_HINT                = Checking a format makes Andzip open it on double-click and appear in its right-click "Open with" list. Unchecking restores the previous default program. Formats guarded by the Windows default-app protection are reported so you can pick Andzip in system settings.
 TEXT_SETTINGS_ASSOC_UNSUPPORTED         = File associations can only be set on Windows.
@@ -256,6 +253,10 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = Leaving it empty behaves like "the fo
 
 ; ---- Settings: extraction page ----
 TEXT_SETTINGS_EXTRACT_TITLE             = Extraction settings
+TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = When double-clicking an archive
+TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = Open Andzip
+TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = Extract directly
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This only changes what the program itself does; it does not rewrite registry verbs, so it takes effect at once for every associated format. "Extract directly" follows the same destination rules as the right-click Extract entry, including the lone-file option below, shows only the progress bar, and closes when it finishes.
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = When extracting, put a lone file into a new folder too
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = Off by default: an archive holding one file simply releases that file. When on, a folder named after that file is created (photo.jpg.gz becomes photo\photo.jpg), using "name (2)", "name (3)" when the name is taken.
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = Open the folder after extraction

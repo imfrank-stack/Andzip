@@ -220,10 +220,117 @@ public class UiFeatureWiringTests
             text => text.StartsWith("TEXT_", StringComparison.Ordinal));
     }
 
+    // ------------------------------------------------ 设置 → 解压：双击这一项搬过来了
+
+    /// <summary>
+    /// 「双击压缩包时」原本住在常规页，1.6.0 搬到解压页 —— 它选的落点规则就是同一页第一条。
+    /// 搬家成不成，判据是两边各一侧：解压页有唯一一个下拉，常规页一个都不剩。
+    /// 两页各留一份的话，两边会各自写同一个键，谁后落盘谁说了算。
+    /// </summary>
+    [AvaloniaFact]
+    public void ExtractPageOwnsTheDoubleClickChoice()
+    {
+        var lang = TestLang.Chinese();
+        var settingsPath = TempSettings();
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+
+            ShowPage(window, lang, "TEXT_SETTINGS_GENERAL");
+            Assert.Empty(VisualQuery.Of<ComboBox>(window));
+
+            ShowPage(window, lang, "TEXT_SETTINGS_EXTRACT");
+            var combo = Assert.Single(VisualQuery.Of<ComboBox>(window));
+            Assert.Equal(
+                new[] { lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_OPEN"), lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT") },
+                ItemsOf(combo));
+            Assert.Equal(0, combo.SelectedIndex);
+        }
+        finally
+        {
+            TryDelete(settingsPath);
+        }
+    }
+
+    [AvaloniaFact]
+    public void ExtractPageDoubleClickRoundTripsToTheStartupKey()
+    {
+        // 界面上选了不算数：启动时读的是 double_click_action，写的必须是同一个键。
+        var lang = TestLang.Chinese();
+        var settingsPath = TempSettings();
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+            ShowPage(window, lang, "TEXT_SETTINGS_EXTRACT");
+
+            Assert.Single(VisualQuery.Of<ComboBox>(window)).SelectedIndex = 1;
+
+            var apply = FindButton(window, lang.Get("TEXT_BTN_APPLY"));
+            Assert.True(apply.IsEnabled, "改了双击行为，应用按钮就该可点");
+            Clicker.Invoke(apply);
+
+            var stored = AppSettings.Load(settingsPath).GetString(SettingKeys.DoubleClickAction);
+            Assert.Equal("extract", stored);
+            Assert.True(SettingKeys.ShouldExtractDirectly(stored));
+
+            var reopened = new SettingsWindow(lang, AppSettings.Load(settingsPath), settingsPath).Shown();
+            ShowPage(reopened, lang, "TEXT_SETTINGS_EXTRACT");
+
+            Assert.Equal(1, Assert.Single(VisualQuery.Of<ComboBox>(reopened)).SelectedIndex);
+        }
+        finally
+        {
+            TryDelete(settingsPath);
+        }
+    }
+
+    [AvaloniaFact]
+    public void GeneralPageOkDoesNotEraseWhatTheExtractPageApplied()
+    {
+        // 两页写同一个文件，落盘时机却不同：解压页点「立即应用」就走，常规页等到「确定」。
+        // 后者过去拿窗口打开那一刻的整份快照写盘，正好把前者刚写的双击行为盖掉 ——
+        // 和 0.13.0「设置不生效」是同一个成因，只是这次是页面之间互相盖。
+        var lang = TestLang.Chinese();
+        var settingsPath = TempSettings();
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+            ShowPage(window, lang, "TEXT_SETTINGS_EXTRACT");
+
+            Assert.Single(VisualQuery.Of<ComboBox>(window)).SelectedIndex = 1;
+            Clicker.Invoke(FindButton(window, lang.Get("TEXT_BTN_APPLY")));
+
+            ShowPage(window, lang, "TEXT_SETTINGS_GENERAL");
+            FindCheck(window, lang.Get("TEXT_SETTINGS_ESC_CANCEL")).IsChecked = false;
+
+            // 「确定」在语言包里写着 确定(&O)，界面上印的是剥掉助记符之后的那一半。
+            Clicker.Invoke(FindButton(window, lang.Label("TEXT_BTN_OK")));
+            UiWait.Pump(50);
+
+            var stored = AppSettings.Load(settingsPath);
+            Assert.Equal("extract", stored.GetString(SettingKeys.DoubleClickAction));
+            Assert.False(stored.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+        }
+        finally
+        {
+            TryDelete(settingsPath);
+        }
+    }
+
     // ---------------------------------------------------------------- 辅助
 
     private static void ShowCompressPage(Window window, LangCatalog lang)
         => Clicker.Invoke(FindButton(window, lang.Get("TEXT_SETTINGS_COMPRESS")));
+
+    /// <summary>点左侧导航进某一页。页与页之间控件会换，所以每次找都得在进页之后。</summary>
+    private static void ShowPage(Window window, LangCatalog lang, string navKey)
+    {
+        Clicker.Invoke(FindButton(window, lang.Get(navKey)));
+        UiWait.Pump(50);
+    }
 
     // ---------------------------------------- 文案：Win32 的 (&X) 助记符不能露给用户
 

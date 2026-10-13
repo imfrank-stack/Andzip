@@ -9,7 +9,7 @@ using Avalonia.Threading;
 namespace Andzip.App;
 
 /// <summary>
-/// 没有主窗口的解压执行体：右键「解压」/「解压并删除」，以及双击 + 「常规 → 双击 = 直接解压」。
+/// 没有主窗口的解压执行体：右键「解压」/「解压并删除」，以及双击 + 「解压 → 双击 = 直接解压」。
 /// 由注册表动词带上 <c>/task=</c> 拉起来（见 <see cref="Services.FileAssociationService"/>）。
 /// <para>
 /// 刻意<strong>不</strong>创建主窗口：用户点的是进度条，跑完自己消失，

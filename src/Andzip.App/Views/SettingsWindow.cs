@@ -13,10 +13,16 @@ using Avalonia.Platform.Storage;
 namespace Andzip.App.Views;
 
 /// <summary>
-/// 设置窗口（选项 → 设置，F5）：左侧蓝色导航 + 右侧页面 + 底部「重置 / 确定」。
+/// 设置窗口（选项 → 设置，F5）：左侧导航 + 右侧页面 + 底部「重置 / 确定」。
 /// <para>
-/// 已实装「常规」与「文件关联」两页，其余按参考软件的导航顺序列出并显示占位文案 ——
-/// 空着的导航项比假装能用的控件诚实。
+/// 九个页面全部实装（常规 / 文件关联 / 上下文菜单 / 压缩 / 解压 / 查看 / 安全 / 高级 / 语言），
+/// 每页只放真正接得上线的开关 —— 参考软件上有、这里做不到的项一律不摆，
+/// 空着的导航项和假控件都比"做不到的功能"更糟。
+/// </para>
+/// <para>
+/// 页与页之间<strong>不共享写入时机</strong>：一半是点「立即应用」就落盘，另一半等「确定」。
+/// 所以任何一处写盘都要走 <see cref="Persist" />，否则后写的那一份会盖掉先写的那一份
+/// （第七节第 29 条记的就是这个）。
 /// </para>
 /// </summary>
 public sealed class SettingsWindow : Window
@@ -194,6 +200,23 @@ public sealed class SettingsWindow : Window
         Close();
     }
 
+    /// <summary>
+    /// 只改自己那几项的写法：从磁盘重读一份、改完写回去，再把主窗口手里那份快照同步上新值。
+    /// <para>
+    /// 两步都必要。<strong>重读</strong>：设置窗口里各页的写入时机不同（有的点「立即应用」就落盘，
+    /// 有的等到「确定」），拿窗口打开时那份快照整文件写回，会把别处刚落的盘抹掉 —— 这正是
+    /// 0.13.0「设置不生效」的成因。<strong>同步</strong>：主窗口那份快照还在被人用来写别的键
+    /// （最近文件、上次输出目录），不同步的话它下次写盘一样是旧文件覆盖新文件。
+    /// </para>
+    /// </summary>
+    private static void Persist(AppSettings shared, string settingsPath, Action<AppSettings> mutate)
+    {
+        var fresh = AppSettings.Load(settingsPath);
+        mutate(fresh);
+        fresh.Save(settingsPath);
+        shared.Reload(settingsPath);
+    }
+
     private static TextBlock SectionTitle(string text) => new()
     {
         Text = text,
@@ -289,17 +312,16 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 常规页：双击行为 + 进度窗口能否按 Esc 取消。
+    /// 常规页：进度窗口能否按 Esc 取消。
     /// <para>
-    /// 双击那一项不是界面偏好开关：程序启动时读它决定「开主窗口」还是「直接解压」，
-    /// 所以对已经关联出去的所有扩展名立即生效，不需要回头改注册表。
+    /// 这里原来还有「双击压缩包时」那一项，1.6.0 挪到解压页了 —— 它和落点规则是一件事，
+    /// 而且两页各摆一份会各自写同一个键，一边改完另一边不知道。
     /// </para>
     /// </summary>
     private sealed class GeneralPage : ISettingsPage
     {
         private readonly AppSettings _settings;
         private readonly string _settingsPath;
-        private readonly ComboBox _doubleClick;
         private readonly CheckBox _escCancel;
 
         public GeneralPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
@@ -308,44 +330,16 @@ public sealed class SettingsWindow : Window
             _settings = settings;
             _settingsPath = settingsPath;
 
-            _doubleClick = new ComboBox
-            {
-                Width = 260,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                ItemsSource = new[] { lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_OPEN"), lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT") },
-            };
-
             _escCancel = new CheckBox
             {
                 Content = lang.Label("TEXT_SETTINGS_ESC_CANCEL"),
                 Margin = new Thickness(0, 20, 0, 0),
             };
 
-            var doubleClickRow = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 12,
-                Margin = new Thickness(0, 20, 0, 0),
-            };
-            doubleClickRow.Children.Add(new TextBlock
-            {
-                Text = lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"),
-                Width = 170,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-            doubleClickRow.Children.Add(_doubleClick);
-
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_GENERAL_TITLE")));
-            panel.Children.Add(doubleClickRow);
-            panel.Children.Add(new TextBlock
-            {
-                Text = lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_HINT"),
-                Foreground = HintText,
-                Margin = new Thickness(182, 6, 0, 0),
-                TextWrapping = TextWrapping.Wrap,
-            });
             panel.Children.Add(_escCancel);
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_ESC_CANCEL_HINT")));
             Root = panel;
         }
 
@@ -355,24 +349,14 @@ public sealed class SettingsWindow : Window
 
         public void Reload()
         {
-            _doubleClick.SelectedIndex = SettingKeys.ParseDoubleClick(_settings.GetString(SettingKeys.DoubleClickAction))
-                == ArchiveDoubleClick.ExtractDirectly ? 1 : 0;
-            _escCancel.IsChecked = _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true);
+            _escCancel.IsChecked = AppSettings.Load(_settingsPath)
+                .GetBool(SettingKeys.AllowEscCancelProgress, fallback: true);
         }
 
         public void Commit()
         {
-            var mode = _doubleClick.SelectedIndex == 1
-                ? ArchiveDoubleClick.ExtractDirectly
-                : ArchiveDoubleClick.OpenInAndzip;
-
-            _settings.SetString(SettingKeys.DoubleClickAction, mode.ToStorage());
-            _settings.SetBool(SettingKeys.AllowEscCancelProgress, _escCancel.IsChecked == true);
-            _settings.Save(_settingsPath);
-
-            // 这里刻意不碰注册表：双击行为是启动时读设置决定的，不是由哪个动词被调用决定的。
-            // 早先把默认动词改成 extract 的做法会留下「动词名写了、命令键不存在」的半截状态，
-            // Windows 找不到动词就退回 open，用户看到的就是“设了没反应”。
+            var allowEsc = _escCancel.IsChecked == true;
+            Persist(_settings, _settingsPath, fresh => fresh.SetBool(SettingKeys.AllowEscCancelProgress, allowEsc));
         }
     }
 
@@ -691,11 +675,13 @@ public sealed class SettingsWindow : Window
 
                 service.NotifyChanged();
 
-                _settings.SetStringList(AssociationSettingKey, desired);
-                _settings.SetString(
-                    AssociationOriginals.SettingKey,
-                    AssociationOriginals.Encode(_originals.Select(pair => new AssociationOriginal(pair.Key, pair.Value))));
-                _settings.Save(_settingsPath);
+                var originals = AssociationOriginals.Encode(
+                    _originals.Select(pair => new AssociationOriginal(pair.Key, pair.Value)));
+                Persist(_settings, _settingsPath, fresh =>
+                {
+                    fresh.SetStringList(AssociationSettingKey, desired);
+                    fresh.SetString(AssociationOriginals.SettingKey, originals);
+                });
             }
             catch (Exception ex)
             {
@@ -924,8 +910,8 @@ public sealed class SettingsWindow : Window
 
                 if (desired.Extract != _live.Extract)
                 {
-                    _settings.SetBool(SettingKeys.ContextMenuExtractVerbs, desired.Extract);
-                    _settings.Save(_settingsPath);
+                    Persist(_settings, _settingsPath,
+                        fresh => fresh.SetBool(SettingKeys.ContextMenuExtractVerbs, desired.Extract));
 
                     // 解压动词住在每个 Andzip.* ProgID 里，所以"改开关"就是把自己命名空间下的
                     // 动词全部重写一遍 —— 关掉的那几项是真删掉，不是留着键改文字。
@@ -947,7 +933,11 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 解压页：三个开关，都只影响"东西铺在哪儿 / 窗口留不留"。
+    /// 解压页：双击怎么办 + 三个开关。
+    /// <para>
+    /// 「双击压缩包」这一项原本住在常规页，1.6.0 搬到这里：它选出的「直接解压」用的正是本页
+    /// 第一条落点规则，拆在两处会让用户在一个页面改完、在另一个页面找不到自己刚改的东西。
+    /// </para>
     /// <para>
     /// 没有放参考软件上的「一次性解压 TGZ/TBZ」「自动检测 Macintosh 代码页」「并行解压」等项 ——
     /// 前者引擎本来就会把嵌套归档展平（不是可关的行为），中者需要引擎侧的代码页猜测，
@@ -957,6 +947,7 @@ public sealed class SettingsWindow : Window
     private sealed class ExtractionPage : ISettingsPage
     {
         private readonly string _settingsPath;
+        private readonly ComboBox _doubleClick;
         private readonly CheckBox _singleFileToFolder;
         private readonly CheckBox _openFolderAfter;
         private readonly CheckBox _keepProgress;
@@ -968,6 +959,14 @@ public sealed class SettingsWindow : Window
         {
             NavKey = "TEXT_SETTINGS_EXTRACT";
             _settingsPath = settingsPath;
+
+            _doubleClick = new ComboBox
+            {
+                Width = 260,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                ItemsSource = new[] { lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_OPEN"), lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT") },
+            }.Picker();
+            _doubleClick.SelectionChanged += (_, _) => UpdateApplyState();
 
             _singleFileToFolder = Check(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER"), UpdateApplyState);
             _openFolderAfter = Check(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState);
@@ -985,6 +984,8 @@ public sealed class SettingsWindow : Window
 
             var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_EXTRACT_TITLE")));
+            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"), _doubleClick));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_HINT")));
             panel.Children.Add(_singleFileToFolder);
             panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT")));
             panel.Children.Add(_openFolderAfter);
@@ -1003,6 +1004,7 @@ public sealed class SettingsWindow : Window
         public void Reload()
         {
             _live = ExtractionDefaults.Load(AppSettings.Load(_settingsPath));
+            _doubleClick.SelectedIndex = _live.DoubleClick == ArchiveDoubleClick.ExtractDirectly ? 1 : 0;
             _singleFileToFolder.IsChecked = _live.SingleFileToFolder;
             _openFolderAfter.IsChecked = _live.OpenFolderAfterExtract;
             _keepProgress.IsChecked = _live.KeepProgressWindow;
@@ -1020,7 +1022,10 @@ public sealed class SettingsWindow : Window
         private ExtractionDefaults Selection() => new(
             _singleFileToFolder.IsChecked == true,
             _openFolderAfter.IsChecked == true,
-            _keepProgress.IsChecked == true);
+            _keepProgress.IsChecked == true,
+            _doubleClick.SelectedIndex == 1
+                ? ArchiveDoubleClick.ExtractDirectly
+                : ArchiveDoubleClick.OpenInAndzip);
 
         private void UpdateApplyState() => _applyButton.IsEnabled = !Selection().Equals(_live);
 
@@ -1036,6 +1041,10 @@ public sealed class SettingsWindow : Window
             desired.Save(settings);
             settings.Save(_settingsPath);
             Reload();
+
+            // 刻意不碰注册表：双击走哪条路由启动时读设置决定，不是由哪个动词被调用决定 ——
+            // 早先把默认动词改成 extract 会留下「动词名写了、命令键不存在」的半截状态，
+            // Windows 找不到动词就退回 open，用户看到的就是"设了没反应"。
         }
     }
 

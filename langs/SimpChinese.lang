@@ -199,11 +199,8 @@ TEXT_BTN_SELECT_ALL                     = 全选
 TEXT_BTN_DESELECT_ALL                   = 取消全选
 TEXT_SETTINGS_WINDOWS_DEFAULT_APPS      = Windows - 设置默认程序
 TEXT_SETTINGS_GENERAL_TITLE             = 常规设置
-TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = 双击压缩包文件时
-TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = 打开 Andzip
-TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = 直接解压
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = 这一项只改程序自己的行为，不重写注册表里的动词，所以对已关联的所有格式立刻生效。直接解压走右键「解压」那套落点规则，只弹进度条，完成后自动关闭。
 TEXT_SETTINGS_ESC_CANCEL                = 解压过程中允许按 Esc 取消
+TEXT_SETTINGS_ESC_CANCEL_HINT           = 取消按钮一直都在，这一项只管键盘：关掉之后进度窗口不再理会 Esc，免得大文件跑到一半误按就前功尽弃。压缩、检测、修复的进度窗口跟随同一项设置。
 TEXT_SETTINGS_NOT_IMPLEMENTED           = 该设置页尚未实现，会在后续版本加入。
 TEXT_SETTINGS_ASSOC_HINT                = 勾选后双击这些扩展名会用 Andzip 打开，右键「打开方式」里也会出现 Andzip；取消勾选会还原接管前的默认程序。若某项被 Windows 的默认应用保护挡住，会提示你去系统设置里手选。
 TEXT_SETTINGS_ASSOC_UNSUPPORTED         = 文件关联只能在 Windows 上设置。
@@ -255,6 +252,10 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = 留空等同于「上次新建时使�
 
 ; ---- 设置：解压页 ----
 TEXT_SETTINGS_EXTRACT_TITLE             = 解压设置
+TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = 双击压缩包文件时
+TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = 打开 Andzip
+TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = 直接解压
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = 这一项只改程序自己的行为，不重写注册表里的动词，所以对已关联的所有格式立刻生效。选「直接解压」时走右键「解压」那一套落点规则，下面那条「单个文件也放进新建的文件夹」同样作用于它；屏幕上只弹进度条，跑完自动关闭。
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = 解压时，单个文件也放进新建的文件夹
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = 默认关闭：包里只有一个文件时直接把它解出来。勾上后会建一个以那个文件命名的文件夹（photo.jpg.gz → photo\photo.jpg），名字被占用时依次用「名称 (2)」「名称 (3)」。
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = 解压后打开文件夹
