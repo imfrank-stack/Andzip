@@ -116,7 +116,11 @@ internal sealed class ArchiveView : IDisposable
 
     private Control BuildLayout()
     {
+        // SimpleTheme 给 TreeView 的模板自带一圈描边（实测 #888888、1 DIP，1.5 缩放下就是
+        // 屏幕上那根 2px 实线）。这一屏两栏之间只该有一根发丝分栏线（规范 §5.1），
+        // 所以整圈去掉 —— 1.8.0 那次"左栏线太粗"只改淡了分栏线，这一圈漏掉了。
         _tree.Background = Brushes.Transparent;
+        _tree.BorderThickness = new Thickness(0);
         _treePane.Child = _tree;
 
         var detailPane = new Border { Child = _detailHost };
