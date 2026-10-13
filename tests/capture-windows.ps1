@@ -12,7 +12,10 @@ param(
     [string]$OutDir = "$env:TEMP\andzip-real-shots",
     [string[]]$DialogTitles = @(),
     [string[]]$Keys = @(),
-    [string[]]$Clicks = @()
+    [string[]]$Clicks = @(),
+    # Arguments for the app itself, e.g. @('C:\tmp\box.zip','/task=open'). Without these
+    # the script can only ever screenshot the home screen.
+    [string[]]$ExeArgs = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,7 +75,11 @@ function Save-Screen([string]$path) {
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 Get-ChildItem $OutDir -Filter *.png -ErrorAction SilentlyContinue | Remove-Item -Force
 
-$process = Start-Process -FilePath $Exe -PassThru
+$process = if ($ExeArgs.Count -gt 0) {
+  Start-Process -FilePath $Exe -ArgumentList $ExeArgs -PassThru
+} else {
+  Start-Process -FilePath $Exe -PassThru
+}
 Start-Sleep -Seconds 5
 
 try {

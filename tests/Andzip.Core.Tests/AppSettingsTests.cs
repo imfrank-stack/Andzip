@@ -136,4 +136,91 @@ public class AppSettingsTests : IDisposable
         // 设置跟着用户走：绿色版常被放进只读位置，程序目录不可写。
         Assert.NotEqual(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar), Path.GetDirectoryName(path));
     }
+
+    // ---------- Reload：两份实例并存时的唯一安全网 ----------
+
+    /// <summary>
+    /// 主窗口与设置窗口各持一份实例，而写盘是"整份快照盖过去"。
+    /// 不重读的话有两件事会同时发生：界面按旧值重新应用（看着像设置没生效），
+    /// 以及主窗口下一次写盘把用户刚改的那一项抹掉（连重启都找不回来）。
+    /// 0.13.0 之前「自动展开树里的文件夹」就是这么坏的。
+    /// </summary>
+    [Fact]
+    public void Reload_PicksUpWhatAnotherInstanceWrote()
+    {
+        var window = AppSettings.Load(_path);
+        window.SetBool("view_auto_expand_tree", true);
+        window.Save(_path);
+
+        var dialog = AppSettings.Load(_path);
+        dialog.SetBool("view_auto_expand_tree", false);
+        dialog.Save(_path);
+
+        Assert.True(window.GetBool("view_auto_expand_tree", fallback: true), "前提：窗口手里那份还是旧值");
+
+        window.Reload(_path);
+
+        Assert.False(window.GetBool("view_auto_expand_tree", fallback: true));
+    }
+
+    [Fact]
+    public void StaleSnapshot_SaveErasesWhatAnotherInstanceWrote()
+    {
+        // 反向钉住后果（而不是修复）：不重读就直接写盘，别人刚写的值会整条消失。
+        // 这条用例读起来像在给 bug 背书，它的用处是说明为什么 Reload 不能省。
+        var window = AppSettings.Load(_path);
+        window.SetString("language", "SimpChinese");
+        window.Save(_path);
+
+        var dialog = AppSettings.Load(_path);
+        dialog.SetString("language", "English");
+        dialog.Save(_path);
+
+        window.Save(_path);
+
+        var afterClobber = AppSettings.Load(_path).GetString("language");
+        Assert.True(afterClobber == "SimpChinese", $"旧快照写盘应当把 English 抹掉，实际留下的是「{afterClobber}」");
+
+        // 反过来，先重读再写就两全：这一项保住了，窗口自己要记的那一项也记上了。
+        var other = AppSettings.Load(_path);
+        other.SetString("language", "English");
+        other.Save(_path);
+
+        window.Reload(_path);
+        window.SetString("recent_files", @"C:\a.zip");
+        window.Save(_path);
+
+        var final = AppSettings.Load(_path);
+        Assert.Equal("English", final.GetString("language"));
+        Assert.Equal(@"C:\a.zip", final.GetString("recent_files"));
+    }
+
+    [Fact]
+    public void Reload_AlsoDropsKeysThatWentAwayOnDisk()
+    {
+        var window = AppSettings.Load(_path);
+        window.SetString("title_bar_full_path", "1");
+        window.Save(_path);
+
+        File.WriteAllText(_path, "; everything reset by hand\n");
+
+        window.Reload(_path);
+
+        Assert.False(window.Has("title_bar_full_path"));
+    }
+
+    [Fact]
+    public void Reload_ReplacesInPlaceSoHoldersSeeTheNewValues()
+    {
+        // 必须是就地替换：换新实例的话，已经把这份引用交出去的地方（主窗口、设置窗口）
+        // 手里拿的还是旧的，重读就白做了。
+        var window = AppSettings.Load(_path);
+        var handedOut = window;
+
+        File.WriteAllText(_path, "recent_files = C:\\a.zip\n");
+        window.Reload(_path);
+
+        Assert.Same(window, handedOut);
+        Assert.Equal("C:\\a.zip", handedOut.GetString("recent_files"));
+    }
 }

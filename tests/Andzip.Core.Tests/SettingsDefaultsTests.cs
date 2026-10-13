@@ -168,7 +168,10 @@ public class SettingsDefaultsTests
         Assert.True(loaded.ShowStatusBar);
         Assert.True(loaded.ShowTree);
         Assert.False(loaded.IconViewByDefault);
-        Assert.True(loaded.AutoExpandTree);
+
+        // 唯一故意偏离"引入这一页之前的界面"的一项：树默认**不**摊开（2026-10-13 改的）。
+        // 深包一打开就把整棵目录铺平，第一屏全是文件夹名，看不到内容。
+        Assert.False(loaded.AutoExpandTree);
     }
 
     [Fact]

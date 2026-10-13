@@ -395,13 +395,17 @@ public sealed class MainWindow : Window
 
     /// <summary>
     /// 设置窗口（F5，FR-5）：模态，与参考软件一致。
-    /// <para>关掉之后重新应用一次「查看」那组设置 —— 不然用户勾掉工具栏要重启才看得见效果，
-    /// 而那看起来就像设置没生效。</para>
+    /// <para>关掉之后先<strong>从磁盘重读</strong>再重新应用一次「查看」那组设置。两步都必要：
+    /// 设置窗口写盘用的是它自己那份实例，窗口手里这份还是启动时的旧快照 ——
+    /// 不重读，① 这里应用的是旧值，用户点完「立即应用」界面不动；② 更糟的是窗口之后任何一次
+    /// 写盘（记最近的文件、记住上次输出目录）都会拿旧快照把整个 <c>settings.ini</c> 覆盖掉，
+    /// 刚才那一项设置连重启都找不回来。0.13.0 之前"自动展开树"设置不生效就是这么来的。</para>
     /// </summary>
     private async void OpenSettingsDialog()
     {
         var dialog = new SettingsWindow(_lang, _settings, AppSettings.DefaultFilePath);
         await dialog.ShowDialog(this);
+        _settings.Reload(AppSettings.DefaultFilePath);
         ApplyViewDefaults();
 
         // 树、状态栏、默认视图样式是压缩包视图内部的构造期决定，重开一次视图才看得到。

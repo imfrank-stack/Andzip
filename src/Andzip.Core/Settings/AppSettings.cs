@@ -39,9 +39,27 @@ public sealed class AppSettings
     public static AppSettings Load(string path)
     {
         var settings = new AppSettings();
+        settings.Reload(path);
+        return settings;
+    }
+
+    /// <summary>
+    /// 用磁盘上的内容<strong>就地</strong>替换这个实例里的值。
+    /// <para>为什么要有这个方法：设置窗口写文件时用的是它自己 <see cref="Load"/> 出来的一份实例，
+    /// 而主窗口手里那份是启动时读的。不重读的话有两件事会同时发生 ——
+    /// ① 主窗口"重新应用界面设置"读到的是旧值，用户点了「立即应用」却像没生效；
+    /// ② 更糟：主窗口之后任何一次写盘（记最近的文件、记住上次输出目录）都会拿旧快照
+    /// 把整个文件覆盖掉，刚才那一项设置<strong>连重启都找不回来</strong>。
+    /// 就地替换而不是换新实例，是为了让已经持有引用的地方（主窗口、设置窗口）一起看到新值。</para>
+    /// </summary>
+    public void Reload(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        _values.Clear();
         if (!File.Exists(path))
         {
-            return settings;
+            return;
         }
 
         foreach (var rawLine in File.ReadAllLines(path))
@@ -58,10 +76,8 @@ public sealed class AppSettings
                 continue;
             }
 
-            settings._values[line[..separator].Trim()] = line[(separator + 1)..].Trim();
+            _values[line[..separator].Trim()] = line[(separator + 1)..].Trim();
         }
-
-        return settings;
     }
 
     public void Save(string path)

@@ -15,13 +15,17 @@ public sealed record ViewDefaults(
     bool IconViewByDefault,
     bool AutoExpandTree)
 {
-    /// <summary>缺省值 = 引入这一页之前的界面：全都在，默认是详情列表。</summary>
+    /// <summary>
+    /// 缺省值 = 引入这一页之前的界面：骨架全都在、默认是详情列表。
+    /// <para>唯一的例外是<strong>树默认不展开</strong>（2026-10-13 改的）：以前一打开就把整棵
+    /// 目录摊平，深包的树长得比窗口还高，第一屏看到的全是文件夹名而不是内容。</para>
+    /// </summary>
     public static ViewDefaults Fallback { get; } = new(
         ShowToolBar: true,
         ShowStatusBar: true,
         ShowTree: true,
         IconViewByDefault: false,
-        AutoExpandTree: true);
+        AutoExpandTree: false);
 
     public static ViewDefaults Load(AppSettings settings)
     {
@@ -32,7 +36,7 @@ public sealed record ViewDefaults(
             settings.GetBool(SettingKeys.ViewShowStatusBar, fallback: true),
             settings.GetBool(SettingKeys.ViewShowTree, fallback: true),
             settings.GetBool(SettingKeys.ViewIconByDefault, fallback: false),
-            settings.GetBool(SettingKeys.ViewAutoExpandTree, fallback: true));
+            settings.GetBool(SettingKeys.ViewAutoExpandTree, fallback: false));
     }
 
     public void Save(AppSettings settings)
