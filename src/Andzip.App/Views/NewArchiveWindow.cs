@@ -303,7 +303,7 @@ public sealed class NewArchiveWindow : Window
         root.Children.Add(grid);
         root.Children.Add(_advancedPanel);
 
-        Content = root;
+        this.Chromeless(lang, root);
 
         if (seedPaths is { Count: > 0 } seeds)
         {

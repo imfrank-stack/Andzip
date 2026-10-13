@@ -46,8 +46,8 @@ internal sealed class ArchiveView : IDisposable
     private static readonly string[] ImageExtensions =
         [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff"];
 
-    private static readonly IBrush PrimaryText = Design.Ink.Primary;
-    private static readonly IBrush SecondaryText = Design.Ink.Secondary;
+    private static IBrush PrimaryText => Design.Ink.Primary;
+    private static IBrush SecondaryText => Design.Ink.Secondary;
 
     private readonly LangCatalog _lang;
     private readonly ArchiveListing _listing;
@@ -59,18 +59,10 @@ internal sealed class ArchiveView : IDisposable
 
     private readonly TreeView _tree = new();
 
-    // 树所在的面板比内容区深一档（Sunken），分隔条两侧靠底色差就能看出边界，
-    // 不需要描边 —— 这是规范 5.1 里"层级靠底色差"的主要落点。
-    private readonly Border _treePane = new() { Background = Design.Surface.Sunken };
-    private readonly GridSplitter _splitter = new()
-    {
-        Width = 4,
-        Background = Design.Line.Strong,
-        HorizontalAlignment = HorizontalAlignment.Stretch,
-        VerticalAlignment = VerticalAlignment.Stretch,
-        ResizeDirection = GridResizeDirection.Columns,
-        ResizeBehavior = GridResizeBehavior.PreviousAndNext,
-    };
+    // 树与内容区之间只有一根可拖的发丝线（1.7.0）：整块窗口是一张面板，
+    // 两栏各自成卡片会把一屏切成四块白板，用户的评价是"割裂"。
+    private readonly Border _treePane = new() { Padding = new Thickness(Design.Space.X2, Design.Space.X1, 0, 0) };
+    private readonly Control _splitter = Seam.Splitter(1);
     private readonly ContentControl _detailHost = new();
     private readonly TextBlock _status = new()
     {
@@ -124,15 +116,17 @@ internal sealed class ArchiveView : IDisposable
 
     private Control BuildLayout()
     {
+        _tree.Background = Brushes.Transparent;
         _treePane.Child = _tree;
 
-        var detailPane = new Border { Background = Design.Surface.Base, Child = _detailHost };
+        var detailPane = new Border { Child = _detailHost };
 
-        // 关掉树的时候把两列宽度一起归零，只藏控件不够 —— Grid 仍会给 300px 与 4px 留位置，
+        // 关掉树的时候把两列宽度一起归零，只藏控件不够 —— Grid 仍会给 300px 与 8px 留位置，
         // 结果是一条拖不动也点不到的空白。
         var body = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions(_view.ShowTree ? "300,4,*" : "0,0,*"),
+            ColumnDefinitions = new ColumnDefinitions(_view.ShowTree ? "300,8,*" : "0,0,*"),
+            Margin = new Thickness(0, Design.Space.X1, 0, 0),
         };
         _treePane.IsVisible = _view.ShowTree;
         _splitter.IsVisible = _view.ShowTree;

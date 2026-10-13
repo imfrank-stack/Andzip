@@ -223,7 +223,24 @@ namespace Andzip.App.UiTests
 
         public static string Name(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
+        /// <summary>WCAG 的相对亮度。判"这块到底暗不暗"要用它，不能直接比 RGB 之和。</summary>
+        public static double Luminance(Color c)
+        {
+            static double Channel(byte value)
+            {
+                var s = value / 255.0;
+                return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+            }
+
+            return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+        }
+
         /// <summary>令牌是画刷，量出来的是颜色，两边都要能报成同一个十六进制串。</summary>
+        /// <summary>令牌是画刷，量出来的是颜色；要拿令牌跟像素比就得先取出色来。</summary>
+        public static Color Of(IBrush brush) => brush is ISolidColorBrush solid
+            ? solid.Color
+            : throw new InvalidOperationException($"这个令牌不是纯色画刷（{brush.GetType().Name}）。");
+
         public static string Name(IBrush brush) => brush is ISolidColorBrush solid
             ? Name(solid.Color)
             : throw new InvalidOperationException($"这个令牌不是纯色画刷（{brush.GetType().Name}）。");

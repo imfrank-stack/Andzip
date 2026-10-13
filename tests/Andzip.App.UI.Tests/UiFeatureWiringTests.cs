@@ -640,8 +640,10 @@ public class UiFeatureWiringTests
 
         // 按钮模板里也有一个 TextBlock（Avalonia 用的是 AccessText，它是 TextBlock 的子类），
         // 所以按"这一行的开头就是状态文案"来认，而不是"树里只有一个 TextBlock"。
+        // 1.7.0 起还要排掉自绘标题栏那条 caption —— 它绑的就是 Window.Title，
+        // 而进度窗口的标题正是同一句"正在检测…"，不排掉就有两个匹配。
         string Line() => VisualQuery.Of<TextBlock>(window)
-            .Single(t => t.Text?.StartsWith(status, StringComparison.Ordinal) == true).Text!;
+            .Single(t => t.Text?.StartsWith(status, StringComparison.Ordinal) == true && !InsideTitleBar(t)).Text!;
 
         window.Update(new ArchiveProgress(ArchiveOperation.Test, 10, 1000, "noise.bin", 0, 1));
 
@@ -662,9 +664,23 @@ public class UiFeatureWiringTests
         => VisualQuery.Of<Button>(window).SingleOrDefault(b => Equals(b.Content?.ToString(), text))
            ?? throw new InvalidOperationException($"界面上找不到按钮「{text}」。");
 
-    private static CheckBox FindCheck(Window window, string label)
-        => VisualQuery.Of<CheckBox>(window).SingleOrDefault(c => Equals(c.Content?.ToString(), label))
-           ?? throw new InvalidOperationException($"界面上找不到勾选项「{label}」。");
+    /// <summary>这个控件是不是在自绘标题栏里（那条 caption 与窗口标题同文本，按文字找控件时要排掉）。</summary>
+    private static bool InsideTitleBar(Control control)
+    {
+        for (Control? at = control; at is not null; at = at.Parent as Control)
+        {
+            if (at is TitleBar)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static SettingToggle FindCheck(Window window, string label)
+        => VisualQuery.Of<SettingToggle>(window).SingleOrDefault(c => Equals(c.Label, label))
+           ?? throw new InvalidOperationException($"界面上找不到开关行「{label}」。");
 
     private static string TempSettings()
         => Path.Combine(Path.GetTempPath(), $"andzip-ui-{Guid.NewGuid():N}.ini");

@@ -156,11 +156,11 @@ public sealed class RepairWindow : Window
             Children = { _okButton, cancelButton },
         });
 
-        Content = new ScrollViewer
+        this.Chromeless(lang, new ScrollViewer
         {
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
+        });
 
         OutputPath = suggestedOutput;
     }

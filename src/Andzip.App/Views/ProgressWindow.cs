@@ -94,12 +94,12 @@ public sealed class ProgressWindow : Window
             };
         }
 
-        Content = new StackPanel
+        this.Chromeless(lang, new StackPanel
         {
             Margin = new Thickness(Design.Space.X6),
             Spacing = Design.Space.X4,
             Children = { _text, _bar, _cancel },
-        };
+        });
     }
 
     /// <summary>取消当前操作。按钮点一次就禁用，避免重复取消把已结束的令牌再 Cancel 一次。</summary>

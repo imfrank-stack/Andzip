@@ -94,12 +94,12 @@ public sealed class MessageWindow : Window
             buttons.Children.Add(cancelButton);
         }
 
-        Content = new StackPanel
+        this.Chromeless(lang, new StackPanel
         {
             Margin = new Thickness(Design.Space.X6),
             Spacing = Design.Space.X6,
             Children = { body, buttons },
-        };
+        });
     }
 
     /// <summary>提示框左侧那枚圆形图标底。叫 Badge 而不是 Icon —— <c>Window.Icon</c> 已经被占了。</summary>

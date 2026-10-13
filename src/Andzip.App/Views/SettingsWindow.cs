@@ -30,9 +30,9 @@ public sealed class SettingsWindow : Window
     /// <summary>设置里保存「已勾选哪些关联」的键名。</summary>
     public const string AssociationSettingKey = "file_associations";
 
-    private static readonly IBrush PageText = Design.Ink.Primary;
-    private static readonly IBrush LinkBlue = Design.Brand.Base;
-    private static readonly IBrush HintText = Design.Ink.Secondary;
+    private static IBrush PageText => Design.Ink.Primary;
+    private static IBrush LinkBlue => Design.Brand.Base;
+    private static IBrush HintText => Design.Ink.Secondary;
 
     private readonly ContentControl _pageHost = new();
     private readonly Dictionary<string, Button> _navButtons = new(StringComparer.Ordinal);
@@ -89,10 +89,12 @@ public sealed class SettingsWindow : Window
             nav.Children.Add(button);
         }
 
-        // 导航条是"位置"不是"命令"，所以从整条实心蓝改成浅灰底 + 一根右分隔线（规范 5.8）。
+        // 导航条是"位置"不是"命令"：整条实心蓝（1.3.x）→ 浅灰底 + 右分隔线（1.4.0）→
+        // 现在直接坐在画布上，选中项是一颗<strong>浮起来的白色药丸</strong>。
+        // 表示选中不再需要颜色或线条，阴影就够了 —— 这是有了阴影之后才做得出的选择。
         var navPane = new Border
         {
-            Background = Design.Surface.Muted,
+            Background = Brushes.Transparent,
             BorderBrush = Design.Line.Subtle,
             BorderThickness = new Thickness(0, 0, 1, 0),
             Child = nav,
@@ -100,7 +102,8 @@ public sealed class SettingsWindow : Window
         };
         var contentPane = new Border
         {
-            Background = Design.Surface.Base,
+            Background = Brushes.Transparent,
+            Padding = new Thickness(Design.Space.X5, Design.Space.X3, Design.Space.X5, Design.Space.X3),
             Child = _pageHost,
         };
 
@@ -115,27 +118,27 @@ public sealed class SettingsWindow : Window
         var okButton = new Button { Content = lang.Label("TEXT_BTN_OK"), MinWidth = 120, IsDefault = true }.Accent();
         okButton.Click += (_, _) => AcceptAndClose();
 
+        // 按钮贴右：这一窗口的动作在右下角，靠左会让"确定"离它要确定的那卡片最远。
         var footer = new StackPanel
         {
             Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
             Spacing = Design.Space.X3,
-            Margin = new Thickness(Design.Space.X4, Design.Space.X3, Design.Space.X4, Design.Space.X3),
+            Margin = new Thickness(Design.Space.X4, Design.Space.X2, Design.Space.X4, Design.Space.X3),
             Children = { resetButton, okButton },
         };
 
         var root = new DockPanel();
         var footerBar = new Border
         {
-            Background = Design.Surface.Muted,
-            BorderBrush = Design.Line.Subtle,
-            BorderThickness = new Thickness(0, 1, 0, 0),
+            Background = Brushes.Transparent,
             Child = footer,
         };
         DockPanel.SetDock(footerBar, Dock.Bottom);
         root.Children.Add(footerBar);
         root.Children.Add(body);
 
-        Content = root;
+        this.Chromeless(lang, root, resizable: true);
         ShowPage(0);
     }
 
@@ -180,17 +183,26 @@ public sealed class SettingsWindow : Window
         return button;
     }
 
+    /// <summary>
+    /// 导航项的三种状态：选中 = 白色药丸 + 亮边；悬停 = 浅一档；其余 = 透明。
+    /// <para>1.6.0 之前选中靠"淡蓝底 + 左侧 3px 蓝条"，那是没有阴影时唯一的表达手段。
+    /// 现在选中项抬到卡片那一级（白底 + 1px 亮边），未选项留在画布上 ——
+    /// "哪一项被选中"变成一个高度问题而不是颜色问题，深浅两套主题下都成立。</para>
+    /// <para><strong>这里给不了真阴影</strong>：<c>BoxShadow</c> 是 <see cref="Border"/> 的属性，
+    /// 导航项是 Button，模板控件不吃（规范 §二那条仍然成立）。白药丸压在灰画布上本身已经有
+    /// 明度差，所以这一处用底色差 + 亮边顶上，不为它把按钮再包一层 Border。</para>
+    /// </summary>
     private static void PaintNav(Button button, bool selected, bool hover = false)
     {
         button.Tag = selected;
         button.Background = selected
-            ? Design.Brand.Soft
+            ? Design.Surface.Base
             : hover ? Design.Surface.Muted : Brushes.Transparent;
-        button.BorderBrush = selected ? Design.Brand.Base : Design.Line.Subtle;
-        button.BorderThickness = selected
-            ? new Thickness(3, 0, 0, 0)
-            : hover ? new Thickness(1) : new Thickness(0);
-        button.CornerRadius = Design.Radius.Sm;
+        button.BorderBrush = selected ? Design.Line.Subtle : Brushes.Transparent;
+        button.BorderThickness = new Thickness(selected ? 1 : 0);
+        button.CornerRadius = Design.Radius.Md;
+        button.Foreground = selected ? Design.Ink.Primary : Design.Ink.Secondary;
+        button.FontWeight = selected ? Design.Type.Semibold : FontWeight.Normal;
     }
 
     private void AcceptAndClose()
@@ -236,12 +248,15 @@ public sealed class SettingsWindow : Window
     };
 
     /// <summary>带"改动就重新算要不要允许应用"回调的复选框。好几个页面都要这个形状。</summary>
-    private static CheckBox Check(string label, Action onToggled)
-    {
-        var box = new CheckBox { Content = label, Margin = new Thickness(0, Design.Space.X2, 0, 0) };
-        box.IsCheckedChanged += (_, _) => onToggled();
-        return box;
-    }
+    /// <summary>
+    /// 开关行：左边说明（下面一行灰字补充），右边一个开关。带"改动就重算要不要允许应用"的回调。
+    /// <para><strong>为什么设置页的布尔项换成开关，而文件关联页仍然用勾选框</strong>：
+    /// 这一页的每一项是"程序的某个行为开不开"，开关的位置语义（左/右）比一个勾更贴合；
+    /// 文件关联那一页是"这一批里选哪几个"的多选清单，换成几十个开关只会更慢也更难看。
+    /// 两种控件各管各的语义，不是改版改到哪儿就推到哪儿。</para>
+    /// </summary>
+    private static SettingToggle Check(string label, Action onToggled, string? hint = null)
+        => new(label, hint, onToggled);
 
     /// <summary>左标签右控件的一行；标签给空串就是只占缩进的单独控件行。</summary>
     private static Control LabeledRow(string label, Control control, Control? trailing = null)
@@ -322,7 +337,7 @@ public sealed class SettingsWindow : Window
     {
         private readonly AppSettings _settings;
         private readonly string _settingsPath;
-        private readonly CheckBox _escCancel;
+        private readonly SettingToggle _escCancel;
 
         public GeneralPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
         {
@@ -330,16 +345,12 @@ public sealed class SettingsWindow : Window
             _settings = settings;
             _settingsPath = settingsPath;
 
-            _escCancel = new CheckBox
-            {
-                Content = lang.Label("TEXT_SETTINGS_ESC_CANCEL"),
-                Margin = new Thickness(0, 20, 0, 0),
-            };
+            _escCancel = Check(lang.Label("TEXT_SETTINGS_ESC_CANCEL"), () => { },
+                lang.Label("TEXT_SETTINGS_ESC_CANCEL_HINT"));
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_GENERAL_TITLE")));
             panel.Children.Add(_escCancel);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_ESC_CANCEL_HINT")));
             Root = panel;
         }
 
@@ -786,9 +797,9 @@ public sealed class SettingsWindow : Window
         private readonly LangCatalog _lang;
         private readonly AppSettings _settings;
         private readonly string _settingsPath;
-        private readonly CheckBox _forFiles;
-        private readonly CheckBox _forFolders;
-        private readonly CheckBox _forExtract;
+        private readonly SettingToggle _forFiles;
+        private readonly SettingToggle _forFolders;
+        private readonly SettingToggle _forExtract;
         private readonly Button _applyButton;
 
         private (bool Files, bool Folders, bool Extract) _live;
@@ -802,33 +813,33 @@ public sealed class SettingsWindow : Window
             _settingsPath = settingsPath;
 
             _forFiles = Check(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_FILES"), UpdateApplyState);
-            _forFolders = Check(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_FOLDERS"), UpdateApplyState);
-            _forExtract = Check(lang.Label("TEXT_SETTINGS_CTX_EXTRACT"), UpdateApplyState);
+            _forFolders = Check(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_FOLDERS"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_CTX_COMPRESS_HINT"));
+            _forExtract = Check(lang.Label("TEXT_SETTINGS_CTX_EXTRACT"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_CTX_EXTRACT_RULES") + "\n" + lang.Label("TEXT_SETTINGS_CTX_EXTRACT_HINT"));
 
             _applyButton = new Button
             {
                 Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
-                Margin = new Thickness(0, 22, 0, 0),
+                Margin = new Thickness(0, Design.Space.X2, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
             };
             _applyButton.Click += (_, _) => Apply();
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_CONTEXT_MENU_TITLE")));
             panel.Children.Add(new TextBlock
             {
                 Text = lang.Label("TEXT_SETTINGS_CTX_NOTE"),
                 Foreground = HintText,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 12, 0, 16),
+                Margin = new Thickness(0, Design.Space.X1, 0, Design.Space.X2),
             });
             panel.Children.Add(_forFiles);
             panel.Children.Add(_forFolders);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_CTX_COMPRESS_HINT")));
             panel.Children.Add(_forExtract);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_CTX_EXTRACT_RULES")));
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_CTX_EXTRACT_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -948,9 +959,9 @@ public sealed class SettingsWindow : Window
     {
         private readonly string _settingsPath;
         private readonly ComboBox _doubleClick;
-        private readonly CheckBox _singleFileToFolder;
-        private readonly CheckBox _openFolderAfter;
-        private readonly CheckBox _keepProgress;
+        private readonly SettingToggle _singleFileToFolder;
+        private readonly SettingToggle _openFolderAfter;
+        private readonly SettingToggle _keepProgress;
         private readonly Button _applyButton;
 
         private ExtractionDefaults _live = ExtractionDefaults.Fallback;
@@ -968,30 +979,30 @@ public sealed class SettingsWindow : Window
             }.Picker();
             _doubleClick.SelectionChanged += (_, _) => UpdateApplyState();
 
-            _singleFileToFolder = Check(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER"), UpdateApplyState);
-            _openFolderAfter = Check(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState);
-            _keepProgress = Check(lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS"), UpdateApplyState);
+            _singleFileToFolder = Check(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT"));
+            _openFolderAfter = Check(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT"));
+            _keepProgress = Check(lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT"));
 
             _applyButton = new Button
             {
                 Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
-                Margin = new Thickness(0, 24, 0, 0),
+                Margin = new Thickness(0, Design.Space.X2, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
             };
             _applyButton.Click += (_, _) => Apply();
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_EXTRACT_TITLE")));
-            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"), _doubleClick));
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_HINT")));
+            panel.Children.Add(SettingRow.Labeled(lang.Label("TEXT_SETTINGS_DOUBLE_CLICK_LABEL"), _doubleClick,
+                lang, "TEXT_SETTINGS_DOUBLE_CLICK_HINT"));
             panel.Children.Add(_singleFileToFolder);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT")));
             panel.Children.Add(_openFolderAfter);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT")));
             panel.Children.Add(_keepProgress);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1059,13 +1070,12 @@ public sealed class SettingsWindow : Window
     private sealed class ViewPage : ISettingsPage
     {
         private readonly string _settingsPath;
-        private readonly CheckBox _toolBar;
-        private readonly CheckBox _statusBar;
-        private readonly CheckBox _tree;
-        private readonly CheckBox _iconDefault;
-        private readonly CheckBox _autoExpand;
+        private readonly SettingToggle _toolBar;
+        private readonly SettingToggle _statusBar;
+        private readonly SettingToggle _tree;
+        private readonly SettingToggle _iconDefault;
+        private readonly SettingToggle _autoExpand;
         private readonly ComboBox _theme;
-        private readonly TextBlock _themeHint;
         private readonly Button _applyButton;
 
         private ViewDefaults _live = ViewDefaults.Fallback;
@@ -1086,7 +1096,6 @@ public sealed class SettingsWindow : Window
             _theme = new ComboBox
             {
                 Width = 260,
-                HorizontalAlignment = HorizontalAlignment.Left,
                 ItemsSource = new[]
                 {
                     lang.Label("TEXT_SETTINGS_VIEW_THEME_SYSTEM"),
@@ -1095,42 +1104,34 @@ public sealed class SettingsWindow : Window
                 },
             }.Picker();
             _theme.SelectionChanged += (_, _) => UpdateApplyState();
-            _themeHint = Hint(lang.Label("TEXT_SETTINGS_VIEW_THEME_HINT"));
-
-            var themeRow = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = Design.Space.X3,
-                Margin = new Thickness(0, Design.Space.X5, 0, 0),
-            };
-            themeRow.Children.Add(new TextBlock
-            {
-                Text = lang.Label("TEXT_SETTINGS_VIEW_THEME"),
-                Foreground = PageText,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-            themeRow.Children.Add(_theme);
 
             _applyButton = new Button
             {
                 Content = lang.Label("TEXT_BTN_APPLY"),
                 MinWidth = 150,
                 IsEnabled = false,
-                Margin = new Thickness(0, 24, 0, 0),
+                Margin = new Thickness(0, Design.Space.X2, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
             };
             _applyButton.Click += (_, _) => Apply();
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_VIEW_TITLE")));
             panel.Children.Add(_toolBar);
             panel.Children.Add(_statusBar);
             panel.Children.Add(_tree);
             panel.Children.Add(_iconDefault);
             panel.Children.Add(_autoExpand);
-            panel.Children.Add(themeRow);
-            panel.Children.Add(_themeHint);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_VIEW_APPLY_HINT")));
+            panel.Children.Add(SettingRow.Labeled(lang.Label("TEXT_SETTINGS_VIEW_THEME"), _theme,
+                lang, "TEXT_SETTINGS_VIEW_THEME_HINT"));
+            panel.Children.Add(new TextBlock
+            {
+                Text = lang.Label("TEXT_SETTINGS_VIEW_APPLY_HINT"),
+                Foreground = HintText,
+                FontSize = Design.Type.Caption,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, Design.Space.X2, 0, 0),
+            });
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1250,7 +1251,7 @@ public sealed class SettingsWindow : Window
             });
             row.Children.Add(_language);
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_LANGUAGE_TITLE")));
             panel.Children.Add(row);
             panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_LANGUAGE_HINT")));
@@ -1329,7 +1330,7 @@ public sealed class SettingsWindow : Window
         private readonly SettingsWindow _owner;
         private readonly LangCatalog _lang;
         private readonly string _settingsPath;
-        private readonly CheckBox _fullPathTitle;
+        private readonly SettingToggle _fullPathTitle;
         private readonly TextBox _tempFolder;
         private readonly Button _applyButton;
         private readonly Button _exportButton;
@@ -1370,7 +1371,7 @@ public sealed class SettingsWindow : Window
             };
             export.Click += async (_, _) => await ExportAsync();
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_ADVANCED_TITLE")));
             panel.Children.Add(_fullPathTitle);
             panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_TEMP_FOLDER"), _tempFolder, browse));
@@ -1491,7 +1492,7 @@ public sealed class SettingsWindow : Window
         private readonly SettingsWindow _owner;
         private readonly LangCatalog _lang;
         private readonly string _settingsPath;
-        private readonly CheckBox _remember;
+        private readonly SettingToggle _remember;
         private readonly TextBlock _remembered;
         private readonly Button _clearButton;
         private readonly Button _applyButton;
@@ -1505,7 +1506,8 @@ public sealed class SettingsWindow : Window
             _lang = lang;
             _settingsPath = settingsPath;
 
-            _remember = Check(lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS"), UpdateApplyState);
+            _remember = Check(lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT"));
             _remembered = new TextBlock { Foreground = HintText, Margin = new Thickness(24, 4, 0, 0) };
             _clearButton = new Button
             {
@@ -1527,10 +1529,9 @@ public sealed class SettingsWindow : Window
             };
             _applyButton.Click += (_, _) => Apply();
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_SECURITY_TITLE")));
             panel.Children.Add(_remember);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT")));
             panel.Children.Add(_remembered);
             panel.Children.Add(_clearButton);
             panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_PASSWORD_MANAGER_NOTE")));
@@ -1612,13 +1613,13 @@ public sealed class SettingsWindow : Window
         private readonly LangCatalog _lang;
         private readonly string _settingsPath;
         private readonly ComboBox _level;
-        private readonly CheckBox _noRootFolder;
-        private readonly CheckBox _excludeThumbs;
+        private readonly SettingToggle _noRootFolder;
+        private readonly SettingToggle _excludeThumbs;
         private readonly TextBox _excludePatterns;
-        private readonly CheckBox _testAfter;
-        private readonly CheckBox _keepProgress;
-        private readonly CheckBox _preallocate;
-        private readonly CheckBox _shareSources;
+        private readonly SettingToggle _testAfter;
+        private readonly SettingToggle _keepProgress;
+        private readonly SettingToggle _preallocate;
+        private readonly SettingToggle _shareSources;
         private readonly RadioButton _outputLast;
         private readonly RadioButton _outputFixed;
         private readonly TextBox _outputFolder;
@@ -1642,12 +1643,17 @@ public sealed class SettingsWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Left,
             };
 
-            _noRootFolder = Check(lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT"), UpdateApplyState);
+            _noRootFolder = Check(lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT"));
             _excludeThumbs = Check(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_THUMBS"), UpdateApplyState);
-            _testAfter = Check(lang.Label("TEXT_SETTINGS_COMPRESS_TEST_AFTER"), UpdateApplyState);
-            _keepProgress = Check(lang.Label("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS"), UpdateApplyState);
-            _preallocate = Check(lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC"), UpdateApplyState);
-            _shareSources = Check(lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES"), UpdateApplyState);
+            _testAfter = Check(lang.Label("TEXT_SETTINGS_COMPRESS_TEST_AFTER"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_COMPRESS_TEST_AFTER_HINT"));
+            _keepProgress = Check(lang.Label("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT"));
+            _preallocate = Check(lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC_HINT"));
+            _shareSources = Check(lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES"), UpdateApplyState,
+                lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT"));
 
             _excludePatterns = new TextBox { Width = 320, HorizontalAlignment = HorizontalAlignment.Left }.Field();
             _excludePatterns.TextChanged += (_, _) => UpdateApplyState();
@@ -1673,22 +1679,18 @@ public sealed class SettingsWindow : Window
             };
             _applyButton.Click += (_, _) => Apply();
 
-            var panel = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+            var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_COMPRESS_TITLE")));
-            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL"), _level));
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_LEVEL_HINT")));
+            panel.Children.Add(SettingRow.Labeled(lang.Label("TEXT_SETTINGS_COMPRESS_DEFAULT_LEVEL"), _level,
+                lang, "TEXT_SETTINGS_COMPRESS_LEVEL_HINT"));
             panel.Children.Add(_noRootFolder);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT")));
             panel.Children.Add(_excludeThumbs);
-            panel.Children.Add(LabeledRow(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES"), _excludePatterns));
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT")));
+            panel.Children.Add(SettingRow.Labeled(lang.Label("TEXT_SETTINGS_COMPRESS_EXCLUDE_TYPES"), _excludePatterns,
+                lang, "TEXT_SETTINGS_COMPRESS_EXCLUDE_HINT"));
             panel.Children.Add(_testAfter);
             panel.Children.Add(_keepProgress);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_KEEP_PROGRESS_HINT")));
             panel.Children.Add(_preallocate);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_PREALLOC_HINT")));
             panel.Children.Add(_shareSources);
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_COMPRESS_SHARE_SOURCES_HINT")));
 
             panel.Children.Add(new TextBlock
             {

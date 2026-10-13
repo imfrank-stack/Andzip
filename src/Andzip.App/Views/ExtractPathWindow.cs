@@ -169,7 +169,7 @@ public sealed class ExtractPathWindow : Window
         AddRow(layout, 4, _hint);
         AddRow(layout, 5, buttons);
 
-        Content = layout;
+        this.Chromeless(lang, layout);
     }
 
     private static void AddRow(Grid grid, int row, Control control)

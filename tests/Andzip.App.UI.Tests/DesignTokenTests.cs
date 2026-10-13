@@ -35,15 +35,40 @@ public class DesignTokenTests
     }
 
     /// <summary>
+    /// 颜色不许冻进 <c>static readonly</c> 字段。
+    /// <para>1.7.0 截图时发现的：设置页的分组标题在深色下变成一片发灰的浅色字 —— 因为
+    /// <c>private static readonly IBrush PageText = Design.Ink.Primary;</c> 在类型第一次被碰时
+    /// 就把当时那套调色板的画刷抄死了，之后切换主题它不会跟着变。
+    /// 属性（<c>static IBrush PageText =&gt; Design.Ink.Primary;</c>）才是对的：每次读都现取。</para>
+    /// <para>这条与"禁止裸色值"是同一族的守门：规则只写在文档里，就会有下一个字段冻在那里。</para>
+    /// </summary>
+    [Fact]
+    public void BrushesMustNotBeFrozenIntoStaticFields()
+    {
+        var offenders = OffendingLines("static readonly IBrush", "static readonly SolidColorBrush");
+
+        Assert.True(offenders.Count == 0,
+            "颜色被抄死在静态字段里了，切主题时它不会跟着变 —— 改成表达式体属性（=> Design.……）：\n    "
+            + string.Join("\n    ", offenders));
+    }
+
+    /// <summary>
     /// 工具栏按钮的悬停态必须<strong>真的看得见</strong>。
     /// <para>这是改版前最大的缺口：蓝色带上的按钮悬停时一个像素都不变，用户只能靠点下去
     /// 才知道这里能不能点。规范第二条原则就是"每个可点的元素都要有反馈"。</para>
-    /// <para>断言方式是量像素：把真指针移到按钮上，同一个点的颜色必须变浅（叠加层是半透明白）。</para>
+    /// <para>断言方式是量像素：把真指针移到按钮上，同一个点的颜色必须变。</para>
+    /// <para><strong>方向随 1.7.0 翻了</strong>：带子从实心蓝改成白色卡片之后，"叠半透明白提亮"
+    /// 在白底上等于没有反馈，所以悬停改成往下压一档。规则本身没变（必须看得见），
+    /// 变的只是它长什么样 —— 这条断言因此仍然要求一个明确方向，不能退化成"变了就行"。</para>
     /// </summary>
     [AvaloniaFact]
     public void ToolBarButtonsShowAHoverState()
     {
         var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+
+        // 换主题时工具栏是整条重做的，重做之后第一帧的偏移量还没刷新；
+        // 不等这一帧，TranslatePoint 会把第一个按钮算到菜单条那一行上去（实测 y 差 31）。
+        UiWait.Pump(50);
 
         var button = VisualQuery.Of<Button>(window).First(b => b.Content is Avalonia.Controls.StackPanel);
         var probe = button.TranslatePoint(new Point(6, 6), window)!.Value;
@@ -54,7 +79,8 @@ public class DesignTokenTests
         var hovered = Sample(window, probe);
 
         Assert.False(Same(rest, hovered), $"悬停时按钮底色没变（前后都是 {Hex(rest)}）：交互态丢了。");
-        Assert.True(Luminance(hovered) > Luminance(rest), "悬停应当是「浮亮」（半透明白叠加），不是变暗。");
+        Assert.True(Luminance(hovered) < Luminance(rest),
+            $"悬停在浅色卡片上应当「压深一档」（{Hex(rest)} → {Hex(hovered)}），现在是提亮，读不出反馈。");
     }
 
     /// <summary>对话框主按钮是实心品牌蓝 —— 主/次按钮的分量差靠这个建立。</summary>

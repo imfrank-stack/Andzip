@@ -54,12 +54,12 @@ public sealed class DuplicateFileWindow : Window
         buttons.Children.Add(overwriteButton);
         buttons.Children.Add(skipButton);
 
-        Content = new StackPanel
+        this.Chromeless(lang, new StackPanel
         {
             Margin = new Thickness(18),
             Spacing = 14,
             Children = { message, name, buttons },
-        };
+        });
     }
 
     private void Choose(DuplicateDecision decision)

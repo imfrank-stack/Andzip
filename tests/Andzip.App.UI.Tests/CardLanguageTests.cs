@@ -1,0 +1,231 @@
+using Andzip.App.Views;
+using Andzip.Core.Settings;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using System.Threading;
+
+namespace Andzip.App.UiTests;
+
+/// <summary>
+/// 1.7.0 那套"灰画布 + 白色圆角阴影卡片"的守门用例。
+/// <para>规范 §二 从前写着"SimpleTheme 用不了阴影，层级只能靠底色差"。这句话现在只对了一半：
+/// 模板控件（Button / TextBox / CheckBox）确实不吃 <c>BoxShadow</c>，
+/// 但卡片是我们自己搭的 <see cref="Border"/>，它有这个属性而且<strong>真的画得出来</strong>。
+/// 这几条钉的就是"新语言确实用上了"，而不是"某个属性被赋过值"。</para>
+/// </summary>
+[Collection("界面状态")]
+public class CardLanguageTests
+{
+    [AvaloniaFact]
+    public void EveryDialogWrapsItsContentInAnElevatedCard()
+    {
+        var lang = TestLang.Chinese();
+        var archive = @"C:\somewhere\box.zip";
+        var windows = new Window[]
+        {
+            new MessageWindow(lang, "标题", "正文"),
+            new NewArchiveWindow(lang),
+            new PasswordWindow(lang),
+            new ExtractPathWindow(lang, archive),
+            new DuplicateFileWindow(lang, "a.txt"),
+            new VolumeSizeWindow(lang, 100),
+            new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),
+            new ProgressWindow(lang, new CancellationTokenSource()),
+        };
+
+        foreach (var window in windows)
+        {
+            Assert.True(window.Content is Border,
+                $"{window.GetType().Name} 的内容没有包在卡片里（规范 5.6）");
+            var card = (Border)window.Content!;
+
+            Assert.True(card.BoxShadow.Count > 0, $"{window.GetType().Name} 那张卡没有阴影");
+            Assert.True(card.CornerRadius.TopLeft >= 8,
+                $"{window.GetType().Name} 的卡片圆角只有 {card.CornerRadius.TopLeft}");
+        }
+    }
+
+    /// <summary>
+    /// 整块窗口就是一张圆角阴影面板，顶部不再是蓝带、也不再是"外壳卡"。
+    /// <para>断言的是四件互相独立的事：窗口自己透明（圆角外要能看见桌面）、
+    /// 客户端区外扩且系统按钮关掉（否则标题栏会是系统那条方的）、
+    /// 根上那层是圆角 + 有阴影的 Border、顶部那块表面是面板色而不是品牌蓝。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheWholeWindowIsOneRoundedPanelWithNoBlueBand()
+    {
+        Design.Use(dark: false);
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+        UiWait.Pump(50);
+
+        Assert.True(window.Background is ISolidColorBrush clear && clear.Color.A == 0,
+            "窗口自己不是透明的 —— 圆角外会留下四个方方的角");
+        Assert.Contains(WindowTransparencyLevel.Transparent, window.TransparencyLevelHint);
+        Assert.True(window.ExtendClientAreaToDecorationsHint, "客户端区没外扩，系统标题栏还在");
+        Assert.Equal(Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome, window.ExtendClientAreaChromeHints);
+
+        var panel = Assert.IsType<Border>(window.Content);
+        Assert.True(panel.CornerRadius.TopLeft >= 12, $"面板圆角只有 {panel.CornerRadius.TopLeft}");
+        Assert.True(panel.BoxShadow.Count > 0, "面板没有阴影，贴在任何背景上都分不出来");
+
+        var header = Pixels.At(window, new Point(window.Bounds.Width / 2, 60));
+        Assert.False(Pixels.Same(header, BrandColor), "顶部又变回实心蓝带了");
+        Assert.True(Pixels.Same(header, Pixels.Of(Design.Surface.Base)),
+            $"顶部不是面板色而是 {Pixels.Name(header)}");
+    }
+
+    /// <summary>
+    /// 深色下标题栏跟着变深 —— 这件事 1.5.0 做不到（DWM 属性返回 S_OK 但屏幕不动，
+    /// 见开发记录第七节第 28 条），1.7.0 因为标题栏是我们自己画的，自然就成了。
+    /// </summary>
+    [AvaloniaFact]
+    public void DarkModeNowReachesTheTitleBar()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+        UiWait.Pump(50);
+
+        var at = new Point(window.Bounds.Width / 2, 60);
+        var light = Pixels.At(window, at);
+
+        Design.Use(dark: true);
+        UiWait.Pump(100);
+        var dark = Pixels.At(window, at);
+
+        try
+        {
+            Assert.False(Pixels.Same(light, dark), "同一个点深浅一致 —— 标题栏没跟着调色板走");
+            Assert.True(Pixels.Luminance(dark) < 0.2,
+                $"深色下面板还是 {Pixels.Name(dark)}，没暗下去");
+        }
+        finally
+        {
+            Design.Use(dark: false);
+        }
+    }
+
+    /// <summary>最大化时圆角与透明边距要收掉，否则四周会露出一圈桌面。</summary>
+    [AvaloniaFact]
+    public void MaximizingDropsTheCornerRadius()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+        UiWait.Pump(50);
+        var panel = (Border)window.Content!;
+        var rest = (panel.CornerRadius.TopLeft, panel.Margin.Left);
+
+        window.WindowState = WindowState.Maximized;
+        UiWait.Pump(50);
+        var maximized = (panel.CornerRadius.TopLeft, panel.Margin.Left);
+
+        Assert.True(rest.Item1 >= 12, $"正常状态就该有圆角，实测 {rest.Item1}");
+        Assert.True(maximized.Item1 < rest.Item1,
+            $"最大化后圆角没收掉（{rest.Item1} → {maximized.Item1}），四个角会露出桌面");
+        Assert.True(maximized.Item2 < rest.Item2,
+            $"最大化后透明边距没收掉（{rest.Item2} → {maximized.Item2}），窗口会小一圈");
+
+        window.WindowState = WindowState.Normal;
+        UiWait.Pump(50);
+        Assert.Equal(rest, (panel.CornerRadius.TopLeft, panel.Margin.Left));
+    }
+
+    [AvaloniaFact]
+    public void SettingsPagesUseSwitchesNotCheckBoxes()
+    {
+        var lang = TestLang.Chinese();
+        var path = Path.Combine(Path.GetTempPath(), $"andzip-card-{Guid.NewGuid():N}.ini");
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), path).Shown();
+            Clicker.Invoke(FindButton(window, lang.Get("TEXT_SETTINGS_COMPRESS")));
+            UiWait.Pump(50);
+
+            // 设置页的布尔项换成开关（规范 5.9）：这一页上不该再有勾选框。
+            Assert.NotEmpty(VisualQuery.Of<SettingToggle>(window));
+            Assert.Empty(VisualQuery.Of<CheckBox>(window));
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 文件关联那一页仍然必须是勾选框 —— 它是"这一批里选哪几个"的多选清单，
+    /// 不是"某个行为开不开"。这条与上一条成对：防止开关被当成新皮肤到处推。
+    /// </summary>
+    [AvaloniaFact]
+    public void AssociationPageKeepsCheckBoxesBecauseItIsAList()
+    {
+        var lang = TestLang.Chinese();
+        var path = Path.Combine(Path.GetTempPath(), $"andzip-card-{Guid.NewGuid():N}.ini");
+
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), path).Shown();
+            Clicker.Invoke(FindButton(window, lang.Get("TEXT_SETTINGS_FILE_ASSOCIATION")));
+            UiWait.Pump(50);
+
+            Assert.NotEmpty(VisualQuery.Of<CheckBox>(window));
+            Assert.Empty(VisualQuery.Of<SettingToggle>(window));
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 换主题时工具栏必须<strong>整条重做</strong>，不能只刷卡片。
+    /// <para>这条钉的是一个真实出现过的 bug：工具栏改成浅色卡片之后，按钮的文字色从"永远白色"
+    /// 变成了"跟着调色板走"，而 <c>ApplyTheme</c> 当时只重画了卡片底色 ——
+    /// 于是深色下"打开 / 解压 / 新建"三个字变成深灰压深灰，直接消失，
+    /// 而禁用项（添加 / 删除）反而还在。截图上看着像"深色版少了三个按钮"。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ToolBarLabelsFollowThePaletteNotTheMomentTheyWereBuilt()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings()).Shown();
+
+        Design.Use(dark: true);
+        UiWait.Pump(100);
+
+        try
+        {
+            var label = VisualQuery.Of<TextBlock>(window)
+                .First(t => Equals(t.Text, lang.Get("TEXT_TOOLBAR_OPEN")));
+
+            Assert.True(Pixels.Name(label.Foreground) == Pixels.Name(Design.Ink.Primary),
+                "深色下工具栏文字还是浅色那份调色板的颜色（"
+                + $"{Pixels.Name(label.Foreground)} 应为 {Pixels.Name(Design.Ink.Primary)}）—— 工具栏没跟着重做");
+        }
+        finally
+        {
+            Design.Use(dark: false);
+        }
+    }
+
+    private static readonly Color BrandColor = Color.FromRgb(0x0F, 0x6C, 0xBD);
+
+    private static double Luminance(Color c)
+    {
+        static double Channel(byte value)
+        {
+            var s = value / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+    }
+
+    private static Button FindButton(Window window, string text)
+        => VisualQuery.Of<Button>(window).Single(b => Equals(b.Content?.ToString(), text));
+}

@@ -45,13 +45,28 @@ public sealed class MainWindow : Window
 
     /// <summary>首页那份内容。换主题时要重做一份 —— 它的底色是构造时固化上去的。</summary>
     private Control _homeContent;
-    private readonly Control _toolBar;
+
+    /// <summary>
+    /// 工具栏。它<strong>不是</strong>只重画底色就行的那种控件：按钮的图标与文字颜色是在
+    /// <see cref="MainToolBar.Create"/> 里按当时的调色板取死的，换主题必须整条重做一份
+    /// （深色下"打开/解压/新建"的文字消失过，就是因为只刷了卡片没重做这里）。
+    /// </summary>
+    private Control _toolBar;
 
     /// <summary>菜单条。留着是为了按命令找到某几项、在没有包可操作时把它们置灰。</summary>
     private readonly Menu _menuBar;
 
-    /// <summary>菜单条外面那层 Border（那条 1px 下边线归它画），换主题时要重画。</summary>
-    private readonly Border _menuHost;
+    /// <summary>自绘标题栏（图标 + 标题 + 三个窗口按钮）。换主题时要重取一遍令牌。</summary>
+    private readonly TitleBar _titleBar;
+
+    /// <summary>整块窗口那张圆角阴影面板。它的底色就是"表面"，最大化时收掉圆角与边距。</summary>
+    private readonly Border _surface;
+
+    /// <summary>菜单条与工具栏外面那层（那根发丝线归它画）。</summary>
+    private readonly Border _headerHost;
+
+    /// <summary>菜单条 + 工具栏那条竖排。换主题时整条工具栏要重做，换的就是这里的第二项。</summary>
+    private readonly StackPanel _headerBody;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
     private readonly AppSettings _settings;
@@ -75,9 +90,13 @@ public sealed class MainWindow : Window
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        // 窗口底色回到白：以前整窗是品牌蓝，蓝色从工具栏的缝隙里漏出来，
-        // 内容区一有留白就变成"蓝底上贴了张表"。现在蓝只待在工具栏那一条里（规范 5.1）。
-        Background = Design.Surface.Base;
+        // 整块窗口就是一张圆角面板：系统标题栏被"扩展客户端区 + 无按钮"换掉，
+        // 外面那圈透明边距留给圆角与阴影（规范 5.1）。窗口自己的底色必须是透明 ——
+        // 不透明的话圆角外会剩四个方方的白角，比直角还难看。
+        TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
+        ExtendClientAreaToDecorationsHint = true;
+        ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
+        Background = Brushes.Transparent;
         FontFamily = Design.Font;
         FontSize = Design.Type.Body;
 
@@ -102,40 +121,56 @@ public sealed class MainWindow : Window
 
         var root = new DockPanel();
 
+        _titleBar = new TitleBar(this, _lang, resizable: true);
+        DockPanel.SetDock(_titleBar, Dock.Top);
+        root.Children.Add(_titleBar);
+
         _menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles));
 
-        // 菜单与工具栏之间那条 1px 线是层级的一部分：SimpleTheme 用不了阴影，
-        // 层级就靠底色差和这根线表达（规范 5.1）。
-        // 注意 Dock.Top 必须设在<strong>这层 Border</strong>上 —— 设在 _menuBar 上没用，
-        // DockPanel 只看自己直接子元素的值，那样菜单栏会变成左边一整列。
-        var menuHost = new Border
+        // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
+        _toolBar = BuildToolBar();
+
+        // 菜单与工具栏挤在同一块"顶部"里，与内容之间只留一根发丝线。
+        // 注意 Dock.Top 必须设在<strong>这层 Border</strong>上 —— 设在菜单或工具栏自己身上没用，
+        // DockPanel 只看自己直接子元素的值（1.4.0 就踩过：那样菜单栏会变成左边一整列）。
+        _headerBody = new StackPanel { Children = { _menuBar, _toolBar } };
+        _headerHost = new Border
         {
-            Child = _menuBar,
-            Background = Design.Surface.Base,
+            Child = _headerBody,
             BorderBrush = Design.Line.Subtle,
             BorderThickness = new Thickness(0, 0, 0, 1),
+            Margin = new Thickness(Design.Space.X2, 0, Design.Space.X2, 0),
         };
-        _menuHost = menuHost;
-        DockPanel.SetDock(menuHost, Dock.Top);
-        root.Children.Add(menuHost);
-
-        // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
-        _toolBar = MainToolBar.Create(_lang, new MainToolBarActions(
-            OpenArchive: OpenArchiveAsync,
-            ExtractArchive: ExtractArchiveAsync,
-            NewArchive: OpenNewArchiveDialog,
-            TestArchive: TestArchiveAsync));
-        DockPanel.SetDock(_toolBar, Dock.Top);
-        root.Children.Add(_toolBar);
+        DockPanel.SetDock(_headerHost, Dock.Top);
+        root.Children.Add(_headerHost);
 
         root.Children.Add(_contentHost);
 
-        Content = root;
+        // 整块面板：外面 12px 是透明边距（圆角与阴影要地方画），里面是同一张表面。
+        _surface = new Border
+        {
+            Margin = new Thickness(Design.Space.X3),
+            CornerRadius = new CornerRadius(16),
+            BoxShadow = Design.Shadow.Floating,
+            Child = root,
+        };
+        Content = _surface;
+
         ShowHome();
         ApplyViewDefaults();
         RegisterShortcuts(commands);
         AcceptFileDrops();
+
+        // 最大化时圆角与边距要收掉：留着一圈透明边，最大化后的窗口会比工作区小一圈，
+        // 四个角还露出桌面 —— 那是"没铺满"，不是"圆角好看"。
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == WindowStateProperty)
+            {
+                FitSurfaceToState();
+            }
+        };
 
         // 主题放在最后：它要重画上面已经建好的那一套外壳，也订阅了 Design 的变化事件。
         Design.ActiveChanged += ApplyTheme;
@@ -154,17 +189,17 @@ public sealed class MainWindow : Window
     {
         var dark = Design.Active.Name == "dark";
 
-        Background = Design.Surface.Base;
-        _menuHost.Background = Design.Surface.Base;
-        _menuHost.BorderBrush = Design.Line.Subtle;
-        _menuBar.Background = Design.Surface.Base;
+        // 窗口本身永远是透明的（圆角外要能看见桌面），有颜色的是那层面板。
+        Background = Brushes.Transparent;
+        _surface.Background = Design.Surface.Base;
+        _headerHost.BorderBrush = Design.Line.Subtle;
+        _titleBar.Repaint();
+        _menuBar.Background = Brushes.Transparent;
         _menuBar.Foreground = Design.Ink.Primary;
 
-        if (_toolBar is Border band)
-        {
-            band.Background = Design.Brand.Base;
-            band.BorderBrush = Design.Brand.Deep;
-        }
+        // 工具栏整条重做：它的图标与文字颜色是构造时取的一次，光刷卡片底色救不回来。
+        _toolBar = BuildToolBar();
+        _headerBody.Children[1] = _toolBar;
 
         _homeContent = HomeView.Create(_lang);
 
@@ -180,6 +215,35 @@ public sealed class MainWindow : Window
         }
 
         WindowTheme.Apply(this, dark);
+    }
+
+    /// <summary>
+    /// 最大化时收掉圆角与透明边距。留着的话最大化后四周会有一圈透明缝、四个角露出桌面 ——
+    /// 那是"没铺满"，不是"圆角好看"。还原时再放回去。
+    /// </summary>
+    private void FitSurfaceToState()
+    {
+        var maximized = WindowState == WindowState.Maximized;
+        _surface.Margin = maximized ? new Thickness(Design.Space.X1) : new Thickness(Design.Space.X3);
+        _surface.CornerRadius = maximized ? Design.Radius.Xs : new CornerRadius(16);
+    }
+
+    /// <summary>
+    /// 按当前调色板做一条新工具栏。「查看 → 显示工具栏」的开关状态在这里一并带上，
+    /// 否则换完主题工具栏会悄悄跑回来（<see cref="ApplyViewDefaults"/> 那次已经过去了）。
+    /// </summary>
+    private Control BuildToolBar()
+    {
+        var bar = MainToolBar.Create(_lang, new MainToolBarActions(
+            OpenArchive: OpenArchiveAsync,
+            ExtractArchive: ExtractArchiveAsync,
+            NewArchive: OpenNewArchiveDialog,
+            TestArchive: TestArchiveAsync));
+
+        // 「查看 → 显示工具栏」要跟着带上，否则换完主题工具栏会悄悄跑回来
+        // （ApplyViewDefaults 那一次已经过去了）。
+        bar.IsVisible = _view.ShowToolBar;
+        return bar;
     }
 
     // ---------- 拖拽 ----------

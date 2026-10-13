@@ -85,7 +85,7 @@ public sealed class VolumeSizeWindow : Window
         Grid.SetColumnSpan(buttons, 2);
         grid.Children.Add(buttons);
 
-        Content = grid;
+        this.Chromeless(lang, grid);
         Opened += (_, _) => _sizeBox.Focus();
     }
 

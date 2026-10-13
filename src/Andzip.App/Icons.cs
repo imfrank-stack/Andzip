@@ -89,6 +89,77 @@ internal static class Icons
     /// <summary>警告：圆角三角 + 感叹号。</summary>
     public const string Warning = "M12,3.5 L21,19.5 H3 Z M12,9.5 V14.5 M12,17 V17.01";
 
+    // ---------- 窗口按钮（1.7.0 自绘标题栏） ----------
+    //
+    // 这三个不是"功能图标"而是系统符号，所以画得比第六节那套更轻：描边 1.1、
+    // 形状保持横平竖直。系统按钮的可辨识度优先于风格统一 ——
+    // 把它们画成圆角卡通样，用户反而要找一下哪个是关闭。
+    //
+    // **坐标写在 16 分格里，且必须用 WindowGlyph 画**：最小化就是一条水平线，
+    // 外接框高度是 0，`Stretch.Uniform` 算缩放时除以 0 —— 实测那条线会缩成一个点。
+    // 别的图标走 24 分格 + 等比拉伸，这一组走 16 分格 + 不拉伸。
+
+    /// <summary>最小化：一条水平线。</summary>
+    public const string Minimize = "M3.5,8 H12.5";
+
+    /// <summary>最大化：一个方框。</summary>
+    public const string Maximize = "M3.5,3.5 H12.5 V12.5 H3.5 Z";
+
+    /// <summary>还原：前框 + 后框的一角，两框错开 2.5。</summary>
+    public const string Restore = "M3,6 H10.5 V13 H3 Z M5.5,6 V3.5 H13 V10.5 H10.5";
+
+    /// <summary>关闭：一个叉。</summary>
+    public const string Close = "M3.5,3.5 L12.5,12.5 M12.5,3.5 L3.5,12.5";
+
+    /// <summary>窗口按钮那一组：按 16 分格原样画，不做等比拉伸（原因见上面那段注释）。</summary>
+    public static Path WindowGlyph(string geometry, double size, IBrush stroke) => new()
+    {
+        Data = Geometry.Parse(geometry),
+        Stroke = stroke,
+        StrokeThickness = 1.1,
+        StrokeJoin = PenLineJoin.Round,
+        StrokeLineCap = PenLineCap.Round,
+        Stretch = Stretch.None,
+        Width = size,
+        Height = size,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>
+    /// 应用标记：程序图标那张"蓝底 + 两张白纸 + 琥珀拉头"的矢量版，用在自绘标题栏最左边。
+    /// <para>与 <c>assets/make_icon.py</c> 是同一套构图、两套实现：那边是打进 exe 的位图
+    /// （要喂给资源管理器、任务栏、右键菜单），这里是窗口内要跟着主题重画的矢量。
+    /// 两者共用 24 分格与同一族令牌，改任何一边都要记得另一边 —— 规范 6.4 末尾写着这件事。</para>
+    /// </summary>
+    public static Control AppMark(double size)
+    {
+        var unit = size / 24.0;
+
+        static Border Piece(double u, double x, double y, double w, double h, double r, IBrush fill) => new()
+        {
+            Width = w * u,
+            Height = h * u,
+            CornerRadius = new Avalonia.CornerRadius(r * u),
+            Background = fill,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Avalonia.Thickness(x * u, y * u, 0, 0),
+        };
+
+        var tile = Piece(unit, 0, 0, 24, 24, 5.4, Design.Brand.Base);
+        tile.Child = new Panel
+        {
+            Children =
+            {
+                Piece(unit, 5.5, 6, 5.5, 12, 1.4, Design.Ink.OnBrand),
+                Piece(unit, 13, 6, 5.5, 12, 1.4, Design.Ink.OnBrand),
+                Piece(unit, 9.8, 13.2, 4.4, 5, 1.8, Design.Icon.Face),
+            },
+        };
+        return tile;
+    }
+
     /// <summary>一条线稿图标。尺寸只允许规范 6.3 的那几档。</summary>
     public static Path Line(string geometry, double size, IBrush stroke, double? thickness = null) => new()
     {

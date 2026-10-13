@@ -44,9 +44,9 @@ public class ScreenshotTests
 
             Save(window, "settings-compress.png");
 
-            // 截图之外再钉一次内容：图能画出来但勾选项不见了，同样是不合格。
-            Assert.Contains(VisualQuery.Of<CheckBox>(window),
-                c => Equals(c.Content?.ToString(), lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC")));
+            // 截图之外再钉一次内容：图能画出来但开关不见了，同样是不合格。
+            Assert.Contains(VisualQuery.Of<SettingToggle>(window),
+                c => c.Label == lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC"));
         }
         finally
         {
@@ -71,6 +71,59 @@ public class ScreenshotTests
 
         Assert.Contains(TestLang.Chinese().Get("TEXT_REPAIR_MODE_3_HINT"),
             VisualQuery.Of<TextBlock>(dialog).Select(t => t.Text));
+    }
+
+    /// <summary>
+    /// 深色下的卡片语言：画布压暗、卡片抬亮。阴影在这套配色里几乎不可见，
+    /// 所以这两张图要看的不是"有没有影子"，而是"两块分不分得开"。
+    /// <para><strong>顺序不能反</strong>：先 <c>Design.Use(dark: true)</c> 再构造主窗口是没用的 ——
+    /// 主窗口构造末尾会按「查看 → 界面主题」（默认跟随系统）重新应用一次主题，
+    /// 把刚设的深色冲回浅色。第一版就是这么截出一张"深色截图其实是浅色"的假图。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void HomePaintsInDarkMode()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+
+        Design.Use(dark: true);
+        UiWait.Pump(100);
+
+        try
+        {
+            Save(window, "dark-home.png");
+            Assert.True(Pixels.Luminance(Pixels.At(window, new Point(4, 4))) < 0.12,
+                "深色下的画布没有真的变暗，这张图是浅色的");
+        }
+        finally
+        {
+            Design.Use(dark: false);
+        }
+    }
+
+    [AvaloniaFact]
+    public void SettingsPagePaintsInDarkMode()
+    {
+        var lang = TestLang.Chinese();
+        var settingsPath = Path.Combine(Path.GetTempPath(), $"andzip-shot-{Guid.NewGuid():N}.ini");
+
+        Design.Use(dark: true);
+        try
+        {
+            var window = new SettingsWindow(lang, new AppSettings(), settingsPath).Shown();
+            Clicker.Invoke(FindButton(window, lang.Get("TEXT_SETTINGS_COMPRESS")));
+            Save(window, "dark-settings.png");
+
+            Assert.Contains(VisualQuery.Of<SettingToggle>(window),
+                c => c.Label == lang.Get("TEXT_SETTINGS_COMPRESS_PREALLOC"));
+        }
+        finally
+        {
+            Design.Use(dark: false);
+            if (File.Exists(settingsPath))
+            {
+                File.Delete(settingsPath);
+            }
+        }
     }
 
     private static void Save(Window window, string fileName)

@@ -6,20 +6,23 @@ using Avalonia.Media;
 namespace Andzip.App.Views;
 
 /// <summary>
-/// 视图底部栏（首页与压缩包视图共用）：浅灰一条，右侧依次是视图切换按钮与状态文字。
-/// <para>层级靠底色差（内容白、这条浅灰）+ 1px 上边线表达 —— SimpleTheme 用不了阴影，
-/// 见规范第七节。按钮命中区按规范第八节抬到 30×26 以上。</para>
+/// 视图底部栏（首页与压缩包视图共用）：右侧依次是视图切换按钮与状态文字。
+/// <para>1.7.0 起它与上面的内容在同一张表面上，只靠顶上一根发丝线分开 ——
+/// 上一版它是第四张卡片，一屏四块白板就是用户说的"割裂感"。</para>
+/// <para>按钮的悬停色：静止透明、悬停压深一档、选中淡蓝。白底上"提亮"等于没有反馈，
+/// 所以方向与工具栏一致（规范 3.1 末）。</para>
+/// <para>按钮命中区按规范第八节抬到 30×26 以上。</para>
 /// </summary>
 internal static class ViewBar
 {
-    public static Border Create(params Control[] rightItems)
+    public static Control Create(params Control[] rightItems)
     {
         var right = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
             Spacing = Design.Space.X1,
-            Margin = new Thickness(0, 0, Design.Space.X2, 0),
+            Margin = new Thickness(0, 0, Design.Space.X3, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -28,14 +31,20 @@ internal static class ViewBar
             right.Children.Add(item);
         }
 
-        return new Border
+        var row = new Border
         {
             Height = 34,
-            Background = Design.Surface.Muted,
-            BorderThickness = new Thickness(0, 1, 0, 0),
-            BorderBrush = Design.Line.Subtle,
+            Background = Brushes.Transparent,
             Child = right,
         };
+
+        // 发丝线单独一层：Border 的上边线会把 34px 的内容挤掉 1px，Rectangle 不会。
+        var dock = new DockPanel();
+        var line = Seam.Line();
+        DockPanel.SetDock(line, Dock.Top);
+        dock.Children.Add(line);
+        dock.Children.Add(row);
+        return dock;
     }
 
     /// <summary>图标按钮；<paramref name="onClick"/> 为 null 时是禁用态（首页还没有压缩包可看）。</summary>
@@ -79,9 +88,11 @@ internal static class ViewBar
     private static void Paint(Button button, bool hover)
     {
         var active = Equals(button.Tag, true);
+        var hot = hover && button.IsEnabled;
 
-        button.Background = active ? Design.Brand.Soft : hover && button.IsEnabled ? Design.Surface.Base : Brushes.Transparent;
-        button.BorderBrush = active ? Design.Brand.Line : hover && button.IsEnabled ? Design.Line.Subtle : Brushes.Transparent;
-        button.BorderThickness = new Thickness(active || hover && button.IsEnabled ? 1 : 0);
+        // 静止透明、悬停压深一档、选中淡蓝 —— 三者必须在白卡片上彼此分得开。
+        button.Background = active ? Design.Brand.Soft : hot ? Design.Line.Subtle : Brushes.Transparent;
+        button.BorderBrush = active ? Design.Brand.Line : hot ? Design.Line.Strong : Brushes.Transparent;
+        button.BorderThickness = new Thickness(active || hot ? 1 : 0);
     }
 }

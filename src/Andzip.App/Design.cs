@@ -93,19 +93,51 @@ internal static class Design
         public static IBrush OnBrandDisabled => Active.InkOnBrandDisabled;
     }
 
-    /// <summary>面板底色。层级靠底色差表达 —— SimpleTheme 用不了阴影。</summary>
+    /// <summary>
+    /// 面板底色。1.7.0 起<strong>整块窗口就是一张表面</strong>（<see cref="Base"/>），
+    /// 内部不再切二级卡片 —— 用户对着"外壳卡 + 左卡 + 右卡 + 底栏卡"的评价是割裂。
+    /// 分层改由<strong>外阴影 + 一圈发丝边 + 内部 1px 线</strong>承担
+    /// （<c>ShadowCapabilityTests</c> 量过 <c>Border.BoxShadow</c> 真的画得出来）。
+    /// <see cref="Muted"/> 只用于"压一档"的小块：悬停、表头、标题栏按钮。
+    /// </summary>
     internal static class Surface
     {
         public static IBrush Base => Active.SurfaceBase;
         public static IBrush Muted => Active.SurfaceMuted;
         public static IBrush Sunken => Active.SurfaceSunken;
-        public static IBrush RowAlt => Active.SurfaceRowAlt;
     }
 
     internal static class Line
     {
         public static IBrush Subtle => Active.LineSubtle;
         public static IBrush Strong => Active.LineStrong;
+    }
+
+    /// <summary>
+    /// 开关（Toggle）的三段色。设置页的布尔项用它而不是勾选框 —— 参考风格就是开关，
+    /// 而且开关的"开/关"是位置语义，比一个勾更贴近"这是程序的某个行为开关"。
+    /// </summary>
+    internal static class Toggle
+    {
+        public static IBrush TrackOff => Active.ToggleTrackOff;
+        public static IBrush TrackOn => Active.ToggleTrackOn;
+        public static IBrush Knob => Active.ToggleKnob;
+    }
+
+    /// <summary>
+    /// 两档阴影（规范 4.4）。每一档都是<strong>两层</strong>：一层紧贴的接触影（小而实）
+    /// + 一层弥散的环境影（大而虚）—— 单层大模糊会糊成一片灰雾，看着脏；
+    /// 两层才有"浮起来"而不是"变暗了"的感觉。
+    /// <para>深色下阴影几乎不可见（底本来就黑），所以那一份只把不透明度提高一档，
+    /// 真正管用的是 <c>Line.Subtle</c> 那圈发丝边。</para>
+    /// </summary>
+    internal static class Shadow
+    {
+        /// <summary>整块窗口面板浮在桌面上：主窗口、设置窗口、每个对话框。</summary>
+        public static BoxShadows Floating => Active.ShadowFloating;
+
+        /// <summary>小件：开关的滑块。</summary>
+        public static BoxShadows Pill => Active.ShadowPill;
     }
 
     /// <summary>语义色。规范里写着"不许当装饰"：红只用于错误/危险，绿只用于成功。</summary>
@@ -186,8 +218,8 @@ internal static class Design
 }
 
 /// <summary>
-/// 一套完整的调色板：28 个画刷，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
-/// <para>深色那一份刻意<strong>不用纯黑</strong>：底色停在 <c>#17191C</c>~<c>#262B31</c> 这一带，
+/// 一套完整的调色板：28 个画刷 + 2 档阴影，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
+/// <para>深色那一份刻意<strong>不用纯黑</strong>：画布停在 <c>#14171A</c>、卡片 <c>#1F2328</c>，
 /// 纯黑配高对比文字会在暗环境里产生"光晕"，眼睛要不停重新对焦。
 /// 品牌蓝在深色下反而要<strong>压深</strong>（<c>#1B5E9E</c>）而不是提亮：
 /// 它是白字的底，提亮会把白字的对比度打到 AA 以下。</para>
@@ -219,10 +251,16 @@ internal sealed class Palette
     public required IBrush SurfaceBase { get; init; }
     public required IBrush SurfaceMuted { get; init; }
     public required IBrush SurfaceSunken { get; init; }
-    public required IBrush SurfaceRowAlt { get; init; }
 
     public required IBrush LineSubtle { get; init; }
     public required IBrush LineStrong { get; init; }
+
+    public required IBrush ToggleTrackOff { get; init; }
+    public required IBrush ToggleTrackOn { get; init; }
+    public required IBrush ToggleKnob { get; init; }
+
+    public required BoxShadows ShadowFloating { get; init; }
+    public required BoxShadows ShadowPill { get; init; }
 
     public required IBrush Danger { get; init; }
     public required IBrush DangerTint { get; init; }
@@ -256,10 +294,18 @@ internal sealed class Palette
         SurfaceBase = Brush(0xFF, 0xFF, 0xFF),
         SurfaceMuted = Brush(0xF6, 0xF8, 0xFA),
         SurfaceSunken = Brush(0xFA, 0xFB, 0xFC),
-        SurfaceRowAlt = Brush(0xFA, 0xFB, 0xFC),
 
         LineSubtle = Brush(0xE6, 0xE9, 0xEC),
         LineStrong = Brush(0xC9, 0xCE, 0xD6),
+
+        ToggleTrackOff = Brush(0xD6, 0xDC, 0xE4),
+        ToggleTrackOn = Brush(0x0F, 0x6C, 0xBD),
+        ToggleKnob = Brush(0xFF, 0xFF, 0xFF),
+
+        // 影子的颜色不是黑的，是品牌深墨蓝：灰黑影子在白底上发脏，带一点冷的墨色才干净。
+        // 两层 —— 一层贴地的接触影（小而实）+ 一层弥散的环境影（大而虚）。
+        ShadowFloating = Shadows("0 2 6 0 #1F0B1E33, 0 12 32 0 #2E0B1E33"),
+        ShadowPill = Shadows("0 1 2 0 #1A0B1E33"),
 
         Danger = Brush(0xC4, 0x2B, 0x1C),
         DangerTint = Brush(0xFD, 0xEC, 0xEA),
@@ -296,10 +342,18 @@ internal sealed class Palette
         SurfaceBase = Brush(0x1F, 0x23, 0x28),
         SurfaceMuted = Brush(0x26, 0x2B, 0x31),
         SurfaceSunken = Brush(0x1A, 0x1E, 0x22),
-        SurfaceRowAlt = Brush(0x22, 0x27, 0x2C),
 
         LineSubtle = Brush(0x2E, 0x34, 0x3A),
         LineStrong = Brush(0x45, 0x4D, 0x56),
+
+        // 关着的轨道要压得够暗，否则与开着的蓝分不出两态（PaletteContrastTests 卡 3:1）。
+        ToggleTrackOff = Brush(0x2E, 0x35, 0x3D),
+        ToggleTrackOn = Brush(0x3D, 0x86, 0xC8),
+        ToggleKnob = Brush(0xE7, 0xEB, 0xF0),
+
+        // 同一套几何，不透明度提高一档：纯黑上的黑影子只有加深边缘这一种作用，太淡等于没有。
+        ShadowFloating = Shadows("0 2 6 0 #66000000, 0 12 32 0 #8C000000"),
+        ShadowPill = Shadows("0 1 2 0 #66000000"),
 
         Danger = Brush(0xF2, 0x8B, 0x82),
         DangerTint = Brush(0x3A, 0x1F, 0x1D),
@@ -318,4 +372,7 @@ internal sealed class Palette
     private static IBrush Brush(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
 
     private static IBrush Brush(byte a, byte r, byte g, byte b) => new SolidColorBrush(Color.FromArgb(a, r, g, b));
+
+    /// <summary>阴影只允许在这里写死：CSS 那串"偏移 模糊 扩散 颜色"散到视图代码里就没法统一调档了。</summary>
+    private static BoxShadows Shadows(string spec) => BoxShadows.Parse(spec);
 }
