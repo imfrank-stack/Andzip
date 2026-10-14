@@ -54,18 +54,24 @@ internal sealed class TitleBar : Border
         Background = Brushes.Transparent;
         Padding = new Thickness(Design.Space.X2, 0, 0, 0);
 
-        var icon = new Border
+        var mark = new Border
         {
             Width = 16,
             Height = 16,
-            // 与任务栏、桌面快捷方式是同一张图：标题栏里那枚换成另一套画法，
-            // 用户就会看到"桌面上一个图标、窗口里另一个图标"。
-            Child = Assets.AppArt is { } art
-                ? new Image { Source = art, Width = 16, Height = 16 }
-                : Icons.AppMark(16),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(Design.Space.X1, 0, Design.Space.X2, 0),
         };
+
+        // 与任务栏、桌面快捷方式是同一张图：标题栏里那枚换成另一套画法，
+        // 用户就会看到"桌面上一个图标、窗口里另一个图标"。用户自己调过配色之后，
+        // 这句话反过来也成立 —— 所以这一枚跟着 Assets 换，不是构造时抄一次。
+        void PaintMark() => mark.Child = Assets.AppArt is { } art
+            ? new Image { Source = art, Width = 16, Height = 16 }
+            : Icons.AppMark(16);
+
+        PaintMark();
+        Assets.IconChanged += PaintMark;
+        DetachedFromVisualTree += (_, _) => Assets.IconChanged -= PaintMark;
 
         _caption = new TextBlock
         {
@@ -83,7 +89,7 @@ internal sealed class TitleBar : Border
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        left.Children.Add(icon);
+        left.Children.Add(mark);
         if (leading is not null)
         {
             leading.VerticalAlignment = VerticalAlignment.Center;

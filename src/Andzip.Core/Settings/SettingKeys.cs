@@ -133,6 +133,31 @@ public static class SettingKeys
     /// </summary>
     public const string ViewTheme = "theme_mode";
 
+    // ------------------------------------------------------- 查看页：图标配色
+    //
+    // 用户自己调的那套渐变。存字符串而不是打包成一坨 JSON：这个设置文件的规矩就是
+    // 一行一个键，坏了能手工改（见本文件顶部那段）。
+
+    public const string IconFront0 = "icon_front_0";
+    public const string IconFront1 = "icon_front_1";
+    public const string IconFront2 = "icon_front_2";
+    public const string IconBack0 = "icon_back_0";
+    public const string IconBack1 = "icon_back_1";
+
+    /// <summary>渐变方向的下标（↘ ↓ → ↙）。</summary>
+    public const string IconDirection = "icon_direction";
+
+    /// <summary>两种字形选哪一种：<c>overflow</c> / <c>punched</c>。</summary>
+    public const string IconGlyph = "icon_glyph";
+
+    /// <summary>
+    /// 这套配色<strong>是不是已经设成了程序图标</strong>。
+    /// <para>为什么要单独一个键而不是"图标文件在不在"：改色时预览就要跟着变，
+    /// 但只有按过那颗按钮才该去动快捷方式与任务栏。两件事分开记，
+    /// 否则"我在设置里试了个颜色"会变成"桌面上那个图标悄悄换了"。</para>
+    /// </summary>
+    public const string IconApplied = "icon_applied";
+
     // ------------------------------------------------------------- 语言页
 
     /// <summary>

@@ -47,11 +47,19 @@ public static class P {
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
   [StructLayout(LayoutKind.Sequential)] public struct R { public int L, T, Rt, B; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
-  public const uint LeftDown = 0x0002, LeftUp = 0x0004;
+  public const uint LeftDown = 0x0002, LeftUp = 0x0004, WheelFlag = 0x0800;
   public static void Click(int x, int y) {
     SetCursorPos(x, y);
     mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero);
     mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+  }
+  // Notches: negative scrolls down. Avalonia routes the wheel to whatever is under the
+  // cursor, so the caller names the pixel to hover first.
+  public static void Wheel(int x, int y, int notches) {
+    SetCursorPos(x, y);
+    for (int i = 0; i < Math.Abs(notches); i++) {
+      mouse_event(WheelFlag, 0, 0, (uint)(notches < 0 ? -120 : 120), UIntPtr.Zero);
+    }
   }
   // Held press: some states only exist while the button is down (a nav row's :pressed
   // shade), and a click is too fast to screenshot.
@@ -165,7 +173,20 @@ foreach ($step in $Steps) {
             Start-Sleep -Milliseconds 400
         }
         'key' { [System.Windows.Forms.SendKeys]::SendWait($rest); Start-Sleep -Milliseconds 500 }
-        default { throw "unknown step '$step' (expected shot:/wait:/click:/key:)" }
+        # wheel:x,y,notches -- negative notches scroll down. A page taller than the dialog
+        # can only be reached by scrolling, and the click coordinates of a scrolled-off
+        # button are not knowable from an unscrolled screenshot. Scroll far past the clamp,
+        # then measure from the bottom edge of the dialog: at max offset the last rows sit
+        # at a fixed distance from it, so the numbers survive a second run.
+        'wheel' {
+            $p = $rest.Split(',')
+            $r = Rect
+            $n = if ($p.Count -gt 2) { [int]$p[2] } else { -3 }
+            [P]::Wheel($r.L + [int]$p[0], $r.T + [int]$p[1], $n)
+            Write-Host ("  wheel +{0},+{1} x{2}" -f $p[0], $p[1], $n)
+            Start-Sleep -Milliseconds 400
+        }
+        default { throw "unknown step '$step' (expected shot:/wait:/click:/key:/wheel:)" }
     }
 }
 

@@ -88,8 +88,14 @@ public sealed class App : Application
                 return;
             }
 
-            var window = new MainWindow(lang, settings);
-            desktop.MainWindow = window;
+            // 用户自己调的那套图标配色：文件在就接回来。这一步必须在建窗口之前 ——
+            // 窗口那一张是在构造时从 Assets 取的，晚一步主窗口就穿着旧衣服开出来。
+            if (OperatingSystem.IsWindows())
+            {
+                new IconStudio().RestoreFromSettings(IconPreferences.Load(settings));
+            }
+
+            var window = new MainWindow(lang, settings);            desktop.MainWindow = window;
             // 命令行带压缩包路径时直接打开：文件关联与「发送到 Andzip」都依赖这条入口。
             if (target is not null)
             {

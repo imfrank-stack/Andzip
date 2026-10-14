@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Andzip.App.Services;
 using Andzip.Core.Archive;
+using Andzip.Core.Iconography;
 using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia;
@@ -1106,6 +1107,9 @@ public sealed class SettingsWindow : Window
         private readonly ComboBox _theme;
         private readonly Button _applyButton;
 
+        /// <summary>图标配色那一节，只在 Windows 上存在（它做的是快捷方式与注册表）。</summary>
+        private readonly IconStudioSection? _icons;
+
         private ViewDefaults _live = ViewDefaults.Fallback;
 
         public ViewPage(LangCatalog lang, AppSettings settings, string settingsPath)
@@ -1162,7 +1166,21 @@ public sealed class SettingsWindow : Window
             });
             panel.Children.Add(_applyButton);
 
-            Root = panel;
+            if (OperatingSystem.IsWindows())
+            {
+                _icons = new IconStudioSection(lang, settings, settingsPath);
+                panel.Children.Add(_icons.Root);
+            }
+
+            // 加了图标配色这一节之后，这一页比窗口高（两个预览 + 五格颜色 + 一排按钮），
+            // 所以整页要能滚 —— 与文件关联页同一件事：内容长就套 ScrollViewer，不撑窗口尺寸。
+            // 少了这一层，真机上看到的是"图标配色"这个标题与一排预设色片，下面全在窗口外面。
+            Root = new ScrollViewer
+            {
+                Content = panel,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            };
         }
 
         public string NavKey { get; }
@@ -1178,6 +1196,13 @@ public sealed class SettingsWindow : Window
             _iconDefault.IsChecked = _live.IconViewByDefault;
             _autoExpand.IsChecked = _live.AutoExpandTree;
             _theme.SelectedIndex = (int)_live.Theme;
+
+            // 判空挡不住平台分析器：它要的是"这一段只在 Windows 上跑"这句话本身。
+            if (OperatingSystem.IsWindows())
+            {
+                _icons?.Reload();
+            }
+
             UpdateApplyState();
         }
 
@@ -1213,6 +1238,550 @@ public sealed class SettingsWindow : Window
             desired.Save(settings);
             settings.Save(_settingsPath);
             Reload();
+        }
+    }
+
+    /// <summary>
+    /// 「设置 → 查看」里的图标配色（2.5.0）：五段渐变颜色、四档方向、两种字形，
+    /// 改一处立刻重画预览，能导出 SVG / PNG，也能设成这台机器上的程序图标。
+    /// <para><strong>为什么这一节自己落盘、不等页脚的「应用」</strong>：预览要的就是即时反馈
+    /// （参考工具的原文是"改色即时生效"），而那一颗「应用」管的是界面骨架的五个开关。
+    /// 两套生效时机混在一起，只会让用户分不清哪一处要按哪一颗。</para>
+    /// <para><strong>为什么颜色是"色块 + 十六进制框"而不是系统取色器</strong>：
+    /// 取色器要 P/Invoke <c>comdlg32</c> 的 <c>ChooseColor</c>，而这一节的真正契约是
+    /// "我能把颜色说清楚"——十六进制就是那个说法，它同时是导出的 SVG 里写的东西。</para>
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private sealed class IconStudioSection
+    {
+        private static readonly (string Key, string LabelKey)[] Fields =
+        [
+            (SettingKeys.IconFront0, "TEXT_ICON_FRONT_0"),
+            (SettingKeys.IconFront1, "TEXT_ICON_FRONT_1"),
+            (SettingKeys.IconFront2, "TEXT_ICON_FRONT_2"),
+            (SettingKeys.IconBack0, "TEXT_ICON_BACK_0"),
+            (SettingKeys.IconBack1, "TEXT_ICON_BACK_1"),
+        ];
+
+        /// <summary>四档方向的箭头。方向不是文案，不进气泡语言包。</summary>
+        private static readonly string[] Arrows = ["↘", "↓", "→", "↙"];
+
+        private readonly LangCatalog _lang;
+        private readonly string _settingsPath;
+        private readonly IconStudio _studio;
+        private readonly InstallationService _installation;
+
+        private readonly TextBox[] _hexes = new TextBox[Fields.Length];
+        private readonly Border[] _swatches = new Border[Fields.Length];
+        private readonly Image[] _previews = new Image[2];
+
+        // 三排按钮收在 List 里而不是定长数组：那一排有几个是这一节自己建的时候决定的，
+        // 写死长度等于同一个数在两个地方各写一遍。
+        private readonly List<Button> _presets = [];
+        private readonly List<Button> _directions = [];
+        private readonly List<Button> _glyphButtons = [];
+        private readonly TextBlock _status = new();
+
+        private readonly AppSettings _shared;
+        private IconPreferences _state = IconPreferences.Fallback;
+
+        /// <summary>把值填回控件的那一小段时间里，不许触发重画与落盘。</summary>
+        private bool _loading;
+
+        public IconStudioSection(LangCatalog lang, AppSettings settings, string settingsPath)
+        {
+            _lang = lang;
+            _settingsPath = settingsPath;
+            _shared = settings;
+            _studio = new IconStudio();
+            _installation = new InstallationService(lang);
+
+            var root = new StackPanel { Margin = new Thickness(0, Design.Space.X8, 0, 0) };
+
+            root.Children.Add(SectionTitle(lang.Label("TEXT_ICON_TITLE")));
+            root.Children.Add(Hint(lang.Label("TEXT_ICON_HINT")));
+
+            root.Children.Add(ChipRow(lang.Label("TEXT_ICON_PRESETS"), IconPalette.Presets.Length, _presets, (chip, i) =>
+            {
+                chip.Width = 34;
+                chip.Height = 24;
+                chip.Padding = new Thickness(0);
+                chip.CornerRadius = Design.Radius.Sm;
+                chip.Background = GradientOf(IconPalette.Presets[i]);
+                // 读屏与测试都靠这一句认片：色片上没有文字，否则念出来只是"按钮"。
+                var preset = IconPalette.Presets[i];
+                Avalonia.Automation.AutomationProperties.SetName(
+                    chip, $"{preset.Front0} {preset.Front1} {preset.Front2}");
+                chip.Click += (_, _) => PickPreset(i);
+            }));
+
+            root.Children.Add(GlyphRow());
+
+            root.Children.Add(ChipRow(lang.Label("TEXT_ICON_DIRECTION"), Arrows.Length, _directions, (chip, i) =>
+            {
+                chip.Width = 34;
+                chip.Height = 26;
+                chip.Padding = new Thickness(0);
+                chip.CornerRadius = Design.Radius.Sm;
+                chip.Background = Design.Surface.Base;
+                chip.BorderBrush = Design.Line.Strong;
+                chip.BorderThickness = new Thickness(1);
+                chip.Content = Arrows[i];
+                chip.Click += (_, _) => PickDirection(i);
+            }));
+
+            // 五格颜色：两列排，跟参考工具一样"起 / 中 / 止 / 后层起 / 后层止"。
+            var colors = new UniformGrid { Rows = 0, Columns = 2, Margin = new Thickness(0, Design.Space.X3, 0, 0) };
+            for (var i = 0; i < Fields.Length; i++)
+            {
+                colors.Children.Add(ColorRow(i));
+            }
+
+            root.Children.Add(colors);
+
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = Design.Space.X2,
+                Margin = new Thickness(0, Design.Space.X4, 0, 0),
+            };
+
+            var derive = new Button { Content = lang.Label("TEXT_ICON_DERIVE") }.Ghost();
+            derive.Click += (_, _) => DeriveBack();
+
+            var exportSvg = new Button { Content = lang.Label("TEXT_ICON_EXPORT_SVG") }.Ghost();
+            exportSvg.Click += async (_, _) => await ExportAsync(svg: true);
+
+            var exportPng = new Button { Content = lang.Label("TEXT_ICON_EXPORT_PNG") }.Ghost();
+            exportPng.Click += async (_, _) => await ExportAsync(svg: false);
+
+            var apply = new Button { Content = lang.Label("TEXT_ICON_APPLY") }.Accent();
+            apply.Click += (_, _) => ApplyToDesktop();
+
+            var restore = new Button { Content = lang.Label("TEXT_ICON_RESTORE") }.Ghost();
+            restore.Click += (_, _) => RestoreDefault();
+
+            actions.Children.Add(derive);
+            actions.Children.Add(exportSvg);
+            actions.Children.Add(exportPng);
+            actions.Children.Add(apply);
+            actions.Children.Add(restore);
+            root.Children.Add(actions);
+
+            _status.FontSize = Design.Type.Caption;
+            _status.Foreground = HintText;
+            _status.TextWrapping = TextWrapping.Wrap;
+            _status.Margin = new Thickness(0, Design.Space.X3, 0, 0);
+            root.Children.Add(_status);
+
+            Root = root;
+            Reload();
+        }
+
+        public Control Root { get; }
+
+        /// <summary>从磁盘重读这一节的状态（窗口打开时与「恢复默认」之后各走一次）。</summary>
+        public void Reload()
+        {
+            _state = IconPreferences.Load(AppSettings.Load(_settingsPath));
+            SyncControls();
+            Repaint();
+        }
+
+        private void SyncControls()
+        {
+            _loading = true;
+
+            var palette = _state.Palette;
+            var values = new[] { palette.Front0, palette.Front1, palette.Front2, palette.Back0, palette.Back1 };
+            for (var i = 0; i < values.Length; i++)
+            {
+                _hexes[i].Text = values[i];
+            }
+
+            for (var i = 0; i < _presets.Count; i++)
+            {
+                _presets[i].BorderThickness = new Thickness(IconPalette.Presets[i] == palette ? 2 : 0);
+            }
+
+            for (var i = 0; i < _directions.Count; i++)
+            {
+                _directions[i].BorderThickness = new Thickness(palette.Direction == i ? 2 : 1);
+            }
+
+            _loading = false;
+        }
+
+        /// <summary>重画两块预览与五个色块。颜色一改就走这里，所以它必须便宜。</summary>
+        private void Repaint()
+        {
+            var current = new[]
+            {
+                _state.Palette.Front0, _state.Palette.Front1, _state.Palette.Front2,
+                _state.Palette.Back0, _state.Palette.Back1,
+            };
+
+            for (var i = 0; i < _swatches.Length; i++)
+            {
+                // 那一格里正在打的字认得就用它（用户一边改一边看色块变），认不得退回已存的那份。
+                var hex = IconPalette.Normalize(_hexes[i].Text) ?? current[i];
+                var (r, g, b) = IconPalette.Rgb(hex);
+                _swatches[i].Background = new SolidColorBrush(Color.FromRgb(r, g, b));
+            }
+
+            for (var i = 0; i < _previews.Length; i++)
+            {
+                var glyph = i == 0 ? IconGlyph.Overflow : IconGlyph.Punched;
+                var png = IconPainter.Png(glyph, _state.Palette, PreviewEdge);
+                var bitmap = new System.IO.MemoryStream(png);
+                _previews[i].Source = new Avalonia.Media.Imaging.Bitmap(bitmap);
+                _glyphButtons[i].BorderThickness = new Thickness(_state.Glyph == glyph ? 2 : 1);
+                _glyphButtons[i].BorderBrush = _state.Glyph == glyph ? Design.Ink.Primary : Design.Line.Strong;
+            }
+        }
+
+        private const int PreviewEdge = 64;
+
+        /// <summary>两种字形各一张预览，点哪张用哪张 —— 与参考工具并排放的两张卡片同一个形状。</summary>
+        private Control GlyphRow()
+        {
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = Design.Space.X2,
+                Margin = new Thickness(0, Design.Space.X3, 0, 0),
+            };
+
+            row.Children.Add(new TextBlock
+            {
+                Text = _lang.Label("TEXT_ICON_GLYPH"),
+                Width = 76,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = HintText,
+                FontSize = Design.Type.Caption,
+            });
+
+            var names = new[] { "TEXT_ICON_GLYPH_OVERFLOW", "TEXT_ICON_GLYPH_PUNCHED" };
+
+            for (var i = 0; i < 2; i++)
+            {
+                var captured = i;
+                var image = new Image { Width = PreviewEdge, Height = PreviewEdge };
+                var plate = new StackPanel
+                {
+                    Orientation = Orientation.Vertical,
+                    Spacing = Design.Space.X1,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                };
+
+                plate.Children.Add(image);
+                plate.Children.Add(new TextBlock
+                {
+                    Text = _lang.Label(names[i]),
+                    FontSize = Design.Type.Caption,
+                    Foreground = HintText,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                });
+
+                var button = new Button
+                {
+                    Content = plate,
+                    Padding = new Thickness(Design.Space.X2),
+                    CornerRadius = Design.Radius.Md,
+                    Background = Design.Surface.Base,
+                    BorderBrush = Design.Line.Strong,
+                    BorderThickness = new Thickness(1),
+                }.PinFace();
+
+                button.Click += (_, _) => PickGlyph(captured == 0 ? IconGlyph.Overflow : IconGlyph.Punched);
+
+                _previews[i] = image;
+                _glyphButtons.Add(button);
+                row.Children.Add(button);
+            }
+
+            return row;
+        }
+
+        private void PickPreset(int index)
+        {
+            var chosen = IconPalette.Presets[index];
+            _state = _state with { Palette = chosen with { Direction = _state.Palette.Direction } };
+            Commit();
+        }
+
+        private void PickDirection(int index)
+        {
+            _state = _state with { Palette = _state.Palette with { Direction = index } };
+            Commit();
+        }
+
+        private void PickGlyph(IconGlyph glyph)
+        {
+            _state = _state with { Glyph = glyph };
+            Commit();
+        }
+
+        private void DeriveBack()
+        {
+            _state = _state with { Palette = _state.Palette.WithBackFromFront() };
+            Commit();
+        }
+
+        private void Commit()
+        {
+            if (_loading)
+            {
+                return;
+            }
+
+            Persist(settings => _state.Save(settings));
+
+            // 已经设成桌面图标的人改颜色时，磁盘上那份 .ico 要跟着重画 ——
+            // 不然预览是新颜色、桌面是旧颜色，用户会以为"改回去又生效了"。
+            if (_state.Applied)
+            {
+                _studio.Apply(_state, IconStudio.ExistingShortcuts(_installation));
+            }
+
+            SyncControls();
+            Repaint();
+        }
+
+        private void ApplyToDesktop()
+        {
+            _state = _state with { Applied = true };
+            var outcome = _studio.Apply(_state, IconStudio.ExistingShortcuts(_installation));
+            Persist(settings => _state.Save(settings));
+            _status.Text = Describe(outcome);
+        }
+
+        private void RestoreDefault()
+        {
+            _state = IconPreferences.Fallback;
+            var outcome = _studio.Restore(IconStudio.ExistingShortcuts(_installation));
+            Persist(settings => _state.Save(settings));
+
+            // 「恢复」也要说败。写死一句"已恢复"的话，桌面上还会留着用户自己挑的那一张。
+            _status.Text = outcome.Failure is null
+                ? _lang.Label("TEXT_ICON_RESTORED")
+                : _lang.Format("TEXT_ICON_RESTORE_FAILED", ("reason", outcome.Failure));
+
+            SyncControls();
+            Repaint();
+        }
+
+        /// <summary>
+        /// 照实说改了几处。<strong>绿色版没有快捷方式</strong>，那种情况下说"桌面图标已更新"
+        /// 就是谎话（1.8.4 那句"桌面与开始菜单的快捷方式已创建"教的）。
+        /// </summary>
+        private string Describe(IconStudio.Outcome outcome)
+        {
+            if (outcome.Failure is not null)
+            {
+                return _lang.Format("TEXT_ICON_APPLY_FAILED", ("reason", outcome.Failure));
+            }
+
+            if (outcome.ShortcutsUpdated == 0)
+            {
+                return _lang.Label("TEXT_ICON_APPLIED_NO_SHORTCUT");
+            }
+
+            return outcome.ShortcutsBlocked
+                ? _lang.Format("TEXT_ICON_APPLY_PARTIAL", ("n", outcome.ShortcutsUpdated.ToString()))
+                : _lang.Format("TEXT_ICON_APPLIED",
+                    ("n", outcome.ShortcutsUpdated.ToString()),
+                    ("m", outcome.ProgIdsUpdated.ToString()));
+        }
+
+        private async Task ExportAsync(bool svg)
+        {
+            var provider = GetTopLevel(_status)?.StorageProvider;
+            if (provider is null)
+            {
+                return;
+            }
+
+            var name = IconStudio.SuggestedName(_state.Glyph, svg ? ".svg" : ".png");
+            var choice = await provider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = _lang.Label(svg ? "TEXT_ICON_EXPORT_SVG" : "TEXT_ICON_EXPORT_PNG"),
+                SuggestedFileName = name,
+                DefaultExtension = svg ? "svg" : "png",
+            });
+
+            var target = choice?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(target))
+            {
+                return;
+            }
+
+            if (svg)
+            {
+                IconStudio.WriteSvg(target, IconArt.Svg(_state.Glyph, _state.Palette));
+            }
+            else
+            {
+                File.WriteAllBytes(target, IconPainter.Png(_state.Glyph, _state.Palette, 512));
+            }
+
+            _status.Text = _lang.Format("TEXT_ICON_EXPORTED", ("path", target));
+        }
+
+        /// <summary>存完要把主窗口那份快照同步回来 —— 它下次写盘是整文件覆盖，
+        /// 拿旧快照写就把这一节的键抹掉了（0.13.0「设置不生效」就是这么来的）。
+        /// </summary>
+        private void Persist(Action<AppSettings> mutate)
+        {
+            var fresh = AppSettings.Load(_settingsPath);
+            mutate(fresh);
+            fresh.Save(_settingsPath);
+            _shared.Reload(_settingsPath);
+        }
+
+        private Control ColorRow(int index)
+        {
+            var swatch = new Border
+            {
+                Width = 30,
+                Height = 24,
+                CornerRadius = Design.Radius.Sm,
+                BorderBrush = Design.Line.Strong,
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 0, Design.Space.X2, 0),
+            };
+
+            var hex = new TextBox
+            {
+                Width = 92,
+                FontSize = Design.Type.Caption,
+                Text = _state.Palette.Front0,
+            }.Field();
+
+            var captured = index;
+            hex.LostFocus += (_, _) => CommitHex(captured, hex.Text);
+            hex.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter || e.Key == Key.Return)
+                {
+                    CommitHex(captured, hex.Text);
+                }
+            };
+
+            _swatches[index] = swatch;
+            _hexes[index] = hex;
+
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = Design.Space.X2,
+                Margin = new Thickness(0, Design.Space.X1, 0, Design.Space.X1),
+            };
+
+            row.Children.Add(new TextBlock
+            {
+                Text = _lang.Label(Fields[index].LabelKey),
+                Width = 76,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = HintText,
+                FontSize = Design.Type.Caption,
+            });
+            row.Children.Add(swatch);
+            row.Children.Add(hex);
+            return row;
+        }
+
+        /// <summary>
+        /// 认得的写回去，认不得的<strong>保留原值并把那格照原样显示</strong>。
+        /// 一个打错的十六进制如果被当成黑色，用户看到的是"图标突然黑了"，然后开始怀疑软件。
+        /// </summary>
+        private void CommitHex(int index, string? text)
+        {
+            if (_loading || IconPalette.Normalize(text) is not { } normalized)
+            {
+                SyncControls();
+                return;
+            }
+
+            var p = _state.Palette;
+            _state = _state with
+            {
+                Palette = index switch
+                {
+                    0 => p with { Front0 = normalized },
+                    1 => p with { Front1 = normalized },
+                    2 => p with { Front2 = normalized },
+                    3 => p with { Back0 = normalized },
+                    _ => p with { Back1 = normalized },
+                },
+            };
+
+            Commit();
+        }
+
+        /// <summary>
+        /// 一排色片：一个标签 + 几颗自己上色的按钮。<strong>建几颗由调用方说</strong>，
+        /// 不是这一排自己数该有几个 —— 预设与方向两排的数量是两件不相干的事。
+        /// </summary>
+        private Control ChipRow(string label, int count, List<Button> buttons, Action<Button, int> configure)
+        {
+
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = Design.Space.X2,
+                Margin = new Thickness(0, Design.Space.X3, 0, 0),
+            };
+
+            row.Children.Add(new TextBlock
+            {
+                Text = label,
+                Width = 76,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = HintText,
+                FontSize = Design.Type.Caption,
+            });
+
+            var chips = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = Design.Space.X1,
+            };
+
+            for (var i = 0; i < count; i++)
+            {
+                var chip = new Button().PinFace();
+                chip.BorderBrush = Design.Ink.Primary;
+                chip.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+                configure(chip, i);
+                buttons.Add(chip);
+                chips.Children.Add(chip);
+            }
+
+            row.Children.Add(chips);
+            return row;
+        }
+
+        /// <summary>把一套配色画成一颗色片（预览与预设共用这一个画法，不许两处各写一遍）。</summary>
+        private static IBrush GradientOf(IconPalette palette)
+        {
+            var (x1, y1, x2, y2) = palette.Anchors;
+            var brush = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(x1 / 100, y1 / 100, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(x2 / 100, y2 / 100, RelativeUnit.Relative),
+            };
+
+            brush.GradientStops.Add(Stop(palette.Front0, 0));
+            brush.GradientStops.Add(Stop(palette.Front1, 0.52));
+            brush.GradientStops.Add(Stop(palette.Front2, 1));
+            return brush;
+
+            static GradientStop Stop(string hex, double offset)
+            {
+                var (r, g, b) = IconPalette.Rgb(hex);
+                return new GradientStop(Color.FromRgb(r, g, b), offset);
+            }
         }
     }
 

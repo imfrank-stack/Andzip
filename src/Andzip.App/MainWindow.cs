@@ -110,10 +110,10 @@ public sealed class MainWindow : Window
         TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
         ExtendClientAreaToDecorationsHint = true;
         ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
-        Background = Brushes.Transparent;
-        FontFamily = Design.Font;
-        FontSize = Design.Type.Body;
-        Icon = Assets.AppIcon;
+
+        // 底色、字体、图标这三样不在这里各写一遍：那是 WindowSurface 的活，
+        // 而它顺手还接了"用户换图标时这扇窗跟着换"。
+        this.WindowSurface();
 
         _homeContent = HomeView.Create(lang);
 

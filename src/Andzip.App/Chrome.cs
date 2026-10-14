@@ -294,6 +294,13 @@ internal static class Chrome
         window.FontFamily = Design.Font;
         window.FontSize = Design.Type.Body;
         window.Icon = Assets.AppIcon;
+
+        // 用户换图标时这扇窗要跟着换（任务栏那一张与标题栏那枚不能停在旧的上）。
+        // 窗口关掉就退订：这是一个静态事件，不退订等于每开一扇窗就漏一扇。
+        void SyncIcon() => window.Icon = Assets.AppIcon;
+        Assets.IconChanged += SyncIcon;
+        window.Closed += (_, _) => Assets.IconChanged -= SyncIcon;
+
         return window;
     }
 

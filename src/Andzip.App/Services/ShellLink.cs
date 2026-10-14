@@ -60,7 +60,39 @@ internal static class ShellLink
         }
     }
 
-    /// <summary>读回快捷方式指向的图标（测试用：证明"带透明通道的那张图"真的挂上去了）。</summary>
+    /// <summary>
+    /// 只换快捷方式的图标，其余一格都不动。
+    /// <para>为什么不干脆 <see cref="Create"/> 重建一个：快捷方式里还有工作目录、说明、热键、
+    /// 相对路径这些我们没读回来的字段，重建等于把它们抹平 —— 用户只是换了个图标颜色，
+    /// 结果"以管理员身份运行"那个勾没了之类的怪事就会冒出来。读进来、改一格、原地存回去才是最小动作。</para>
+    /// <para><paramref name="iconPath"/> 传 null 就是"图标跟目标文件走"（也就是出厂那张）。</para>
+    /// </summary>
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ShellLinkNative))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(IShellLinkW))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(IPersistFile))]
+    public static void SetIcon(string linkPath, string? iconPath)
+    {
+        var link = new ShellLinkNative();
+        try
+        {
+            var cast = (IShellLinkW)link;
+            ((IPersistFile)link).Load(linkPath, 0);
+            // 空串才是"没有单独的图标，跟目标文件走"。传快捷方式自己的路径是另一种意思
+            // （那会写下一个显式的图标字段，指向 .lnk），恢复默认时不该留下它。
+            cast.SetIconLocation(iconPath ?? string.Empty, 0);
+
+            // createNew = false：覆盖同一个文件。传 true 时 IPersistFile 会拒绝第二次保存。
+            ((IPersistFile)link).Save(linkPath, createNew: false);
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(link);
+        }
+    }
+
+    /// <summary>
+    /// 读回快捷方式指向的图标（测试用：证明"带透明通道的那张图"真的挂上去了）。
+    /// </summary>
     public static (string Path, int Index) ReadIcon(string linkPath)
     {
         var link = new ShellLinkNative();
