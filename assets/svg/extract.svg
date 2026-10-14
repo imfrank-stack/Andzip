@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <title>解压缩</title>
+  <rect x="8" y="19" width="24" height="22" rx="3" fill="#414B5A"/>
+  <path d="M8 22 A3 3 0 0 1 11 19 H29 A3 3 0 0 1 32 22 V26 H8 Z" fill="#A7B1BF"/>
+  <rect x="9.5" y="26" width="21" height="2" fill="#FFFFFF"/>
+  <path d="M21.56 20.06 L29.28 12.34 L25.21 8.27 L39 6.5 L37.23 20.29 L33.16 16.22 L25.44 23.94 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M21.56 20.06 L29.28 12.34 L25.21 8.27 L39 6.5 L37.23 20.29 L33.16 16.22 L25.44 23.94 Z" fill="#414B5A" stroke="#414B5A" stroke-width="1.6" stroke-linejoin="round"/>
+</svg>

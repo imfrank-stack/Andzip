@@ -66,6 +66,13 @@ public class LangLoaderTests
         Assert.True(catalog.HasLanguage("SimpChinese"));
         Assert.Equal("SimpChinese", catalog.CurrentLanguage);
         Assert.Equal("文件(&F)", catalog.Get("MENUSTR_FILE"));
-        Assert.Equal("打开", catalog.Get("TEXT_TOOLBAR_OPEN"));
+
+        // 再要一个键证明"不是只有那一条能取到"。这里**不断言文案内容** ——
+        // 2.6.0 把工具栏那排标签从「打开」改成长标签「打开压缩包」，这条按字面比文案的断言
+        // 就红了一次，而它想守的东西（内嵌那份读得到）一点没变。
+        // 文案是语言包的事，归"两侧键集对齐"那类断言管；这一条只管"取到了真文案而不是键名"。
+        var open = catalog.Get("TEXT_TOOLBAR_OPEN");
+        Assert.False(string.IsNullOrWhiteSpace(open));
+        Assert.NotEqual("TEXT_TOOLBAR_OPEN", open);
     }
 }

@@ -1,10 +1,8 @@
 using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Path = Avalonia.Controls.Shapes.Path;
 
 namespace Andzip.App.Views;
 
@@ -20,10 +18,17 @@ namespace Andzip.App.Views;
 /// <para>「打开」「解压」右侧原来各挂着一个下拉箭头（主按钮 + 小箭头两个按钮拼一组），
 /// 0.9.12 删掉了：箭头里「最近的文件」根本没有这个功能，永远灰着，而「解压」里那一条
 /// 与主按钮是同一条命令 —— 两个箭头点开都看不出差别，用户的评价是"似乎没有作用"。</para>
-/// <para>尚未接入命令的按钮（添加 / 删除 / 扫描）保持禁用态，不假装可用。</para>
+/// <para>尚未接入命令的按钮（添加 / 删除 / 扫描 / 查看）保持禁用态，不假装可用。</para>
+/// <para><strong>2.6.0 起这九枚图标不再由代码画</strong>：几何来自 <c>assets/svg/*.svg</c>
+/// （用户给的设计稿），由 <see cref="SvgGlyph"/> 在运行时读那份原文件画出来 ——
+/// 抄进代码就等于造第二份真相。文字也跟着稿子改成长标签（「打开压缩包」而不是「打开」），
+/// 因为这一排现在是"图标 + 一句话"，短到两个字的标签反而要人猜。</para>
 /// </summary>
 internal static class MainToolBar
 {
+    /// <summary>禁用态那枚双色图标整体降到的不透明度。文字走 <c>Ink.Disabled</c>，图标没有对应的"禁用第二档灰"，压透明度比换个颜色更贴近"这一整格都不通"。</summary>
+    private const double DisabledOpacity = 0.4;
+
     public static Control Create(LangCatalog lang, MainToolBarActions actions)
     {
         var items = new StackPanel
@@ -33,39 +38,44 @@ internal static class MainToolBar
             Margin = new Thickness(Design.Space.X2, 0, Design.Space.X2, Design.Space.X2),
         };
 
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), Icons.Open, actions.OpenArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_EXTRACT"), Icons.Extract, actions.ExtractArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), "open-archive", actions.OpenArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_EXTRACT"), "extract", actions.ExtractArchive));
 
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_NEW"), Icons.New, actions.NewArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_ADD"), Icons.Add, actions.AddFiles));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_DELETE"), Icons.Delete, actions.DeleteFiles));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_TEST"), Icons.Test, actions.TestArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_SCAN"), Icons.Scan, actions.ScanArchive));
-        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_VIEW"), Icons.View, actions.ToggleViewStyle));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_NEW"), "new-archive", actions.NewArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_ADD"), "add-file", actions.AddFiles));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_DELETE"), "delete-file", actions.DeleteFiles));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_TEST"), "test-archive", actions.TestArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_SCAN"), "scan-file", actions.ScanArchive));
+        items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_VIEW"), "view", actions.ToggleViewStyle));
 
-        // 当前语言：切换语言尚未实现，所以这里只是一个展示用的禁用按钮。
+        // 语言切换本身在「设置 → 语言」里（换完要重启才全面生效），
+        // 所以这一颗做的是"跳到那一页"。以前它写着当前语言、点不动，如今它有地方可去。
         items.Children.Add(CreateButton(
-            "[" + lang.GetLanguageDisplayName(lang.CurrentLanguage) + "]",
-            string.Empty,
-            null));
+            lang.Label("TEXT_TOOLBAR_LANGUAGE"), "language", actions.SwitchLanguage));
 
         return items;
     }
 
-    private static Control CreateButton(string text, string icon, Action? run)
+    private static Control CreateButton(string text, string glyph, Action? run)
     {
         var enabled = run is not null;
 
         // 禁用态图标与文字同降 —— 只淡图标会读成"这个功能有，只是暂时不能点"，
         // 而事实是整条命令都不可用。
         var ink = enabled ? Design.Ink.Primary : Design.Ink.Disabled;
+        var icon = SvgGlyph.Load(glyph, Design.IconSize.ToolBar);
+
+        if (!enabled)
+        {
+            icon.Opacity = DisabledOpacity;
+        }
 
         var content = new StackPanel
         {
             Orientation = Orientation.Vertical,
             Children =
             {
-                CreateIcon(icon, enabled ? Design.Brand.Base : Design.Ink.Disabled),
+                icon,
                 new TextBlock
                 {
                     Text = text,
@@ -99,17 +109,6 @@ internal static class MainToolBar
         // 所以静止态保持透明，不会在卡片上留一块"亮着的死按钮"。
         return button.Lift();
     }
-
-    private static Control CreateIcon(string geometry, IBrush stroke)
-    {
-        if (string.IsNullOrEmpty(geometry))
-        {
-            // 语言按钮没有图标，占一个等高位保持基线一致。
-            return new Border { Width = Design.IconSize.ToolBar, Height = Design.IconSize.ToolBar };
-        }
-
-        return Icons.Line(geometry, Design.IconSize.ToolBar, stroke);
-    }
 }
 
 /// <summary>工具栏各按钮的命令入口；null 表示该按钮当前不可用。</summary>
@@ -121,5 +120,6 @@ internal sealed record MainToolBarActions(
     Action? DeleteFiles = null,
     Action? TestArchive = null,
     Action? ScanArchive = null,
-    Action? ToggleViewStyle = null);
+    Action? ToggleViewStyle = null,
+    Action? SwitchLanguage = null);
 

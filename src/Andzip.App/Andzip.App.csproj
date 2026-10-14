@@ -48,4 +48,11 @@
     <EmbeddedResource Include="..\..\assets\andzip.png" Link="assets\andzip.png" />
   </ItemGroup>
 
+  <!-- 首页工具栏那九枚双色图标。同样是内嵌而不是旁边的文件：单文件绿色版只有一个 exe，
+       少一个 .svg 就少一枚图标，而"图标缺一个"这种毛病要到用户点进去才看得见。
+       SvgGlyph 读的就是这一份，所以设计稿与屏幕上不可能长得不一样。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\svg\*.svg" Link="assets\svg\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

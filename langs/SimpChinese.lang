@@ -10,14 +10,15 @@ DLG_FONT_SIZE                           = 9
 
 [TEXT]
 ; ---- 主工具栏（FR-1 首页）----
-TEXT_TOOLBAR_OPEN                       = 打开
-TEXT_TOOLBAR_EXTRACT                    = 解压
-TEXT_TOOLBAR_NEW                        = 新建
-TEXT_TOOLBAR_ADD                        = 添加
-TEXT_TOOLBAR_DELETE                     = 删除
-TEXT_TOOLBAR_TEST                       = 测试
-TEXT_TOOLBAR_SCAN                       = 扫描
+TEXT_TOOLBAR_OPEN                       = 打开压缩包
+TEXT_TOOLBAR_EXTRACT                    = 解压缩
+TEXT_TOOLBAR_NEW                        = 新建压缩
+TEXT_TOOLBAR_ADD                        = 添加文件
+TEXT_TOOLBAR_DELETE                     = 删除文件
+TEXT_TOOLBAR_TEST                       = 测试压缩包
+TEXT_TOOLBAR_SCAN                       = 扫描文件
 TEXT_TOOLBAR_VIEW                       = 查看
+TEXT_TOOLBAR_LANGUAGE                   = 切换语言
 
 ; ---- 新建压缩文件对话框（FR-2）----
 TEXT_TITLE_NEW_ARCHIVE                  = 新建压缩文件

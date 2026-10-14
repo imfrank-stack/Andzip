@@ -20,40 +20,10 @@ internal static class Icons
     public const double Stroke = 1.5;
 
     // ---------- 工具栏 ----------
-
-    /// <summary>打开：文件夹轮廓 + 向右箭头（箭头不压住文件夹上沿）。</summary>
-    public const string Open =
-        "M3,9 Q3,7 5,7 H8.5 L10.5,9.5 H19 Q21,9.5 21,11.5 V19 Q21,21 19,21 H5 Q3,21 3,19 Z "
-        + "M9.5,15 H14 M12,12.5 L14.5,15 12,17.5";
-
-    /// <summary>解压：抽屉 + 向下箭头穿过上沿 + 拉手。</summary>
-    public const string Extract =
-        "M3,13 Q3,11 5,11 H19 Q21,11 21,13 V19 Q21,21 19,21 H5 Q3,21 3,19 Z "
-        + "M10,16 H14 M12,2.5 V9.5 M9,7 L12,10 15,7";
-
-    /// <summary>新建：带拉链的压缩包 —— 本软件的身份图标，齿与扣环都保留。</summary>
-    public const string New =
-        "M5,4 Q5,2 7,2 H17 Q19,2 19,4 V20 Q19,22 17,22 H7 Q5,22 5,20 Z "
-        + "M12,2 V16.5 M9.5,5.5 H12 M12,8.5 H14.5 M9.5,11.5 H12 M12,14 H14.5 "
-        + "M10,17 H14 V20.5 H10 Z";
-
-    /// <summary>添加：文件 + 折角，加号落在文件外右下，不与折角打架。</summary>
-    public const string Add =
-        "M4,4 Q4,2 6,2 H11 L16,7 V13 M4,4 V20 Q4,22 6,22 H9 M11,2 V6 Q11,7 12,7 H16 "
-        + "M18.5,15 V21.5 M15.5,18.5 H21.5";
-
-    /// <summary>删除：同样的文件，减号。</summary>
-    public const string Delete =
-        "M4,4 Q4,2 6,2 H11 L16,7 V13 M4,4 V20 Q4,22 6,22 H9 M11,2 V6 Q11,7 12,7 H16 "
-        + "M15.5,18.5 H21.5";
-
-    /// <summary>测试：闪电。描边而不是实心 —— 与其他线稿同一视觉重量。</summary>
-    public const string Test = "M13.5,2.5 L6.5,13 H11 L9.5,21.5 17.5,11 H13 Z";
-
-    /// <summary>扫描：盾牌 + 对勾。</summary>
-    public const string Scan =
-        "M12,2.5 L4.5,5.5 V12 Q4.5,17.5 12,21.5 Q19.5,17.5 19.5,12 V5.5 Z "
-        + "M8.5,11.5 L11.3,14.3 15.9,9.2";
+    //
+    // 这一排原来是线稿（打开 / 解压 / 新建 / 添加 / 删除 / 测试 / 扫描），2.6.0 起换成
+    // assets/svg/*.svg 那九枚双色图形，由 SvgGlyph 直接读设计稿画 —— 七个常量就此没了用途。
+    // 留着不会出错，但会留下"代码里有一份、设计稿里有一份"的第二个真相，而两份会开始各说各话。
 
     /// <summary>查看：三行列表，左侧短标 + 右侧长线。</summary>
     public const string View = "M4.5,6 H6 M9,6 H20 M4.5,12 H6 M9,12 H20 M4.5,18 H6 M9,18 H20";

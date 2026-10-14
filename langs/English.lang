@@ -10,14 +10,15 @@ DLG_FONT_SIZE                           = 9
 
 [TEXT]
 ; ---- Main toolbar (FR-1 home) ----
-TEXT_TOOLBAR_OPEN                       = Open
+TEXT_TOOLBAR_OPEN                       = Open archive
 TEXT_TOOLBAR_EXTRACT                    = Extract
-TEXT_TOOLBAR_NEW                        = New
-TEXT_TOOLBAR_ADD                        = Add
-TEXT_TOOLBAR_DELETE                     = Delete
-TEXT_TOOLBAR_TEST                       = Test
-TEXT_TOOLBAR_SCAN                       = Scan
+TEXT_TOOLBAR_NEW                        = New archive
+TEXT_TOOLBAR_ADD                        = Add files
+TEXT_TOOLBAR_DELETE                     = Delete files
+TEXT_TOOLBAR_TEST                       = Test archive
+TEXT_TOOLBAR_SCAN                       = Scan files
 TEXT_TOOLBAR_VIEW                       = View
+TEXT_TOOLBAR_LANGUAGE                   = Switch language
 
 ; ---- New archive dialog (FR-2) ----
 TEXT_TITLE_NEW_ARCHIVE                  = New archive

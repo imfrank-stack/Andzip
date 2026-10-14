@@ -41,7 +41,9 @@ public sealed class SettingsWindow : Window
     private readonly ISettingsPage[] _pages;
     private ISettingsPage? _currentPage;
 
-    public SettingsWindow(LangCatalog lang, AppSettings settings, string settingsPath)
+    /// <param name="startPage">开在哪一页（导航键）。工具栏那颗「切换语言」要落在语言页上 ——
+    /// 它做的事是"把人带到真正能换语言的地方"，而不是自己假装能换。</param>
+    public SettingsWindow(LangCatalog lang, AppSettings settings, string settingsPath, string? startPage = null)
     {
         Title = lang.Label("TEXT_TITLE_SETTINGS");
         Width = 1000;
@@ -142,7 +144,7 @@ public sealed class SettingsWindow : Window
         root.Children.Add(body);
 
         this.Chromeless(lang, root, resizable: true);
-        ShowPage(0);
+        ShowPage(startPage is { } key ? System.Array.IndexOf(navKeys, key) : 0);
     }
 
     private void ShowPage(int index)

@@ -270,7 +270,8 @@ public sealed class MainWindow : Window
             OpenArchive: OpenArchiveAsync,
             ExtractArchive: ExtractArchiveAsync,
             NewArchive: OpenNewArchiveDialog,
-            TestArchive: TestArchiveAsync));
+            TestArchive: TestArchiveAsync,
+            SwitchLanguage: () => OpenSettingsDialogOn("TEXT_SETTINGS_LANGUAGE")));
 
         // 「查看 → 显示工具栏」要跟着带上，否则换完主题工具栏会悄悄跑回来
         // （ApplyViewDefaults 那一次已经过去了）。
@@ -567,9 +568,17 @@ public sealed class MainWindow : Window
     /// 写盘（记最近的文件、记住上次输出目录）都会拿旧快照把整个 <c>settings.ini</c> 覆盖掉，
     /// 刚才那一项设置连重启都找不回来。0.13.0 之前"自动展开树"设置不生效就是这么来的。</para>
     /// </summary>
-    private async void OpenSettingsDialog()
+    private void OpenSettingsDialog() => OpenSettingsDialogOn(null);
+
+    /// <summary>
+    /// 打开设置窗口。<paramref name="startPage"/> 是导航键 —— 工具栏那颗「切换语言」传语言页，
+    /// 因为"换语言"这件事真正的开关在<strong>那一页</strong>（改完要重启才全面生效），
+    /// 工具栏不该假装自己能换。键写错就是代码错：构造时直接抛，
+    /// 而不是悄悄开在第一页让人以为按错了别的什么。
+    /// </summary>
+    private async void OpenSettingsDialogOn(string? startPage)
     {
-        var dialog = new SettingsWindow(_lang, _settings, AppSettings.DefaultFilePath);
+        var dialog = new SettingsWindow(_lang, _settings, AppSettings.DefaultFilePath, startPage);
         await dialog.ShowDialog(this);
         _settings.Reload(AppSettings.DefaultFilePath);
         ApplyViewDefaults();

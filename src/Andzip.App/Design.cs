@@ -165,12 +165,20 @@ internal static class Design
         public static IBrush WarningIcon => Active.WarningIcon;
     }
 
-    /// <summary>文件夹图标的面与边。内容区唯一允许填充的图标。</summary>
+    /// <summary>图标的面与边。内容区唯一允许填充的图标是文件夹；工具栏那九枚双色图形见 <c>Icon.Accent</c>。</summary>
     internal static class Icon
     {
         public static IBrush Face => Active.FolderFace;
         public static IBrush Edge => Active.FolderEdge;
         public static IBrush Glyph => Active.IconGlyph;
+
+        /// <summary>
+        /// 双色图标的第二档：同一枚图形里"次要的那一层"（盒盖、折角）。
+        /// <para>工具栏那九枚来自 <c>assets/svg/</c>，原稿用 <c>#414B5A</c> + <c>#A7B1BF</c>
+        /// 两档灰。深色下面 <c>#414B5A</c> 会直接融进卡片，所以这里不是照抄两个色，
+        /// 而是把"亮一档 / 暗一档"的关系按调色板各算一遍 —— 关系保住，绝对值让给主题。</para>
+        /// </summary>
+        public static IBrush Accent => Active.IconAccent;
     }
 
     /// <summary>圆角只有这 6 档（规范 4.1）。与主题无关，所以是常量。</summary>
@@ -312,6 +320,9 @@ internal sealed class Palette
     public required IBrush FolderEdge { get; init; }
     public required IBrush IconGlyph { get; init; }
 
+    /// <summary>双色图标的第二档（盒盖 / 折角），永远与 <see cref="IconGlyph"/> 差一档明度。</summary>
+    public required IBrush IconAccent { get; init; }
+
     public static Palette Light { get; } = new("light")
     {
         BrandTint = Brush(0xF2, 0xF7, 0xFD),
@@ -368,6 +379,7 @@ internal sealed class Palette
         FolderFace = Brush(0xF7, 0xC9, 0x48),
         FolderEdge = Brush(0xD9, 0xA6, 0x1F),
         IconGlyph = Brush(0x5B, 0x64, 0x70),
+        IconAccent = Brush(0xA7, 0xB1, 0xBF),
     };
 
     public static Palette Dark { get; } = new("dark")
@@ -419,6 +431,7 @@ internal sealed class Palette
         FolderFace = Brush(0xD9, 0xA6, 0x1F),
         FolderEdge = Brush(0x8A, 0x61, 0x00),
         IconGlyph = Brush(0xA7, 0xB0, 0xBA),
+        IconAccent = Brush(0x6E, 0x76, 0x81),
     };
 
     private static IBrush Brush(int gray) => new SolidColorBrush(Color.FromRgb((byte)gray, (byte)gray, (byte)gray));

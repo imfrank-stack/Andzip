@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <title>测试压缩包</title>
+  <rect x="6" y="5" width="24" height="22" rx="3" fill="#414B5A"/>
+  <path d="M6 8 A3 3 0 0 1 9 5 H27 A3 3 0 0 1 30 8 V12 H6 Z" fill="#A7B1BF"/>
+  <rect x="7.5" y="12" width="21" height="2" fill="#FFFFFF"/>
+  <circle cx="31.5" cy="31.5" r="9.4" fill="#FFFFFF"/>
+  <circle cx="31.5" cy="31.5" r="7.5" fill="#414B5A"/>
+  <path d="M27.8 31.8 L30.4 34.4 L35.3 28.9" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
