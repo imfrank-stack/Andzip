@@ -426,27 +426,43 @@ internal static class Chrome
     public static ComboBox Picker(this ComboBox combo)
     {
         combo.CornerRadius = Design.Radius.Sm;
+        // SimpleTheme 给 ComboBox 自带一圈 #888888（实测：屏幕上是 1 DIP 实线），
+        // 比输入框那档 Border.Strong 重两级 —— 同一个表单里两种描边正是用户报过三次的那种不和谐。
+        combo.BorderBrush = Design.Line.Strong;
+        combo.BorderThickness = new Avalonia.Thickness(1);
         combo.MinHeight = 30;
         combo.DropDownOpened += (_, _) =>
             Avalonia.Threading.Dispatcher.UIThread.Post(combo.RoundPopups,
                 Avalonia.Threading.DispatcherPriority.Render);
-        return TrackStates(combo, Design.Surface.Muted, Design.Surface.Muted);
+        // 描边三档同值：下拉框要变的只有底色，按下那一档不再交给主题（1.9.0 之前按下去是
+        // 整块 #686868 涂在内嵌箭头的面皮上）。
+        return TrackStates(combo, Design.Surface.Muted, Design.Surface.Pressed,
+            Design.Line.Strong, Design.Line.Strong);
     }
 
     /// <summary>
-    /// 接住四个指针事件切换底色。静止底色在调用时读一次 ——
+    /// 接住悬停与按下两档。静止值在调用时读一次 ——
     /// 调用方可能刚刚设过（工具栏按钮是 Transparent），不能写死成白。
-    /// 泛型参数用 <see cref="TemplatedControl"/> 而不是 <c>Button</c>：下拉框也要同一套手感。
+    /// <para>泛型参数用 <see cref="TemplatedControl"/> 而不是 <c>Button</c>：下拉框也要同一套手感。
+    /// 描边那两档默认与静止同值（只有下拉框会传进来：它自带一圈主题给的 <c>#888888</c>，
+    /// 换档时描边不该跟着变）。</para>
+    /// <para>换档的时机与读法见 <see cref="Lift"/> 那段：只认属性，不认指针事件。</para>
     /// </summary>
-    private static T TrackStates<T>(T control, IBrush hover, IBrush pressed) where T : TemplatedControl
+    private static T TrackStates<T>(T control, IBrush hover, IBrush pressed,
+        IBrush? restBorder = null, IBrush? hoverBorder = null) where T : TemplatedControl
     {
         var rest = control.Background;
+        var restLine = restBorder ?? control.BorderBrush;
+        var hoverLine = hoverBorder ?? restLine;
 
         // 同 Lift：由 IsPressed / IsPointerOver 这两个属性触发，当场读这两个状态。
         // 挂在指针事件上会漏掉按住那一档（Button 先发事件后置位），见 Lift 那段注释。
-        void Repaint() => control.Background =
-            control is Button { IsPressed: true } ? pressed
-            : control.IsPointerOver ? hover : rest;
+        void Repaint()
+        {
+            var isPressed = control is Button { IsPressed: true };
+            control.Background = isPressed ? pressed : control.IsPointerOver ? hover : rest;
+            control.BorderBrush = isPressed || control.IsPointerOver ? hoverLine : restLine;
+        }
 
         control.PropertyChanged += (_, e) =>
         {
@@ -473,21 +489,39 @@ internal static class Chrome
     /// 露出那块 <c>#686868</c>，接了这里的则露出 <c>Surface.Pressed</c> —— 两条一起钉在
     /// <c>ChromeCapabilityTests</c>。"漏接一处"这种扫不出像素的，交给
     /// <c>DesignTokenTests.EveryButtonPinsItsTemplateFace</c>。</para>
+    /// <para><strong>模板里内嵌的 <c>ToggleButton</c> 一起钉</strong>（1.9.0）：下拉框右边那格箭头
+    /// 是模板里另一枚 <c>ToggleButton</c>，主题的伪类涂的是<strong>它自己的</strong>面皮，
+    /// 只钉外层那枚够不着（实测按住时那一格里 445 个 <c>#686868</c>）。
+    /// 只认 <c>ToggleButton</c> 这一种：外层模板里还会冒出 <c>TextBox</c> 与 <c>Popup</c>，
+    /// 把它们的面皮一起钉住会连下拉列表里那些行的主题态也钉死 —— 代价比这一格大。</para>
     /// </summary>
     public static T PinFace<T>(this T control) where T : TemplatedControl
     {
         void Sync()
         {
-            if (control.GetTemplateChildren().OfType<ContentPresenter>()
-                    .FirstOrDefault(face => face.Name == "PART_ContentPresenter") is not { } skin)
+            Skin(control.GetTemplateChildren().OfType<ContentPresenter>(), control);
+
+            // 内嵌的那枚 ToggleButton 不在直接子元素里（下拉框的箭头埋在模板的 Border 与 Grid 底下），
+            // 要往整棵子树里找；而它自己的面皮又只在它自己的直接子元素里 —— 两层各自量各自的。
+            // 外层有没有面皮不当下酒菜：下拉框外层那枚 ContentPresenter 埋得更深，等不到它。
+            foreach (var inner in control.GetVisualDescendants().OfType<ToggleButton>())
             {
-                return;   // 模板还没建起来：下一次事件或换主题时会再抄一遍
+                Skin(inner.GetTemplateChildren().OfType<ContentPresenter>(), inner);
+            }
+        }
+
+        static bool Skin(IEnumerable<ContentPresenter> faces, TemplatedControl owner)
+        {
+            if (faces.FirstOrDefault(face => face.Name == "PART_ContentPresenter") is not { } skin)
+            {
+                return false;
             }
 
-            skin.SetValue(TemplatedControl.BackgroundProperty, control.Background);
-            skin.SetValue(TemplatedControl.BorderBrushProperty, control.BorderBrush);
-            skin.SetValue(TemplatedControl.BorderThicknessProperty, control.BorderThickness);
-            skin.SetValue(TemplatedControl.CornerRadiusProperty, control.CornerRadius);
+            skin.SetValue(TemplatedControl.BackgroundProperty, owner.Background);
+            skin.SetValue(TemplatedControl.BorderBrushProperty, owner.BorderBrush);
+            skin.SetValue(TemplatedControl.BorderThicknessProperty, owner.BorderThickness);
+            skin.SetValue(TemplatedControl.CornerRadiusProperty, owner.CornerRadius);
+            return true;
         }
 
         void Later() => Dispatcher.UIThread.Post(Sync, DispatcherPriority.Render);

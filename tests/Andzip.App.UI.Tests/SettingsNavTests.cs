@@ -57,7 +57,15 @@ public class SettingsNavTests : IDisposable
         UiWait.Pump(80);
 
         var pressed = Pixels.At(window, at);
+        // 再量一枚**角上**的像素：药丸是圆的、盖得住行中心，盖不住自己的四个角，
+        // 而那层面皮是方的 —— 1.8.7 那句"已核对"就是从这里漏过去的
+        // （用户 1.8.9 的截图量的正是角上那几粒 #686868，中心却是好的）。
+        var corner = Pixels.At(window, OnWindow(row, 1, 1));
         window.MouseUp(at, MouseButton.Left);
+
+        Assert.False(Pixels.Same(corner, Color.FromRgb(0x68, 0x68, 0x68)),
+            $"药丸四角漏出主题的 {Pixels.Name(corner)}：药丸是圆的、面皮是方的，"
+            + "没钉住面皮的话按下去就是四个角各一块黑（中心量不到这件事）");
 
         Assert.False(Pixels.Same(pressed, Color.FromRgb(0x68, 0x68, 0x68)),
             "按下又变回 SimpleTheme 那块 #686868 深灰了 —— 用户说的\"不协调\"就是这个");

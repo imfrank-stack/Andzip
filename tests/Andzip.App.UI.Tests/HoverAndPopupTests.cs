@@ -9,6 +9,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -25,6 +26,12 @@ public class HoverAndPopupTests
 {
     /// <summary>弹窗测试用的画布色：既不是卡片白，也不是任何令牌色，免得把"没画"读成"画对了"。</summary>
     private static readonly Color Page = Color.FromRgb(0xD8, 0xDE, 0xE5);
+
+    /// <summary>SimpleTheme 在 :pressed 上涂给面皮的那块灰。</summary>
+    private static readonly Color ThemeGray = Color.FromRgb(0x68, 0x68, 0x68);
+
+    /// <summary>SimpleTheme 给 ComboBox 自带的那圈描边（比规范里的 Border.Strong 重两级）。</summary>
+    private static readonly Color ThemeBorder = Color.FromRgb(0x88, 0x88, 0x88);
 
     [AvaloniaFact]
     public void HoveredToolBarButtonBecomesARoundedBoxWithAShadow()
@@ -103,8 +110,8 @@ public class HoverAndPopupTests
             $"子菜单的圆角只有 {root.CornerRadius}，用户要的是「不要有直角」");
         Assert.NotEqual(default, root.BoxShadow);
 
+        var corner = Pixels.At(window, RoundedCornerOf(window, root));
         var at = root.TranslatePoint(new Point(0, 0), window)!.Value;
-        var corner = Pixels.At(window, new Point(at.X + 1, at.Y + 1));
         // 取列表左边缘那一竖条：再往里就是文字，量到的是墨色不是面板色
         var inside = Pixels.At(window, new Point(at.X + 3, at.Y + 14));
 
@@ -148,8 +155,8 @@ public class HoverAndPopupTests
         Assert.True(root.CornerRadius.TopLeft >= 6, $"下拉列表的圆角是 {root.CornerRadius}，还是直角");
         Assert.NotEqual(default, root.BoxShadow);
 
+        var corner = Pixels.At(window, RoundedCornerOf(window, root));
         var at = root.TranslatePoint(new Point(0, 0), window)!.Value;
-        var corner = Pixels.At(window, new Point(at.X + 1, at.Y + 1));
         Assert.True(Pixels.Luminance(corner) < Pixels.Luminance(Pixels.Of(root.Background!)) - 0.08,
             $"下拉列表左上角 1px 是 {Pixels.Name(corner)}，与列表底色一样亮 —— 圆角没生效");
     }
@@ -385,4 +392,91 @@ public class HoverAndPopupTests
     }
 
     private static bool Darker(Color a, Color b) => Pixels.Luminance(a) < Pixels.Luminance(b) - 0.01;
+
+    /// <summary>
+    /// 弹窗左上角那一格，但<strong>等到圆角真的画上去</strong>再取样。
+    /// <para><c>RoundOnOpen</c> 与 <c>DropDownOpened</c> 都是把 <c>RoundPopups</c> 排到 Render 优先级
+    /// （推迟一帧，实现里写了为什么），所以固定泵 120ms 偶尔会抢在那一帧之前 —— 用例于是偶发红，
+    /// 红的还是"角上仍是白的"这种假象（实测约四次一次）。等它变暗，最多两秒；
+    /// 等不到就把原样交回断言，那时红的是产品，不是取样时机。</para>
+    /// </summary>
+    private static Point RoundedCornerOf(Window window, Border root)
+    {
+        var at = root.TranslatePoint(new Point(0, 0), window)!.Value;
+        var probe = new Point(at.X + 1, at.Y + 1);
+        var face = root.Background is { } brush ? Pixels.Luminance(Pixels.Of(brush)) : 1d;
+        var deadline = Environment.TickCount64 + 2000;
+
+        while (Environment.TickCount64 < deadline && Pixels.Luminance(Pixels.At(window, probe)) > face - 0.08)
+        {
+            UiWait.Pump(30);
+        }
+
+        return probe;
+    }
+
+    /// <summary>
+    /// 下拉框右边那一格箭头：1.8.8 记下的一处"已知未修"，1.9.0 修掉了。
+    /// <para>那块灰<strong>不在下拉框自己的面皮上</strong>，而在模板里内嵌的那枚
+    /// <c>ToggleButton</c>（箭头）<strong>自己的</strong>面皮上 —— 只钉外层那枚够不着，
+    /// 实测按住时那一格里有 445 个 <c>#686868</c>。用户报的"按下漏出黑色背景"是同一族，
+    /// 所以这一处不能再留着。</para>
+    /// <para>顺带量描边：主题给 ComboBox 自带一圈 <c>#888888</c>（1 DIP 实线），
+    /// 比同一张表单里输入框那档 <c>Border.Strong</c> 重两级 —— 与 1.8.5 那圈树描边同一族。</para>
+    /// <para>量的是<strong>整片</strong>而不是一粒像素：箭头那格只有 16 DIP 宽，
+    /// 圆角与图标描边都会让单点取样碰巧躲过去。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void PressingTheComboBoxArrowDoesNotShowTheThemeGray()
+    {
+        var window = new NewArchiveWindow(TestLang.Chinese()).Shown();
+        var combo = VisualQuery.Of<ComboBox>(window).First();
+        var at = combo.TranslatePoint(new Point(combo.Bounds.Width - 8, combo.Bounds.Height / 2), window)!.Value;
+        Pixels.At(window, at);
+
+        window.MouseMove(at);
+        UiWait.Pump(60);
+        window.MouseDown(at, MouseButton.Left);
+        UiWait.Pump(120);
+
+        var gray = 0;
+        for (var dy = -14; dy <= 14; dy++)
+        {
+            for (var dx = -14; dx <= 14; dx++)
+            {
+                if (Pixels.Same(Pixels.At(window, at + new Point(dx, dy)), ThemeGray))
+                {
+                    gray++;
+                }
+            }
+        }
+
+        window.MouseUp(at, MouseButton.Left);
+        UiWait.Pump(60);
+        // 按下去已经把下拉列表弹出来了。**必须收回去再走**：1.8.6 那条"开着对话框的用例会把
+        // 测试主机打崩"是同一件事，而这次的表现是下一个用例（子菜单圆角）偶发红 ——
+        // 一个开着的弹窗留在没人关的窗口里，会污染后面按"当前有没有开着的弹窗"取样的用例。
+        combo.IsDropDownOpen = false;
+        UiWait.Pump(60);
+
+        Assert.True(gray == 0,
+            $"按住下拉框的箭头，那一格里有 {gray} 个 #686868 像素（主题那块灰） —— "
+            + "灰是涂在内嵌那枚 ToggleButton 的面皮上的，Chrome.PinFace 得连着它一起钉");
+
+        // 描边：沿着下边缘走一遍，主题那圈 #888888 一个像素都不该出现。
+        var box = combo.TranslatePoint(new Point(0, combo.Bounds.Height - 1), window)!.Value;
+        var heavy = 0;
+        for (var x = 4; x < combo.Bounds.Width - 4; x++)
+        {
+            if (Pixels.Same(Pixels.At(window, new Point(box.X + x, box.Y)), ThemeBorder))
+            {
+                heavy++;
+            }
+        }
+
+        Assert.True(heavy == 0,
+            $"下拉框的下边缘有 {heavy} 个主题的 #888888 描边像素 —— "
+            + "同一张表单里的输入框是 Border.Strong，两种描边读起来就是\"这个框被加重了\"");
+    }
+
 }

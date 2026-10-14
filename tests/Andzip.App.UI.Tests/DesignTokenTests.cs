@@ -146,7 +146,8 @@ public class DesignTokenTests
     }
 
     /// <summary>
-    /// 每一颗按钮都要把主题那份 <c>:pressed</c> 挡在面皮外（<c>Chrome.PinFace</c>）。
+    /// <summary>
+    /// 每一颗按钮与下拉框都要把主题那份 <c>:pressed</c> 挡在面皮外（<c>Chrome.PinFace</c>）。
     /// <para>为什么必须一个个接线点接：<strong>主题按下的那块深灰涂在模板子元素
     /// <c>PART_ContentPresenter</c> 上，应用层样式压不过它，只有给那枚子元素写局部值才压得过</strong>
     /// （规范 §二那条实测）。所以这件事没有"装一次全局就好"的写法 ——
@@ -156,15 +157,15 @@ public class DesignTokenTests
     /// headless 里量到那块灰（合成按住真的会触发伪类），但它只能盯住它当场构造出来的那颗控件;
     /// 设置窗口那九个「应用」按钮、表头、快捷方式行……都要构造一遍既不划算也不好维护。
     /// 扫源码证明的是"没有漏接"，两者加起来才把这类问题封住。</para>
-    /// <para>只查 <c>Button</c> 与 <c>ToggleButton</c>：<c>CheckBox</c> 的量测显示主题的伪类不碰它，
-    /// <c>ComboBox</c> 自己那块也不碰（它的问题是内嵌的箭头 —— 那是另一枚 ToggleButton，
-    /// 见规范 §二末行，这一项是已知未修的残留）。</para>
+    /// <para>查 <c>Button</c> / <c>ToggleButton</c> / <c>ComboBox</c>：<c>CheckBox</c> 的量测显示主题的
+    /// 伪类不碰它。<c>ComboBox</c> 的灰又分两层 —— 字段那层面皮，和右边那格箭头（模板里内嵌的
+    /// 一枚 <c>ToggleButton</c>）自己的面皮，<c>Picker</c> 走的 <c>PinFace</c> 两层都钉。</para>
     /// </summary>
     [Fact]
     public void EveryButtonPinsItsTemplateFace()
     {
         var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");
-        string[] pinned = [".Ghost(", ".Accent(", ".Danger(", ".Lift(", ".ToggleSwitch(", ".PinFace("];
+        string[] pinned = [".Ghost(", ".Accent(", ".Danger(", ".Lift(", ".ToggleSwitch(", ".PinFace(", ".Picker("];
         var offenders = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
@@ -179,7 +180,8 @@ public class DesignTokenTests
             var lines = File.ReadAllLines(file);
             var creates = Enumerable.Range(0, lines.Length)
                 .Where(i => lines[i].Contains("new Button", StringComparison.Ordinal)
-                            || lines[i].Contains("new ToggleButton", StringComparison.Ordinal))
+                            || lines[i].Contains("new ToggleButton", StringComparison.Ordinal)
+                            || lines[i].Contains("new ComboBox", StringComparison.Ordinal))
                 .ToList();
 
             for (var c = 0; c < creates.Count; c++)

@@ -132,7 +132,7 @@ public sealed class NewArchiveWindow : Window
             SelectedIndex = 0,
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Picker();
         _formatCombo.SelectionChanged += (_, _) => OnFormatChanged();
 
         _passwordButton = new Button { Content = lang.Label("TEXT_BTN_SET_PASSWORD"), MinWidth = 150 }.Ghost();
@@ -147,7 +147,7 @@ public sealed class NewArchiveWindow : Window
             SelectedIndex = Math.Max(0, CompressionLevelOption.PositionOf(_defaults.Level)),
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Picker();
 
         _volumeCombo = new ComboBox
         {
@@ -157,7 +157,7 @@ public sealed class NewArchiveWindow : Window
             SelectedIndex = 0,
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Picker();
         _volumeCombo.SelectionChanged += async (_, _) => await OnVolumeChangedAsync();
 
         _hint = new TextBlock { Foreground = Design.Semantic.Danger, TextWrapping = TextWrapping.Wrap, IsVisible = false };
@@ -185,7 +185,7 @@ public sealed class NewArchiveWindow : Window
             SelectedIndex = 0,
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Picker();
 
         _encryptionCombo = new ComboBox
         {
@@ -195,7 +195,7 @@ public sealed class NewArchiveWindow : Window
             SelectedIndex = EncryptionMethodOption.Default.Id,
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Picker();
 
         // 线程数现在真的生效：native 引擎的 LZMA2/BZip2/XZ/Zstd 都是多线程编码器。
         _threadsCombo = new ComboBox
@@ -212,7 +212,7 @@ public sealed class NewArchiveWindow : Window
             SelectedIndex = 0,
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        }.Picker();
 
         _symlinkCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_STORE_SYMLINKS"), IsEnabled = false };
         _fileCommentCheck = new CheckBox { Content = lang.Label("TEXT_CHECK_FILE_COMMENT") };

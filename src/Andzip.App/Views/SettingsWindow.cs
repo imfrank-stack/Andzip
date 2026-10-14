@@ -1252,7 +1252,7 @@ public sealed class SettingsWindow : Window
                     .ToList(),
                 Width = 260,
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Picker();
             _language.SelectionChanged += (_, _) => UpdateApplyState();
 
             _applyButton = new Button
@@ -1669,7 +1669,7 @@ public sealed class SettingsWindow : Window
                     .ToList(),
                 Width = 220,
                 HorizontalAlignment = HorizontalAlignment.Left,
-            };
+            }.Picker();
 
             _noRootFolder = Check(lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT"), UpdateApplyState,
                 lang.Label("TEXT_SETTINGS_COMPRESS_NO_ROOT_HINT"));
