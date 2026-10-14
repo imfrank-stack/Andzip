@@ -286,6 +286,30 @@ public class UiFeatureWiringTests
         }
     }
 
+    /// <summary>
+    /// 「双击那一档就是智能解压」这句话的全部内容：双击解析出来的任务，必须与右键动词
+    /// 带 <c>/task=extract</c> 解析出来的是<strong>同一个</strong>。
+    /// <para>这一条故意不走窗口：两条路在 <c>App.TryResolveTask</c> 汇合，那里既不在界面上
+    /// （没有主窗口的那条路径）也不在内核里（内核看不见设置），除了这里没别的地方能问。
+    /// 名字改了而路由没改，是这种"文案与实现各说各话"最常见的样子 —— 而用户双击出来的
+    /// 结果对不对，只有这一条断言管得着。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheDoubleClickChoiceResolvesToTheSameTaskAsTheVerb()
+    {
+        var settings = new AppSettings();
+        settings.SetString(SettingKeys.DoubleClickAction, "extract");
+
+        Assert.True(App.TryResolveTask(["D:\\a\\docs.zip"], settings, out var byDoubleClick));
+        Assert.True(ShellTasks.TryParse(["D:\\a\\docs.zip", "/task=extract"], out var byVerb));
+        Assert.Equal(byVerb, byDoubleClick);
+        Assert.Equal(ShellTask.Extract, byDoubleClick);
+
+        // 没设过这一项时还是开主窗口：改名字不该顺手改掉默认行为
+        Assert.False(App.TryResolveTask(["D:\\a\\docs.zip"], new AppSettings(), out var untouched));
+        Assert.Equal(ShellTask.Open, untouched);
+    }
+
     [AvaloniaFact]
     public void GeneralPageOkDoesNotEraseWhatTheExtractPageApplied()
     {
@@ -538,6 +562,96 @@ public class UiFeatureWiringTests
             listed);
     }
 
+    /// <summary>
+    /// 高级设置里的「压缩方法」换成 7z 的扩展方法时，那一句兼容性警告要<strong>跟着起落</strong>。
+    /// <para>问的是「用户这时看得见什么」（<see cref="VisualQuery.VisibleTexts"/> 只走真看得见的那一支），
+    /// 不是读 <c>_methodNote.IsVisible</c>：前者才与屏幕上那一格一致。</para>
+    /// <para>两头都得管住：常驻这一行会给 LZMA2 / PPMd 那几档安上一句它们根本不适用的警告，
+    /// 变成噪音；反过来任何一种扩展方法不警告，用户就是在毫不知情的情况下压出一个
+    /// 原版 7-Zip 打不开的包。两个方向的漏网都由下面那两轮循环抓住。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void SevenZipMethodWarningFollowsTheSelectedMethod()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new NewArchiveWindow(lang).Shown();
+
+        // 方法下拉藏在「更多选项」→「高级设置 »」两层后面，都点开才是用户看到的那一格。
+        VisualQuery.Of<CheckBox>(dialog)
+            .Single(check => Equals(VisualQuery.TextOf(check), lang.Get("TEXT_CHECK_MORE_OPTIONS")))
+            .IsChecked = true;
+        Clicker.Invoke(FindButton(dialog, lang.Get("TEXT_BTN_ADVANCED_SETTINGS")));
+
+        Pick(FormatCombo(dialog), "7Z");
+        var methods = ItemsOf(MethodCombo(dialog));
+        var note = lang.Label("TEXT_METHOD_EXTENSION_NOTE");
+
+        // 面板顶上的那句也要跟着换：这一格的方法表本来就是按格式给的，顶着一句
+        // 「ZIP 压缩设置」挑 7z 独有的 LZ4 是自我矛盾（2.2.0 真机截图里露出来的）。
+        Assert.Contains(lang.Format("TEXT_ADVANCED_TITLE", ("format", "7Z")), VisualQuery.VisibleTexts(dialog));
+        Assert.DoesNotContain(lang.Format("TEXT_ADVANCED_TITLE", ("format", "ZIP")), VisualQuery.VisibleTexts(dialog));
+
+        // 默认那一档不许带警告 —— 它是唯一"发给别人也打得开"的选项。
+        Assert.Equal("LZMA2", methods[0]);
+        Assert.DoesNotContain(note, VisualQuery.VisibleTexts(dialog));
+
+        foreach (var name in WarnsAboutCompatibility)
+        {
+            Pick(MethodCombo(dialog), name);
+            Assert.Contains(note, VisualQuery.VisibleTexts(dialog));
+        }
+
+        foreach (var name in NoWarningNeeded(lang))
+        {
+            Pick(MethodCombo(dialog), name);
+            Assert.DoesNotContain(note, VisualQuery.VisibleTexts(dialog));
+        }
+
+        // 两轮清单必须把这张下拉用完，否则上面只是在测自己写的名单：
+        // 表里新加一个方法而测试没跟上，就得在这里失败。
+        var expected = WarnsAboutCompatibility.Concat(NoWarningNeeded(lang)).OrderBy(s => s).ToArray();
+        Assert.Equal(expected, methods.OrderBy(s => s).ToArray());
+    }
+
+    /// <summary>
+    /// 高级设置面板那句标题要报出<strong>当前这个</strong>格式的名字。
+    /// <para>它过去写死成「ZIP 压缩设置」（<c>TEXT_ADVANCED_TITLE_ZIP</c>），而这一格的内容
+    /// 早就是按格式给的 —— 2.2.0 给 7z 补上五种扩展方法之后，真机截图里出现了
+    /// 「标题说 ZIP、下拉里选 LZ4」的自我矛盾。测试按"换格式之后看得见什么"来问，
+    /// 所以把 <c>_advancedTitle.Text</c> 那行删掉就立刻红。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheAdvancedPanelHeaderNamesTheSelectedFormat()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new NewArchiveWindow(lang).Shown();
+
+        VisualQuery.Of<CheckBox>(dialog)
+            .Single(check => Equals(VisualQuery.TextOf(check), lang.Get("TEXT_CHECK_MORE_OPTIONS")))
+            .IsChecked = true;
+        Clicker.Invoke(FindButton(dialog, lang.Get("TEXT_BTN_ADVANCED_SETTINGS")));
+
+        string Header(string formatId) => lang.Format("TEXT_ADVANCED_TITLE", ("format", formatId));
+        var visible = VisualQuery.VisibleTexts(dialog);
+        Assert.Contains(Header("ZIP"), visible);
+        Assert.DoesNotContain(Header("7Z"), visible);
+
+        Pick(FormatCombo(dialog), "7Z");
+        visible = VisualQuery.VisibleTexts(dialog);
+        Assert.Contains(Header("7Z"), visible);
+        Assert.DoesNotContain(Header("ZIP"), visible);
+
+        // 换回去也要跟着回去：只处理"变"不处理"回"，标题会停在最后一个选过的格式上。
+        Pick(FormatCombo(dialog), "ZIP");
+        Assert.Contains(Header("ZIP"), VisualQuery.VisibleTexts(dialog));
+    }
+
+    /// <summary>7z 扩展方法在下拉框里显示的名字（专有名词不翻译，Zstd 显示 "Zstandard"）。</summary>
+    private static readonly string[] WarnsAboutCompatibility = ["Zstandard", "LZ4", "LZ5", "Lizard", "Brotli"];
+
+    private static IEnumerable<string> NoWarningNeeded(LangCatalog lang)
+        => ["LZMA2", "LZMA", "PPMd", "BZip2", "Deflate", lang.Label("TEXT_METHOD_STORE")];
+
     private static (string Directory, string File) SeedFile(string name)
     {
         var directory = Directory.CreateTempSubdirectory("andzip-seed-").FullName;
@@ -554,6 +668,31 @@ public class UiFeatureWiringTests
 
     private static ComboBox FormatCombo(Window window)
         => VisualQuery.Of<ComboBox>(window).Single(combo => ItemsOf(combo).Contains("ZIP"));
+
+    /// <summary>方法下拉：按<strong>值类型</strong>认，不按位置。高级面板里连着三个下拉，
+    /// 顺序一旦调整，"第 N 个"就会安静地选中另一个。</summary>
+    private static ComboBox MethodCombo(Window window)
+        => VisualQuery.Of<ComboBox>(window).Single(combo =>
+            combo.Items.OfType<DisplayItem>().Any(item => item.Value is CompressionMethodOption));
+
+    /// <summary>在下拉框里选中某一项（按用户看到的文字）。找不到就是清单与界面已经不一致。</summary>
+    private static void Pick(ComboBox combo, string text)
+    {
+        var items = ItemsOf(combo);
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (items[index] != text)
+            {
+                continue;
+            }
+
+            combo.SelectedIndex = index;
+            UiWait.Pump(20);
+            return;
+        }
+
+        Assert.Fail($"下拉框里没有「{text}」这一项，界面现在是：{string.Join(" / ", items)}。");
+    }
 
     private static IReadOnlyList<string> ItemsOf(ItemsControl combo)
         => [.. combo.Items.Select(item => item?.ToString() ?? string.Empty)];

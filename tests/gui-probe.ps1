@@ -26,7 +26,11 @@ param(
     [switch]$KeepOpen
 )
 
+if ($Steps -eq $null) { $Steps = @() }
 if ($Steps.Count -eq 1 -and $Steps[0].Contains(';')) { $Steps = $Steps[0].Split(';') }
+# Same escape hatch for the program's own arguments: from bash an unquoted comma is not
+# reliable (PowerShell sees one string), while ';' survives the whole command line.
+if ($ExeArgs.Count -eq 1 -and $ExeArgs[0].Contains(';')) { $ExeArgs = $ExeArgs[0].Split(';') }
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing

@@ -78,6 +78,7 @@ internal static class Program
         TestGlobalInfo();
         TestFormatsAndCodecs();
         TestInMemoryRoundTrip();
+        TestExtensionCodecs();
         TestMultiEntryNested();
         TestDirectoryRoundTripOnDisk(Path.Combine(tempRoot, "tree"));
         TestPasswordRoundTrips();
@@ -175,7 +176,24 @@ internal static class Program
         Check("LZMA2 hex id non-empty", codecs.First(c => c.Name.Equals("LZMA2", StringComparison.OrdinalIgnoreCase)).IdHex.Length > 0);
         Check("Deflate hex id non-empty", codecs.First(c => c.Name.Equals("Deflate", StringComparison.OrdinalIgnoreCase)).IdHex.Length > 0);
         Check("Copy hex id non-empty", codecs.First(c => c.Name.Equals("Copy", StringComparison.OrdinalIgnoreCase)).IdHex.Length > 0);
+
+        // The five 7z-only extension coders (7-Zip-zstd / NanaZip lineage). They are
+        // compiled in by -ExtraCodecs, and the SHIPPING build must have them: the UI
+        // offers them in the 7z method list (CompressionMethodOption.ForFormat), so an
+        // engine built without that switch would offer five options that all fail.
+        // This is what turns "someone rebuilt the engine plainly" into a build failure
+        // here instead of a user-visible surprise later.
+        foreach (var name in ExtensionCodecNames)
+        {
+            var codec = codecs.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            Check($"extension codec {name} is registered (rebuild the engine with "
+                + "build-windows.ps1 -ExtraCodecs)", codec is not null);
+            Check($"extension codec {name} can encode", codec is not null && codec.CanEncode);
+        }
     }
+
+    /// <summary>Method names exactly as the engine registers them (upper case).</summary>
+    private static readonly string[] ExtensionCodecNames = ["ZSTD", "LZ4", "LZ5", "LIZARD", "BROTLI"];
 
     private static void TestInMemoryRoundTrip()
     {
@@ -213,6 +231,81 @@ internal static class Program
             CheckEq("zip format name", "zip", r.FormatName);
             var back = r.ReadEntry(0);
             Check("zip payload matches exactly", back.SequenceEqual(payload));
+        }
+    }
+
+    /// <summary>
+    /// Creates a real 7z with each extension method and reads the bytes back, in memory.
+    /// <para>
+    /// Why this exists at all: a coder being *registered* is not evidence it can *write*.
+    /// An earlier note in this project claimed these five round-tripped when they did not
+    /// -- every create died in UpdateItems with E_INVALIDARG -- and the claim survived
+    /// because nothing in a test process ever tried. Since the UI now offers them, the
+    /// proof lives in the gate that runs before every package (build.ps1 step 2).
+    /// </para>
+    /// <para>
+    /// Two payloads on purpose: compressible text (catches a coder that emits a valid
+    /// header but no usable blocks) and incompressible random bytes (catches a coder that
+    /// only survives by silently storing). Levels 0 / 5 / 9 cover the tier ends; the CLI
+    /// sweep that first established this ran all five tiers plus dict / password /
+    /// non-solid / multi-input variants.
+    /// </para>
+    /// </summary>
+    private static void TestExtensionCodecs()
+    {
+        Section("7z extension codecs (create + read back)");
+
+        var text = Encoding.UTF8.GetBytes(
+            "the quick brown fox 0123456789 " + new string('z', 4096) + " 中文内容也要原样回来");
+        var random = new byte[9001];
+        new Random(20261014).NextBytes(random);
+
+        foreach (var method in ExtensionCodecNames)
+        {
+            foreach (var level in new[] { 0, 5, 9 })
+            {
+                foreach (var (label, payload) in new (string, byte[])[] { ("text", text), ("random", random) })
+                {
+                    var what = $"{method} x{level} {label}";
+
+                    byte[] archive;
+                    using (var w = ArchiveWriter.CreateInMemory(new CreateOptions
+                    {
+                        Format = "7z",
+                        Method = method,
+                        Level = level,
+                    }))
+                    {
+                        w.AddData(payload, "hello.txt");
+                        archive = w.FinishToBytes();
+                    }
+
+                    Check($"{what}: wrote something", archive.Length > 0);
+
+                    using var r = ArchiveReader.Open(archive, new OpenOptions { ForcedFormat = "7z" });
+                    CheckEq($"{what}: one entry", 1ul, r.EntryCount);
+                    Check($"{what}: payload matches exactly", r.ReadEntry(0).SequenceEqual(payload));
+                }
+            }
+        }
+
+        // The red line seen from the engine, not from the UI: the interface simply does
+        // not offer an extension method for ZIP, but "nobody changed that list" is not
+        // a guarantee. The zip handler must refuse it, and must not hand back a file.
+        foreach (var method in ExtensionCodecNames)
+        {
+            CheckThrows<AndzipException>($"zip refuses {method}", () =>
+            {
+                using var w = ArchiveWriter.CreateInMemory(new CreateOptions { Format = "zip", Method = method });
+                w.AddData(text, "hello.txt");
+                var bytes = w.FinishToBytes();
+                if (bytes.Length > 0)
+                {
+                    // A ZIP that nobody but us can open is the failure mode the user
+                    // forbade; an empty refusal is acceptable, a written one is not.
+                    throw new AndzipException(AzResult.ErrorUnsupported, "writer", "a ZIP was produced");
+                }
+            });
         }
     }
 

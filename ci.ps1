@@ -3,10 +3,10 @@
   Windows, so "it passes in CI" and "it passes on my machine" are the same claim.
 
   Sequence (each step aborts on failure):
-    1. compression engine: configure + build + 532 native assertions + export-table check
+    1. compression engine: configure + build + 537 native assertions + export-table check
     2. managed solution build
     3. tests + packaging via build.ps1, which itself gates on
-       dotnet test AND the console self-check (69)
+       dotnet test AND the console self-check (174)
 
   Why step 3 does not just call "dotnet test": Andzip.Native.Tests is a console
   runner without an xUnit adapter, so "dotnet test" silently runs zero of its
@@ -67,7 +67,10 @@ if ($SkipEngine) {
     Write-Host "`n=== engine build skipped (-SkipEngine) ==="
 } else {
     Invoke-Gate 'engine: shared library + native tests' {
-        Invoke-ChildPowerShell -Script (Join-Path $root 'native\scripts\build-windows.ps1') -ScriptArgs @('-RunTests')
+        # -ExtraCodecs is NOT optional any more: the UI offers ZSTD/LZ4/LZ5/LIZARD/BROTLI
+        # for 7z, and Andzip.Native.Tests fails the package when the staged engine lacks
+        # them -- an engine built plainly would ship five menu items that all fail.
+        Invoke-ChildPowerShell -Script (Join-Path $root 'native\scripts\build-windows.ps1') -ScriptArgs @('-ExtraCodecs', '-RunTests')
     }
     Invoke-Gate 'engine: export table matches andzip.h' {
         & (Join-Path $root 'native\scripts\check-exports.ps1') (Join-Path $root 'build\native\bin\andzip_core.dll')
@@ -78,7 +81,7 @@ if ($SkipEngine) {
         # format table. Gate it, do not assume it.
         Invoke-Gate 'engine: static library + native tests' {
             Invoke-ChildPowerShell -Script (Join-Path $root 'native\scripts\build-windows.ps1') `
-                -ScriptArgs @('-Static', '-BuildRoot', (Join-Path $root 'build\native-static'), '-RunTests')
+                -ScriptArgs @('-Static', '-ExtraCodecs', '-BuildRoot', (Join-Path $root 'build\native-static'), '-RunTests')
         }
     }
 }

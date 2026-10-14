@@ -33,7 +33,8 @@ if (-not (Test-Path -LiteralPath $engine)) {
     throw @"
 $engine is missing.
 Restore it by rebuilding the compression engine:
-    powershell -ExecutionPolicy Bypass -File native\scripts\build-windows.ps1 -RunTests
+    powershell -ExecutionPolicy Bypass -File native\scripts\build-windows.ps1 -ExtraCodecs -RunTests
+(-ExtraCodecs is required: the 7z method list offers ZSTD/LZ4/LZ5/LIZARD/BROTLI.)
 "@
 }
 

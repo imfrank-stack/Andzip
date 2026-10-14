@@ -37,7 +37,8 @@ if (-not $SkipTests) {
 
     # Andzip.Native.Tests is a console self-check runner (deliberately xUnit-free), so
     # "dotnet test" discovers zero tests in it. Run it explicitly, otherwise the gate
-    # silently skips the 69 ABI / marshalling / handle-lifetime checks.
+    # silently skips the 174 ABI / marshalling / handle-lifetime checks -- including
+    # the five extension coders the 7z method dropdown now offers.
     $shellProj = Join-Path $root "src\Andzip.Native.Tests\Andzip.Native.Tests.csproj"
     dotnet run --project $shellProj -c Release --no-build
     if ($LASTEXITCODE -ne 0) { throw "Native shell checks failed; packaging aborted (requirements §11.1)." }

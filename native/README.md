@@ -86,10 +86,15 @@ pwsh native/scripts/build-windows.ps1                    # Release x64
 pwsh native/scripts/build-windows.ps1 -RunTests          # 构建后跑 532 条原生断言
 pwsh native/scripts/build-windows.ps1 -Arch arm64
 pwsh native/scripts/build-windows.ps1 -Config Debug -RunTests
-pwsh native/scripts/build-windows.ps1 -ExtraCodecs       # 尝试编入 lz4/lz5/lizard/brotli 编码器（当前会失败，见「已知限制」）
+pwsh native/scripts/build-windows.ps1 -ExtraCodecs       # 编入 zstd/lz4/lz5/lizard/brotli 编码器（产品构建要这一份，见下）
 pwsh native/scripts/build-windows.ps1 -Static -BuildRoot build/native-static -RunTests
 pwsh native/scripts/build-windows.ps1 -NoGui -NoTests    # 只要库和 CLI
 ```
+
+**产品出的是带 `-ExtraCodecs` 的那一份。** `ci.ps1` 与 `build.ps1` 都显式带上它：不带时
+五个编码器根本不登记，`src/Andzip.Native.Tests` 会失败并回一句"rebuild the engine with
+-ExtraCodecs"。CMake 选项 `ANDZIP_EXTRA_CODECS` 仍默认 `OFF`，因为手动构建里"只要库和
+CLI"这种用法不该被拖进多 1.6 MB 的编译时间 —— 但那条默认不适用于打包。
 
 脚本会把 `vcvarsall.bat` 的环境导入当前进程，所以在普通 PowerShell 或 Git Bash 里都能
 直接跑，不必开开发者命令提示符。构建完 DLL 之后它会自动执行
@@ -290,15 +295,16 @@ Linux 作业时发现的（见 `../README.md` 第七节第 13 条）。
 从构建好的库里实测（`azcore formats`、`azcore codecs`），默认配置
 （`ANDZIP_EXTRA_CODECS=OFF`）：
 
-- **可读容器格式 60 个**，其中 **可写 7 个**：`7z`、`zip`、`tar`、`gzip`、`bzip2`、
-  `xz`、`wim`。
-- **编解码器 25 个**，除 RAR 外均可编也可解：`LZMA2`、`LZMA`、`PPMD`、`BZip2`、
+- **可读容器格式 64 个**，其中 **可写 11 个**：`7z`、`zip`、`tar`、`gzip`、`bzip2`、
+  `xz`、`wim`，加上带 `-ExtraCodecs` 才有的 `lz4`、`lz5`、`lizard`、`brotli`。
+- **编解码器 30 个**，除 RAR 外均可编也可解：`LZMA2`、`LZMA`、`PPMD`、`BZip2`、
   `Deflate`、`Deflate64`、`Copy`、`Delta`、`BCJ`、`BCJ2`、`Swap2`、`Swap4`、`7zAES`、
-  `AES256CBC`，以及 `Rar1/Rar2/Rar3` 解码器。
+  `AES256CBC`，加上 `ZSTD`、`LZ4`、`LZ5`、`LIZARD`、`BROTLI`（这五个同样要 `-ExtraCodecs`），
+  以及 `Rar1/Rar2/Rar3/Rar5` 解码器。
 - 已注册 `ARM`、`ARM64`、`ARMT`、`IA64`、`PPC`、`SPARC`、`RISCV` 转换过滤器，所以
   7z/zip 里的可执行数据自动获得分支调用优化。
-- **Zstandard**：只有解码（7-Zip 的 `C/ZstdDec.c` 加 `ZstdHandler`）。编码**当前不可得**：
-  fork 的 `ZstdEncoder.cpp` 随 `cankao/7-Zip-zstd-master.zip` 一起没了，见下面「额外编码器」那条。
+- **Zstandard 编与解都在**（`-ExtraCodecs`）：解码用原生 `NCompress::NZstd` 那一份，编码用
+  fork 的 `NCompress::NZSTD`，两份并存 —— 后者替换不掉前者，见下面「额外编码器」那条。
 - `rar`、`cab`、`iso`、`nsis`、`wim`、`chm`、`apfs`、`ext`、`fat`、`ntfs`、`udf`、
   `squashfs`、`dmg`、`vhd/vhdx`、`rpm`、`arj`、`lzh` 等其余格式随引擎免费提供。
 
@@ -483,26 +489,27 @@ finish 之后再用、分卷请求被拒）。
 - **`word_size` 的含义随方法而变。** 依据方法名它分别变成 PPMd 的 order（`"o"`）、LZMA 的
   `lc`、或 BZip2 的 pass 数，其余情况下被忽略并给出警告。需要更精确的控制请用
   `extra_properties`。
-- **额外编码器是可选的，而且到 2026-10-12 为止仍未跑通。** `cmake/codecs.cmake` 当初是按
-  vendor 之后的文件布局**写**的，从没真编过一次；打开 `-ExtraCodecs` 立刻暴露三个布局问题，
-  已修的两个：
+- **额外编码器要显式打开，而产品构建是打开的。** `cmake/codecs.cmake` 当初是按 vendor 之后的
+  文件布局**写**的，从没真编过一次；第一次打开 `-ExtraCodecs` 立刻暴露三个布局问题，现在三个都修了：
   - `CMAKE_CURRENT_LIST_DIR` 在**函数体内**取的是调用方的目录（`native/`），不是模块自己的
     目录（`native/cmake/`），于是 `third_party/codecs` 被解析到仓库根上面一层。
     现在改成与 `cmake/7zip-sources.cmake` 同样的写法：在文件作用域算好 `AZ_CODEC_ROOT`。
   - zstd 的 `zstd_internal.h` 里是 `#include "../hashes/xxhash.h"` —— `C/hashes/` 是
     7-Zip-zstd fork 的布局，我们的树里没有（xxhash 本体在 `third_party/codecs/xxhash/`）。
     配置期从那份唯一副本里物化出期望路径。
-  还没修的是 Lizard：它的 `entropy/*.h` 写的是 `#include "Zstandard/common/mem.h"`，
-  而我们 vendor 的 zstd 是**平铺**在 `C/zstd/*.c`，没有 `common/` 这一层。
-- **Zstandard 的编码器拿不回来。** fork 的 `ZstdEncoder.cpp` 在 `NCompress::NZstd` 命名空间里，
-  只存在于 `cankao/7-Zip-zstd-master.zip`，而那个归档已经不在磁盘上了。NanaZip 里那份
-  `NanaZip.Core/Extensions/ZSCodecs/ZstdEncoder.hpp` 是 `namespace NanaZip::Core::Extensions`
-  —— 应用层的包装，注册不成引擎 codec，不能直接搬。所以 zstd 仍然只有解码
-  （`C/ZstdDec.c`），`codecs.cmake` 里也不再要求 `ZstdEncoder.cpp` / `ZstdRegister.cpp`。
-- **LZ4 / LZ5 / Lizard / Brotli 的 7-Zip 胶水层已经 vendor 进来**（24 个文件，来自
-  `zipcopy/NanaZip-main/NanaZip.ZS.Codecs/SevenZip/CPP/7zip`，命名空间正确，
-  且 `C/zstdmt/` 里已有它们依赖的 `lz4-mt.h` / `lz5-mt.h` / `lizard-mt.h` / `brotli-mt.h`）。
-  开启条件仍未满足（上面那个 Lizard 的 include 布局），所以默认 `OFF`、产品不受影响。
+  - Lizard（和 LZ5）的 `entropy/*.h` 写的是 `#include <Zstandard/common/mem.h>`，而我们 vendor 的
+    zstd 是**平铺**在 `C/zstd/*.c`，没有 `common/` 这一层。解决办法不是把真头文件复制一份
+    （两份 `mem.h` 会各自漂移），也不是建符号链接（普通用户权限建不出来）：配置期在构建树里
+    **生成一层转发头**（`codecs.cmake` 的 `ZSTD_SHIM`），每个只有 `#include "<绝对路径>"` 一行。
+    绝对路径是有意的：转发头里若写相对包含，它会先匹配到自己然后无限递归。
+- **Zstandard 的编码器来自 fork，与原生那个并存。** stock 7-Zip 自带一个只解不压的
+  `NCompress::NZstd`，`Archive/Zip` 与 `ZstdHandler.cpp` 用的是它；fork 的 `NCompress::NZSTD`
+  换不掉它（直接 C2039 编不过）。所以 `vendor-sources.ps1 -ExtraCodecs` 把 fork 那一对落成
+  `Compress/ZstdFork{Decoder,Encoder,Register}.cpp`，文件名与命名空间都不撞，两边一起编。
+- **打开开关的代价与后果都是量出来的**：`andzip_core.dll` 1,747,968 → 3,415,552 字节，导出仍是
+  41 个（一个没多——编码器藏在 DLL 内部注册，不对外暴露符号）。7z 写入路径对五个方法一律接受，
+  `Andzip.Native.Tests` 按 0/5/9 三档各压一遍再读回逐字节比对；**ZIP 仍然拒绝**（`E_NOTIMPL`），
+  这条是产品红线，不是一句"暂时没做"：非标准方法号写出的 zip 别的软件打不开。
 
 ---
 
@@ -520,9 +527,11 @@ node native/scripts/gen-sources.mjs        # 重新生成源文件清单（这�
 
 有两点是脚本刻意固化下来的，因为不明显：
 
-- **`vendor-sources.ps1 -ExtraCodecs` 是独立的模式。** 7-Zip-zstd fork 的
-  `ZstdDecoder.h` 与原生的 `Archive/ZstdHandler.cpp` 不兼容，所以开启额外编码器必须同时替换
-  这个 handler。无条件叠加 fork 的文件会编译失败，这就是默认 vendor 不带胶水层的原因。
+- **`vendor-sources.ps1 -ExtraCodecs` 是独立的模式。** fork 的 zstd 编码器与原生的那个撞名又撞文件名
+  （两边都叫 `ZstdDecoder.cpp` / `ZstdEncoder.cpp`），所以这一模式把 fork 那一对**改名**落成
+  `ZstdFork{Decoder,Encoder,Register}.*` 并改写其中的自包含；不替换原生那份，因为
+  `ZipHandler.cpp` / `ZstdHandler.cpp` 引用的就是原生命名空间。胶水层要落进引擎树里才能按
+  相对路径解析自己的 include，所以它不属于默认 vendor —— 默认那份是"干净的原生 7-Zip"。
 - **`gen-sources.mjs` 会补两个上游清单里没有的文件。** `Bundles/Format7zF/Arc.mak` 是
   `7z.dll` 的配方，它把文件 I/O 和分卷拆分推给控制台/GUI 前端。由于没有 vendor 任何 `UI/`
   代码，`FileStreams.cpp` 是手工加进来的。`MultiOutStream.cpp` 也曾加上、之后又移除——见上面
@@ -546,7 +555,7 @@ node native/scripts/gen-sources.mjs        # 重新生成源文件清单（这�
 | zstd + zstdmt | `cankao/7-Zip-zstd-master.zip` | BSD-3-Clause 或 GPL-2.0（zstd）、MIT（zstdmt） |
 | LZ4、BLAKE3、xxHash | `cankao/NanaZip-main.zip` | BSD-2-Clause / CC0-or-Apache-2.0 / BSD-2-Clause |
 | Brotli、Lizard、LZ5 | `cankao/NanaZip-main.zip` | MIT / BSD-2-Clause |
-| 上述组件的 7-Zip 封装 | `cankao/NanaZip-main.zip` | MIT（NanaZip） |
+| 上述组件的 7-Zip 封装 | `cankao/NanaZip-main.zip`；zstd 那一对来自 `cankao/7-Zip-zstd-master.zip` | MIT（NanaZip）、BSD-3-Clause（fork 的 zstd 封装） |
 | Zig（仅用于交叉编译，不进产物） | ziglang.org | MIT |
 
 `native/src`、`native/include`、`native/tools`、`native/tests` 下的全部

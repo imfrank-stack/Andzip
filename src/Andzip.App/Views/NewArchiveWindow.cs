@@ -51,7 +51,9 @@ public sealed class NewArchiveWindow : Window
     private readonly CheckBox _separateCheck;
     private readonly Border _advancedPanel;
     private readonly Button _advancedButton;
+    private readonly TextBlock _advancedTitle;
     private readonly ComboBox _methodCombo;
+    private readonly TextBlock _methodNote;
     private readonly ComboBox _encryptionCombo;
     private readonly ComboBox _threadsCombo;
     private readonly CheckBox _symlinkCheck;
@@ -187,6 +189,22 @@ public sealed class NewArchiveWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left,
         }.Picker();
 
+        // 选了扩展方法才说一句"这种包原版 7-Zip 打不开"。不做成一行常驻小字：
+        // 默认那几档（LZMA2 / LZMA / PPMd…）没有这个问题，一直写着反而变成噪音。
+        _methodNote = new TextBlock
+        {
+            Text = lang.Label("TEXT_METHOD_EXTENSION_NOTE"),
+            Foreground = Design.Ink.Secondary,
+            FontSize = Design.Type.Caption,
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+        };
+        _methodCombo.SelectionChanged += (_, _) => RefreshMethodNote();
+
+        // 面板标题跟着格式走：这一格里的方法表本来就是按格式给的（2.2.0 起 7z 有 11 项），
+        // 顶着一句「ZIP 压缩设置」挑 LZ4 是自我矛盾 —— 真机截图里就是这样露出来的。
+        _advancedTitle = SectionTitle(_lang.Format("TEXT_ADVANCED_TITLE", ("format", _currentFormat.Id)));
+
         _encryptionCombo = new ComboBox
         {
             ItemsSource = EncryptionMethodOption.All
@@ -247,8 +265,9 @@ public sealed class NewArchiveWindow : Window
                 Spacing = 10,
                 Children =
                 {
-                    SectionTitle(lang.Label("TEXT_ADVANCED_TITLE_ZIP")),
+                    _advancedTitle,
                     BuildFieldRow(lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), _methodCombo),
+                    _methodNote,
                     BuildFieldRow(lang.Label("TEXT_LABEL_ENCRYPTION_METHOD"), _encryptionCombo),
                     BuildFieldRow(lang.Label("TEXT_LABEL_CPU_THREADS"), _threadsCombo),
                     _symlinkCheck,
@@ -592,7 +611,13 @@ public sealed class NewArchiveWindow : Window
         _methodCombo.ItemsSource = items;
         var keep = previous is null ? -1 : items.FindIndex(item => Equals(item.Value, previous));
         _methodCombo.SelectedIndex = keep >= 0 ? keep : 0;
+        _advancedTitle.Text = _lang.Format("TEXT_ADVANCED_TITLE", ("format", format.Id));
+        RefreshMethodNote();
     }
+
+    /// <summary>只有选了 7z 的扩展方法才露出那一句说明（换格式、换方法都走这里）。</summary>
+    private void RefreshMethodNote()
+        => _methodNote.IsVisible = CompressionMethodOption.IsExtension(SelectedMethod());
 
     /// <summary>输出文件名以旧格式扩展名结尾时，替换为新格式扩展名（对齐参考软件的建议文件名行为）。</summary>
     private void SyncOutputExtension(ArchiveFormatOption oldFormat, ArchiveFormatOption newFormat)

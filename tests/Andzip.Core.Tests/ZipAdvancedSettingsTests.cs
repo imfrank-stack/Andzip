@@ -119,33 +119,61 @@ public class ZipAdvancedSettingsTests : IDisposable
         Assert.Empty(ArchiveFormatOption.FromId("ISO").Methods);
     }
 
-    /// <summary>非标准方法号 —— 只有 zstd/lz4 那一系 fork 的内核认得。</summary>
-    private static readonly string[] NonStandardEverywhere = ["ZSTD", "LZ4", "LZ5", "LIZARD", "BROTLI"];
+    /// <summary>非标准方法号 —— 只有带这些编码器的 7-Zip 分支（我们的内核、7-Zip-zstd、NanaZip）认得。</summary>
+    private static readonly string[] ExtensionMethods = ["ZSTD", "LZ4", "LZ5", "LIZARD", "BROTLI"];
 
+    /// <summary>
+    /// 那五个扩展方法：<strong>7z 一律给，ZIP 一个都不给</strong>。
+    /// <para>2.2.0 之前这条断言是"两边都不给"，理由有两条，其中"7z 写不出来"那条已经消失 ——
+    /// 五种方法 × 五档级别、外加带字典 / 带口令 / 非固实 / 多输入全部实测往返一致
+    /// （常驻检查在 <c>Andzip.Native.Tests</c>）。留下来的这条是用户定的红线，与内核能力无关：
+    /// 非标准方法号写进 ZIP，WinRAR / 资源管理器 / 原版 7-Zip 全都打不开，而用户会把这种包发给别人。
+    /// 内核那边也会拒（实测 <c>-f zip -m LZ4</c> 回 E_NOTIMPL），所以这条不是只靠"界面没列"。</para>
+    /// </summary>
     [Fact]
-    public void NonStandardMethodsAreNotOfferedAnywhere_Yet()
+    public void ExtensionMethodsAreOfferedForSevenZipButNeverForZip()
     {
-        // 两条独立的理由，目前都还成立，所以任何一种都不许出现在下拉框里：
-        //   1) ZIP：非标准方法号写出来的包 WinRAR / 资源管理器 / 原版 7-Zip 全都打不开，
-        //      而用户会把这种包发给别人 —— 这是用户定的红线，与内核能力无关。
-        //   2) 7z：内核登记了编码器，但 7z 的写入路径仍拒绝它们（-mm=LZ4 实测 E_INVALIDARG）。
-        // 等 2) 在内核侧修通，7z 这一半要放开、ZIP 那一半永远不放开 —— 到那时改这条断言。
         var zip = ArchiveFormatOption.FromId("ZIP").Methods.Select(m => m.EngineMethod).ToList();
         var sevenZip = ArchiveFormatOption.FromId("7Z").Methods.Select(m => m.EngineMethod).ToList();
 
-        foreach (var forbidden in NonStandardEverywhere)
+        foreach (var method in ExtensionMethods)
         {
-            Assert.DoesNotContain(forbidden, zip, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain(forbidden, sevenZip, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(method, zip, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(method, sevenZip, StringComparer.OrdinalIgnoreCase);
         }
+
+        // 其余格式（tar / gz / xz 那些）压根没有方法表，扩展方法也不该凭空冒出来
+        Assert.DoesNotContain("LZ4", ArchiveFormatOption.FromId("ISO").Methods.Select(m => m.EngineMethod));
     }
 
     [Fact]
     public void SevenZipOnlyListsMethodsThatRoundTrippedThroughTheEngine()
     {
         // 第一项就是默认方法，所以这张表的顺序是行为的一部分，不是随手写的列表。
-        Assert.Equal(["LZMA2", "LZMA", "PPMd", "BZip2", "Deflate", "Copy"],
+        // 标准方法在前（原版 7-Zip 也认），扩展方法居中，「仅存储」永远垫底。
+        Assert.Equal(
+            ["LZMA2", "LZMA", "PPMd", "BZip2", "Deflate", "ZSTD", "LZ4", "LZ5", "LIZARD", "BROTLI", "Copy"],
             ArchiveFormatOption.FromId("7Z").Methods.Select(m => m.EngineMethod).ToArray());
+    }
+
+    /// <summary>界面上那一句话只对扩展方法显示；判据是这张表，不是"名字看起来像专有名词"。</summary>
+    [Theory]
+    [InlineData("ZSTD", true)]
+    [InlineData("LZ4", true)]
+    [InlineData("LZ5", true)]
+    [InlineData("LIZARD", true)]
+    [InlineData("BROTLI", true)]
+    [InlineData("LZMA2", false)]
+    [InlineData("LZMA", false)]
+    [InlineData("PPMd", false)]
+    [InlineData("BZip2", false)]
+    [InlineData("Deflate", false)]
+    [InlineData("Copy", false)]
+    public void TheExtensionFlagDrivesTheWarningLine(string engineMethod, bool expected)
+    {
+        var method = ArchiveFormatOption.FromId("7Z").Methods.Single(m => m.EngineMethod == engineMethod);
+
+        Assert.Equal(expected, CompressionMethodOption.IsExtension(method));
     }
 
     [Fact]

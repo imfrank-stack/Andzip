@@ -121,8 +121,12 @@ public sealed class App : Application
     /// 改设置才不用重写所有 ProgID。
     /// </para>
     /// <para><c>open</c> 是反例：它要的正是主窗口，交回给调用方去建。</para>
+    /// <para><strong>为什么不是 private</strong>：「双击那一档就是智能解压」这句话的全部内容，
+    /// 是"双击解析出来的任务与右键动词解析出来的是同一个"。它只有在这一处汇合点才测得到 ——
+    /// 界面测试碰不到启动分发，内核测试又看不见设置。
+    /// 见 <c>UiFeatureWiringTests.TheDoubleClickChoiceResolvesToTheSameTaskAsTheVerb</c>。</para>
     /// </summary>
-    private static bool TryResolveTask(IEnumerable<string>? arguments, AppSettings settings, out ShellTask task)
+    internal static bool TryResolveTask(IEnumerable<string>? arguments, AppSettings settings, out ShellTask task)
     {
         if (ShellTasks.TryParse(arguments, out task))
         {
