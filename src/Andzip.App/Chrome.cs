@@ -526,6 +526,21 @@ internal static class Chrome
 
         void Later() => Dispatcher.UIThread.Post(Sync, DispatcherPriority.Render);
 
+        // 兜底那一次：附件时排的那发可能赶在模板应用之前（那时问面皮只有 null，抄了等于没抄）。
+        // 什么时候一定在模板之后？<c>Bounds</c> 第一次非零 —— 布局之前 <c>OnApplyTemplate</c> 一定跑过。
+        // 所以这里在首次量到尺寸时再补抄一发，只补一发（换大小不再来）。
+        // headless 里这一发从来用不上（同步就把模板建好了），所以它测不到 —— 它是给真机买的保险。
+        var retried = false;
+
+        control.PropertyChanged += (_, e) =>
+        {
+            if (!retried && e.Property == Layoutable.BoundsProperty && control.Bounds.Width > 0)
+            {
+                retried = true;
+                Later();
+            }
+        };
+
         control.AttachedToVisualTree += (_, _) => Later();
         control.ActualThemeVariantChanged += (_, _) => Later();
         control.PropertyChanged += (_, e) =>

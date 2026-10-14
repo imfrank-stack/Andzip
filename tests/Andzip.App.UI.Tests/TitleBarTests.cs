@@ -84,6 +84,57 @@ public class TitleBarTests
         Assert.Equal("关闭", Avalonia.Automation.AutomationProperties.GetName(buttons[0]));
     }
 
+    /// <summary>
+    /// 按住标题栏那三颗：看到的必须还是那枚圆角芯片，不能变回主题那块方的 <c>#686868</c>。
+    /// <para>用户两张截图说的是同一件事：悬停是淡红圆角芯片，按下去是一整块 46×40 的方黑框
+    /// —— 芯片是圆的、主题那块灰是方的，它从芯片四周各探出来一点，读起来就是"圆角变方正"。</para>
+    /// <para>1.8.8 给这三颗接过 <c>PinFace</c>，但那条"按下"的像素用例量的是<strong>工具栏</strong>：
+    /// 标题栏这一颗从来没人量过，坏了也没人知道。<strong>接线存在 ≠ 接线生效</strong>，这条补的是生效。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void PressingACaptionButtonKeepsTheRoundedChip()
+    {
+        var (window, bar) = Host();
+        var close = ButtonOf(bar, "关闭");
+        var at = close.TranslatePoint(new Point(close.Bounds.Width / 2, close.Bounds.Height / 2), window)!.Value;
+        Pixels.At(window, at);
+
+        window.MouseMove(at);
+        UiWait.Pump(60);
+        window.MouseDown(at, MouseButton.Left);
+        UiWait.Pump(120);
+
+        var gray = 0;
+        var chip = 0;
+        for (var dy = -19; dy <= 19; dy++)
+        {
+            for (var dx = -22; dx <= 22; dx++)
+            {
+                var c = Pixels.At(window, at + new Point(dx, dy));
+                if (Pixels.Same(c, Color.FromRgb(0x68, 0x68, 0x68)))
+                {
+                    gray++;
+                }
+
+                if (Pixels.Same(c, Color.FromRgb(0xFD, 0xEC, 0xEA)))
+                {
+                    chip++;
+                }
+            }
+        }
+
+        // 松手点挪到芯片外面：不然这一按真把窗口关了，用例只能跑一次。
+        var away = at + new Point(0, 160);
+        window.MouseMove(away);
+        window.MouseUp(away, MouseButton.Left);
+        UiWait.Pump(60);
+
+        Assert.True(gray == 0,
+            $"按住关闭钮，那一格里有 {gray} 个主题的 #686868 —— 圆角芯片被那块方的灰盖住了（Chrome.PinFace 没生效）");
+        Assert.True(chip > 200,
+            $"按住时那一格只量到 {chip} 个淡红芯片像素 —— 灰是没有，但芯片也没画出来，等于看着像\"没反应\"");
+    }
+
     private static (Window Window, TitleBar Bar) Host()
     {
         var lang = TestLang.Chinese();

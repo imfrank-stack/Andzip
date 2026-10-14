@@ -25,7 +25,21 @@ namespace Andzip.App;
 /// </summary>
 public sealed class MainWindow : Window
 {
-    private const string BaseTitle = "Andzip (Professional)";
+    /// <summary>
+    /// 标题里的自己：名字 + <strong>版本号</strong>。
+    /// <para>为什么把版本号写进标题：连着几条"按下变黑"的反馈里，有截图量的是旧构建（1.8.7）的状态，
+    /// 而界面上没有一处写着版本 —— 谁也没法从一张图判断它是谁。多这一段，每张截图自己报户口。</para>
+    /// <para>值来自 <c>build.ps1</c> 注入的 <c>-p:Version</c>；绕过它直接 <c>dotnet build</c>
+    /// 会看到 csproj 里那个兜底版本，那正说明手上这份不是发布产物。
+    /// <strong>读的是 <c>AssemblyName.Version</c> 而不是 <c>InformationalVersion</c></strong>：
+    /// 后者会被 SourceLink 追加提交号（实测标题一度长成 "v1.9.1+44.3e846cf039…"），
+    /// 那是流水线要看的东西，写在窗口上只是噪音。</para>
+    /// </summary>
+    private static string BaseTitle { get; } = $"Andzip (Professional) {AppVersion}";
+
+    private static string AppVersion => typeof(MainWindow).Assembly.GetName().Version is { } v
+        ? $"v{v.Major}.{v.Minor}.{v.Build}"
+        : "v0.0.0";
 
     /// <summary>
     /// 标题里带上压缩内核信息：一眼能确认 native 引擎真的加载了，而不是静默降级。
