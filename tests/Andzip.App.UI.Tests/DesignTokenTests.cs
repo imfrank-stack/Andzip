@@ -213,6 +213,58 @@ public class DesignTokenTests
             + string.Join("\n    ", offenders));
     }
 
+    /// <summary>
+    /// 每一颗 <c>new MenuItem</c> 都要接上 <c>MenuGrayHover()</c>。
+    /// <para>与上面那条同一族：SimpleTheme 给菜单项的高亮是"20% 品牌蓝底 + 一圈 <c>#41B1E1</c> 蓝描边"，
+    /// 不挡就是"扫过的样式不统一"（用户 2.5.1 的截图）。而"记得挡"是靠自觉的规矩 ——
+    /// 2.4.1 那次十扇无边框窗口漏了两扇，这次是「新建压缩文件」里「添加」那两项从来没接过。</para>
+    /// <para>唯一放过的形状是<strong>当场就 <c>IsEnabled = false</c></strong> 的那一项
+    /// （「最近的文件」空占位）：禁用项没有悬停态可统一，包一层是死代码。</para>
+    /// </summary>
+    [Fact]
+    public void EveryMenuItemPinsItsHoverFace()
+    {
+        var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");
+        var offenders = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(file) == "Chrome.cs"
+                || file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            {
+                continue;
+            }
+
+            var lines = File.ReadAllLines(file);
+            var creates = Enumerable.Range(0, lines.Length)
+                .Where(i => lines[i].Contains("new MenuItem", StringComparison.Ordinal))
+                .ToList();
+
+            for (var c = 0; c < creates.Count; c++)
+            {
+                var i = creates[c];
+
+                // 一条语句能摊成几行：到下一颗菜单项那一行为止（再远就把邻居的接法算到它头上），
+                // 且不超过 16 行。
+                var stop = Math.Min(c + 1 < creates.Count ? creates[c + 1] : lines.Length, i + 16);
+                var statement = lines.Skip(i).Take(stop - i);
+
+                if (statement.Any(l => l.Contains(".MenuGrayHover(", StringComparison.Ordinal))
+                    || statement.Any(l => l.Contains("IsEnabled = false", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                offenders.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {lines[i].Trim()}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "这些菜单项没接 MenuGrayHover()，悬停时会退回 SimpleTheme 那圈蓝描边：\n    "
+            + string.Join("\n    ", offenders));
+    }
+
     private static List<string> OffendingLines(params string[] needles)
     {
         var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");

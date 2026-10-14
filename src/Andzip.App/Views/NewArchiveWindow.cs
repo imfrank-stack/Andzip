@@ -101,9 +101,9 @@ public sealed class NewArchiveWindow : Window
         _deleteButton.Click += (_, _) => RemoveSelected();
 
         var addButton = new Button { Content = lang.Label("TEXT_BTN_ADD"), MinWidth = 96 }.Ghost();
-        var addFilesItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FILES") };
+        var addFilesItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FILES") }.MenuGrayHover();
         addFilesItem.Click += async (_, _) => await AddFilesAsync();
-        var addFolderItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FOLDER") };
+        var addFolderItem = new MenuItem { Header = lang.Label("TEXT_MENU_ADD_FOLDER") }.MenuGrayHover();
         addFolderItem.Click += async (_, _) => await AddFolderAsync();
         var addFlyout = new MenuFlyout();
         addFlyout.Items.Add(addFilesItem);

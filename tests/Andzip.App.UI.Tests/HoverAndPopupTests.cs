@@ -315,18 +315,40 @@ public class HoverAndPopupTests
         item.IsSubMenuOpen = true;
         UiWait.Pump(120);
 
-        var center = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), window)!.Value;
-        var stack = window.GetVisualsAt(center).ToList();
+        // headless 的命中测试只认**当前活动的那一扇窗口**：套件里别人开过、关过窗口之后，
+        // 这一扇不再是活动窗口，`GetVisualsAt` 会返回空栈 —— 同一份几何，单独跑栈里有 6 层，
+        // 全量跑到 171 条时读到 0 层。真机上没有这件事（用户点的就是前台那一扇），
+        // 所以这里先把自己提活动，而不是把断言放宽。
+        window.Activate();
 
-        // GetVisualsAt 给的是"命中的可视元素"链，模板里的 AccessText / Border 在内而 MenuItem 本身不在，
-        // 所以判据是"从最上面那个往上走能不能走到这一项"，不是"栈里有没有 MenuItem 类型"。
+        // 再等这一格真的"稳"下来：`RoundOnOpen` 把 `RoundPopups` 排到 Render 优先级（推迟一帧），
+        // 没留白的那一版弹窗矩形正好压在锚点上，量到的是过渡帧而不是产品。
+        // 判据用留白本身 —— `RoundPopups` 写过 Margin 就是处理完了（同一族写法见 RoundedCornerOf）。
+        var settled = OpenedPopupRoot(window);
+        var center = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), window)!.Value;
+        var deadline = Environment.TickCount64 + 2000;
+        List<Visual> stack = [];
         var reachesTheItem = false;
-        for (Visual? at = stack.FirstOrDefault(); at is not null; at = at.GetVisualParent())
+
+        while (Environment.TickCount64 < deadline && !reachesTheItem)
         {
-            if (ReferenceEquals(at, item))
+            UiWait.Pump(30);
+            if (settled.Margin.Right == 0)
             {
-                reachesTheItem = true;
-                break;
+                continue;
+            }
+
+            stack = window.GetVisualsAt(center).ToList();
+
+            // GetVisualsAt 给的是"命中的可视元素"链，模板里的 AccessText / Border 在内而 MenuItem
+            // 本身不在，所以判据是"从最上面那个往上走能不能走到这一项"，不是"栈里有没有 MenuItem 类型"。
+            for (Visual? at = stack.FirstOrDefault(); at is not null; at = at.GetVisualParent())
+            {
+                if (ReferenceEquals(at, item))
+                {
+                    reachesTheItem = true;
+                    break;
+                }
             }
         }
 

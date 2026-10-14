@@ -143,10 +143,14 @@ internal static class Chrome
     }
 
     /// <summary>
-    /// 菜单栏的悬停：只轻微置灰，不要 SimpleTheme 那层 20% 品牌蓝。
+    /// 菜单项的悬停：只轻微置灰，不要 SimpleTheme 那层 20% 品牌蓝，也<strong>不要它那一圈蓝描边</strong>。
     /// <para>高亮画在模板里的 <c>Border#root</c> 上，由 ControlTheme 的 setter 决定，
     /// 应用层样式压不过它（规范 §二 那条实测）。但<strong>实例上的本地值压得过 setter</strong> ——
     /// 所以要把灰色写成局部值。</para>
+    /// <para><strong>描边必须一起挡</strong>（2.5.1）：同一个 setter 还会在那枚 Border 上留下
+    /// <c>BorderBrush=#41B1E1 / BorderThickness=1</c>。只压底色的话，屏幕上是一枚
+    /// "浅灰底 + 一圈蓝框"的药丸 —— 菜单栏、导航、工具栏按钮说的都是"扫过只置灰"，
+    /// 唯独菜单项带框，用户读出来就是"扫过的样式不统一"。</para>
     /// <para><strong>展开状态也要一起管</strong>（1.8.3）：只在指针进入时写、离开时 <c>ClearValue</c>
     /// 的话，用户点开菜单、鼠标滑进子菜单之后那一项就退回模板自己的高亮 —— 一块<strong>直角</strong>的
     /// 20% 蓝，正是用户说的"扫过时圆角，点击变成直角"。所以这里画的是
@@ -174,11 +178,15 @@ internal static class Chrome
             {
                 face.SetValue(Border.BackgroundProperty, Design.Surface.Muted);
                 face.SetValue(Border.CornerRadiusProperty, Design.Radius.Sm);
+                face.SetValue(Border.BorderThicknessProperty, new Thickness(0));
+                face.SetValue(Border.BorderBrushProperty, Design.Surface.Muted);
             }
             else
             {
                 face.ClearValue(Border.BackgroundProperty);
                 face.ClearValue(Border.CornerRadiusProperty);
+                face.ClearValue(Border.BorderThicknessProperty);
+                face.ClearValue(Border.BorderBrushProperty);
             }
         }
 
