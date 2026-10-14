@@ -210,6 +210,17 @@ TEXT_FIND_NONE                          = 没有找到匹配的文件
 TEXT_FIND_COUNT                         = 找到 ${n} 项（包里共 ${m} 项）
 TEXT_BTN_REVEAL                         = 定位
 
+; ---- 帮助 → 关于 Andzip（F1）----
+TEXT_TITLE_ABOUT                        = 关于 Andzip
+TEXT_ABOUT_TAGLINE                      = Bandizip 风格的压缩包工具；压缩与解压由 7-Zip 内核完成
+TEXT_ABOUT_VERSION                      = 版本
+TEXT_ABOUT_ENGINE                       = 压缩内核
+TEXT_ABOUT_LICENSE                      = 许可证
+TEXT_ABOUT_LICENSE_VALUE                = LGPL-2.1 或更新版本，附 unRAR 限制条款；第三方组件清单见项目主页
+TEXT_ABOUT_FOLDER                       = 所在目录
+TEXT_ABOUT_FOLDER_UNKNOWN               = （读不到自己所在的目录）
+TEXT_ABOUT_HOMEPAGE                     = 项目主页：${url}
+
 ; ---- 设置窗口（选项 → 设置，F5）----
 TEXT_TITLE_SETTINGS                     = 设置
 TEXT_SETTINGS_GENERAL                   = 常规
@@ -473,7 +484,6 @@ MENUSTR_TOOLS_REPAIR                    = 修复压缩包...
 MENUSTR_TOOLS_RECOVERY                  = 密码恢复...
 
 MENUSTR_ABOUT                           = 关于 Andzip(&A)
-MENUSTR_HELPPAGE                        = 转到帮助页面(&G)
 MENUSTR_OPEN_FOLDER                     = 打开 Andzip 安装目录(&O)
 MENUSTR_FORUM                           = 转到用户论坛(&F)
 MENUSTR_HOMEPAGE                        = 转到官网(&W)

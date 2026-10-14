@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Andzip.App.Services;
 using Andzip.App.Views;
+using Andzip.Core;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Menu;
@@ -83,7 +84,14 @@ public sealed class MainWindow : Window
     private readonly TextBlock _versionLabel;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
+    /// <summary>
+    /// 已启用、但<strong>不归主窗口命令表管</strong>的那几条。「最近的文件」的条目是展开时现生成的
+    /// （见 <c>MainMenuBar</c>），它没有"点一下这条菜单"这个动作。
+    /// </summary>
+    private static readonly IReadOnlyList<string> HandledElsewhere = [MainMenuModel.CommandRecentFiles];
+
     private FindWindow? _find;
+    private AboutWindow? _about;
     private readonly AppSettings _settings;
 
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
@@ -134,12 +142,29 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
+            [MainMenuModel.CommandAbout] = OpenAboutDialog,
+            [MainMenuModel.CommandOpenInstallFolder] = OpenInstallFolder,
+            [MainMenuModel.CommandHomepage] = OpenHomepage,
         };
 
         var root = new DockPanel();
 
         _menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles));
+
+        // 模型里 Enabled: true 的语义是"这条实装过了"。自称实装了却没接到命令，界面上就是
+        // 一条黑字、能点、点下去什么都不发生 —— 那比灰着危险得多（文件菜单那四条置灰的同一条判断）。
+        // 所以这里当场抛，而不是留给用户先点一下再发现。
+        var unwired = MainMenuModel.Create().SelectMany(menu => menu.Items)
+            .Where(item => item.Enabled && (item.CommandId is null
+                || (!commands.ContainsKey(item.CommandId) && !HandledElsewhere.Contains(item.CommandId))))
+            .Select(item => $"'{item.Id}'（{item.TextKey}）")
+            .ToArray();
+        if (unwired.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"这些菜单项在模型里是启用态，却没有接到命令：{string.Join("、", unwired)}");
+        }
 
         // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
         _toolBar = BuildToolBar();
@@ -424,6 +449,42 @@ public sealed class MainWindow : Window
         _find = window;
         window.Show(this);
     }
+
+    // ---------- 帮助 → 关于 / 安装目录 / 官网 ----------
+
+    /// <summary>「帮助 → 关于 Andzip」（F1）。同一时刻只留一扇，再按一次只是把它唤到前面。</summary>
+    private void OpenAboutDialog()
+    {
+        if (_about is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new AboutWindow(_lang);
+        window.Closed += (_, _) => _about = null;
+        _about = window;
+        window.Show(this);
+    }
+
+    /// <summary>
+    /// 「帮助 → 打开 Andzip 安装目录」。
+    /// <para>开的是<strong>这个正在运行的 exe 自己所在的目录</strong>：绿色版没有"安装"这一步，
+    /// 而一台机器上装了"给自己"与"给所有用户"两份时，只有这一份答案不会指错地方 ——
+    /// 用户对着屏幕上这个窗口点它，要看到的就是这个窗口的老家。</para>
+    /// </summary>
+    private void OpenInstallFolder()
+    {
+        if (AboutWindow.AppDirectory() is not { } directory)
+        {
+            return;
+        }
+
+        OpenInExplorer(directory);
+    }
+
+    /// <summary>「帮助 → 转到官网」：交给系统默认浏览器。地址只有一个来源，见 <c>AndzipLinks</c>。</summary>
+    private void OpenHomepage() => AboutWindow.OpenUrl(AndzipLinks.Homepage);
 
     // ---------- 文件 → 另存为 / 删除 / 永久删除 / 打开位置 ----------
 

@@ -19,8 +19,13 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 
 /// <summary>
 /// 主菜单结构（对应需求文档附录 A，7 个顶级菜单）。
-/// 当前已接入命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
-/// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）；其余项按参考软件结构占位（禁用态），后续里程碑逐项接入。
+/// <para>已接入的命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
+/// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、文件查找（Ctrl+F）、设置（F5）、
+/// 视图切换（F6）、关于（F1）、打开 Andzip 安装目录、转到官网。</para>
+/// <para><strong>模型里 <c>Enabled</c> 的语义是"这条实装过了"</strong>，不是"这条现在能点" ——
+/// 后者由窗口按当前视图现算（见 <see cref="ArchiveOnlyCommands"/>）。
+/// 剩下那些 <c>Enabled: false</c> 的是按参考软件结构留的占位，点了什么也不会发生，
+/// 所以它们必须灰着，而不是接一条假命令。</para>
 /// </summary>
 public static class MainMenuModel
 {
@@ -70,6 +75,15 @@ public static class MainMenuModel
     /// 用户打开十个包之后看到的还是空的。
     /// </summary>
     public const string CommandRecentFiles = "file.recent";
+
+    /// <summary>关于窗口（F1）：版本号、压缩内核、许可证、项目主页。</summary>
+    public const string CommandAbout = "help.about";
+
+    /// <summary>在资源管理器里打开 Andzip 自己所在的那个目录（绿色版与安装版都答得准）。</summary>
+    public const string CommandOpenInstallFolder = "help.folder";
+
+    /// <summary>用系统默认浏览器打开项目主页。</summary>
+    public const string CommandHomepage = "help.homepage";
 
     /// <summary>
     /// 只有"正开着某个压缩包"才能用的命令。模型里给 <c>Enabled: true</c>（表示这些是实装过的，
@@ -161,12 +175,13 @@ public static class MainMenuModel
 
         new("help", "MENUSTR_HELP",
         [
-            new("help.about", "MENUSTR_ABOUT", "F1"),
+            new("help.about", "MENUSTR_ABOUT", "F1", Enabled: true, CommandId: CommandAbout),
             MenuItemModel.Separator(),
-            new("help.page", "MENUSTR_HELPPAGE"),
-            new("help.folder", "MENUSTR_OPEN_FOLDER"),
+            // 「转到帮助页面」删掉了（2.8.0）：它和「转到官网」是同一个目标换两个名字，
+            // 而项目现在只有一个对外地址 —— 与其摆两条让人猜哪条是真的，不如只留一条。
+            new("help.folder", "MENUSTR_OPEN_FOLDER", Enabled: true, CommandId: CommandOpenInstallFolder),
             new("help.forum", "MENUSTR_FORUM"),
-            new("help.homepage", "MENUSTR_HOMEPAGE"),
+            new("help.homepage", "MENUSTR_HOMEPAGE", Enabled: true, CommandId: CommandHomepage),
         ]),
     ];
 }

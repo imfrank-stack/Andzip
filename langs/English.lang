@@ -203,7 +203,7 @@ TEXT_SAVE_AS_SUCCEEDED                  = Saved as: ${path}
 TEXT_ERR_SAVE_AS_SAME_PATH              = The destination is the archive itself, so nothing was changed.
 TEXT_ERR_SAVE_AS_FAILED                 = Save as failed:
 
-; ---- 查找 → 文件查找（Ctrl+F）----
+; ---- Find files (Ctrl+F) ----
 TEXT_TITLE_FIND                         = Find Files
 TEXT_FIND_QUERY                         = Search for
 TEXT_FIND_COLUMN_PATH                       = Path
@@ -212,6 +212,17 @@ TEXT_FIND_EMPTY                         = Type something to search for
 TEXT_FIND_NONE                          = No matching files
 TEXT_FIND_COUNT                         = ${n} found (${m} in the archive)
 TEXT_BTN_REVEAL                         = Go to
+
+; ---- Help -> About Andzip (F1) ----
+TEXT_TITLE_ABOUT                        = About Andzip
+TEXT_ABOUT_TAGLINE                      = A Bandizip-style archiver; compression runs on the 7-Zip engine
+TEXT_ABOUT_VERSION                      = Version
+TEXT_ABOUT_ENGINE                       = Engine
+TEXT_ABOUT_LICENSE                      = License
+TEXT_ABOUT_LICENSE_VALUE                = LGPL-2.1 or later, with the unRAR restriction; the third-party list lives on the project page
+TEXT_ABOUT_FOLDER                       = Folder
+TEXT_ABOUT_FOLDER_UNKNOWN               = (cannot work out which folder I am running from)
+TEXT_ABOUT_HOMEPAGE                     = Project home: ${url}
 
 ; ---- Settings window (Options -> Settings, F5) ----
 TEXT_TITLE_SETTINGS                     = Settings
@@ -476,7 +487,6 @@ MENUSTR_TOOLS_REPAIR                    = Repair archive...
 MENUSTR_TOOLS_RECOVERY                  = Password recovery...
 
 MENUSTR_ABOUT                           = &About Andzip
-MENUSTR_HELPPAGE                        = Go to help page (&G)
 MENUSTR_OPEN_FOLDER                     = Open Andzip install folder (&O)
 MENUSTR_FORUM                           = Go to user forum (&F)
 MENUSTR_HOMEPAGE                        = Go to website (&W)

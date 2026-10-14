@@ -1,4 +1,5 @@
 using Andzip.Core.Menu;
+using Andzip.Core;
 
 namespace Andzip.Core.Tests;
 
@@ -85,5 +86,55 @@ public class MainMenuModelTests
         Assert.Contains(menus.Single(m => m.Id == "edit").Items, i => i.Shortcut == "Ctrl+Shift+M");
         Assert.Contains(menus.Single(m => m.Id == "view").Items, i => i.Shortcut == "F6");
         Assert.Contains(menus.Single(m => m.Id == "help").Items, i => i.Shortcut == "F1");
+    }
+
+    [Fact]
+    public void HelpMenuWiresWhatItClaimsAndDropsTheDuplicate()
+    {
+        var items = MainMenuModel.Create().Single(menu => menu.Id == "help").Items;
+
+        var about = items.Single(i => i.Id == "help.about");
+        Assert.True(about.Enabled);
+        Assert.Equal(MainMenuModel.CommandAbout, about.CommandId);
+        Assert.Equal("F1", about.Shortcut);
+
+        var folder = items.Single(i => i.Id == "help.folder");
+        Assert.True(folder.Enabled);
+        Assert.Equal(MainMenuModel.CommandOpenInstallFolder, folder.CommandId);
+
+        var homepage = items.Single(i => i.Id == "help.homepage");
+        Assert.True(homepage.Enabled);
+        Assert.Equal(MainMenuModel.CommandHomepage, homepage.CommandId);
+
+        // 「转到用户论坛」还没有地址，所以它还得是灰的占位。拿官网凑一个是最容易犯、
+        // 也最难看出来的假 —— 点了确实有浏览器弹出来，只是去的不是它说的那个地方。
+        var forum = items.Single(i => i.Id == "help.forum");
+        Assert.False(forum.Enabled);
+        Assert.Null(forum.CommandId);
+
+        // 「转到帮助页面」整条删掉：它和「转到官网」是同一个目标换两个名字。
+        Assert.DoesNotContain(items, i => i.Id == "help.page");
+    }
+
+    /// <summary>
+    /// 模型里 <c>Enabled: true</c> 的语义是"这条实装过了"，所以它必须报出一个命令 id。
+    /// <para>另一半（报了 id 而窗口真的接了）由 <c>MainWindow</c> 构造时当场核对 ——
+    /// 一条黑字、能点、点下去什么都不发生的菜单项，比灰着危险得多。</para>
+    /// </summary>
+    [Fact]
+    public void EveryEnabledItemNamesACommand()
+    {
+        var nameless = MainMenuModel.Create().SelectMany(menu => menu.Items)
+            .Where(item => item.Enabled && string.IsNullOrWhiteSpace(item.CommandId))
+            .Select(item => item.Id)
+            .ToArray();
+
+        Assert.Empty(nameless);
+    }
+
+    [Fact]
+    public void HomepageIsRegisteredOnceAndIsWhereTheProjectLives()
+    {
+        Assert.Equal("https://github.com/imfrank-stack/Andzip", AndzipLinks.Homepage);
     }
 }

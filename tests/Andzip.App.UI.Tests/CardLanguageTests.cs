@@ -67,6 +67,9 @@ public class CardLanguageTests
             // 查找那一扇是这张清单里唯一**非模态**的 —— 卡片那一套不该因为"它不挡主窗口"就少一层
             new FindWindow(lang, FindListing()),
 
+            // 关于那一屏也是同一族：它不因为"只是展示信息"就少一层卡片
+            new AboutWindow(lang),
+
             // 安装器也是同一个界面语言里的一员：它不该长得像另一个程序
             new InstallerWindow(lang),
         };
@@ -118,6 +121,7 @@ public class CardLanguageTests
             ("修复框", new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip")),
             ("进度框", new ProgressWindow(lang, new CancellationTokenSource())),
             ("查找窗口", new FindWindow(lang, FindListing())),
+            ("关于窗口", new AboutWindow(lang)),
             ("设置窗口", new SettingsWindow(lang, new AppSettings(), settingsPath)),
         };
 
