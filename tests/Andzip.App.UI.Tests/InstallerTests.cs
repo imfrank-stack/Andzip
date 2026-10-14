@@ -3,6 +3,7 @@ using Andzip.App.Services;
 using Andzip.App.Views;
 using Andzip.Core.Installation;
 using Andzip.Core.Lang;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Microsoft.Win32;
@@ -134,6 +135,35 @@ public class InstallerTests : IDisposable
         Assert.DoesNotContain("+", version, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 安装目录里必须有一个<strong>双击就能卸载</strong>的东西（2.4.0）。
+    /// <para>用户的原话是「咱们的安装包只有一个 exe 文件，这不对，至少增加一个
+    /// uninstall.exe/uninstall.bat」。真卸逻辑在 <c>Andzip.exe /uninstall</c> 里，
+    /// 所以出的是一个批处理壳 —— 一个真的 <c>uninstall.exe</c> 要么是那 20 MB 的第二份拷贝，
+    /// 要么也是这样一个壳，而壳不需要目标机器上有编译器。</para>
+    /// <para>批处理的内容必须整个是 ASCII：<c>cmd</c> 按活动代码页解码这个文件，注释里塞中文
+    /// 会先在屏幕上变成一串 <c>?</c>。所以这条量的是<strong>源文本</strong>而不是落盘那一份 ——
+    /// 写的时候用的是 <c>Encoding.ASCII</c>，盘上那一份天生没有非 ASCII 字符，量它等于什么都没量。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void TheInstallFolderCarriesADoubleClickableUninstallFile()
+    {
+        Assert.All(InstallLayout.UninstallScriptText,
+            c => Assert.True(c < 128, $"批处理源码里有非 ASCII 字符「{c}」，cmd 会读成一串问号"));
+
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        Assert.True(File.Exists(_plan.UninstallScript),
+            $"安装目录里没有 {InstallLayout.UninstallScriptName}：{Path.GetDirectoryName(_plan.ExecutablePath)}");
+        Assert.Equal(InstallLayout.UninstallScriptText, File.ReadAllText(_plan.UninstallScript));
+
+        var text = File.ReadAllText(_plan.UninstallScript);
+
+        Assert.Contains("@echo off", text, StringComparison.Ordinal);
+        Assert.Contains($"\"%~dp0{InstallLayout.ExeName}\" /uninstall", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     [SupportedOSPlatform("windows")]
     public void UninstallTakesEverythingBackOut()
@@ -144,6 +174,7 @@ public class InstallerTests : IDisposable
         Assert.True(service.Uninstall(_plan), "卸载报告说删干净了，但安装目录还在（或反过来）。");
 
         Assert.False(Directory.Exists(_plan.InstallDirectory), "安装目录还在。");
+        Assert.False(File.Exists(_plan.UninstallScript), "安装目录里那个双击就能卸载的批处理还在。");
         Assert.False(File.Exists(_plan.StartMenuShortcut), "开始菜单的快捷方式还在。");
         Assert.False(File.Exists(_plan.DesktopShortcut!), "桌面的快捷方式还在。");
         Assert.False(File.Exists(_plan.StartMenuUninstallShortcut), "开始菜单里「卸载 Andzip」那一项还在。");
@@ -458,6 +489,7 @@ public class InstallerTests : IDisposable
         Assert.True(File.Exists(_plan.ExecutablePath), "完成页说装好了，可安装目录里没有程序文件。");
         Assert.True(File.Exists(_plan.StartMenuShortcut), "完成页说装好了，可开始菜单没有快捷方式。");
         Assert.True(File.Exists(_plan.StartMenuUninstallShortcut), "完成页说装好了，可开始菜单没有「卸载 Andzip」。");
+        Assert.True(File.Exists(_plan.UninstallScript), "完成页说装好了，可安装目录里没有 uninstall.bat。");
     }
 
     /// <summary>
@@ -673,6 +705,44 @@ public class InstallerTests : IDisposable
         Assert.Equal(
             Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
             Path.TrimEndingDirectorySeparator(desktop!));
+    }
+
+    /// <summary>
+    /// 「安装」那一格和「完成」那一格必须在同一个位置（2.4.0）。
+    /// <para>真机核对里抓到的形状：点完「安装」，完成页一闪就没，向导自己关了，还顺手把 Andzip 启动了。
+    /// 因由是这扇窗按内容自适应高度，进度页比位置页矮两百多像素 —— 页面一换窗口就缩，
+    /// 用户那一下<strong>松手</strong>落在了窗口外面，Avalonia 于是以为左键还按着；
+    /// 等完成页把窗口撑回来，「完成」正好长在静止不动的指针底下，那一次积压的按下就在它身上结了账。</para>
+    /// <para>headless 的窗口不会真的跟着内容改尺寸，所以这条量的是我们为这件事立的那条规矩：
+    /// 页与页之间正文只长不缩（<c>InstallerWindow.HoldHeight</c>），页脚因此待在同一格。
+    /// 把那条规矩去掉，这两格就对不上了。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheFooterRowStaysPutBetweenTheLocationAndTheFinishPage()
+    {
+        var lang = TestLang.Chinese();
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        ToLocationPage(window, lang);
+        UncheckExtras(window);
+        var installTop = TopOf(window, lang, "TEXT_BTN_INSTALL");
+
+        Click(window, lang, "TEXT_BTN_INSTALL");
+        WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
+
+        var finishTop = TopOf(window, lang, "TEXT_BTN_FINISH");
+        Assert.True(Math.Abs(finishTop - installTop) < 1,
+            $"「安装」那一格的顶在 y={installTop:0.#}，「完成」却在 y={finishTop:0.#} —— "
+            + "换页时窗口缩了一截，用户点「安装」的那一下松手就会落到窗口外面");
+    }
+
+    private static double TopOf(InstallerWindow window, LangCatalog lang, string labelKey)
+    {
+        UiWait.Pump(60);
+        var button = VisualQuery.Of<Button>(window)
+            .Single(b => Equals(VisualQuery.TextOf(b), lang.Label(labelKey)));
+
+        return button.TranslatePoint(new Avalonia.Point(0, 0), window)!.Value.Y;
     }
 
     // --------------------------------------------------------------- 小工具

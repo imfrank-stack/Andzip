@@ -36,6 +36,9 @@ public sealed record InstallPlan(
 {
     /// <summary>卸载时要按同一个名字找回自己写过的 ProgId（<c>Andzip.*</c>）。</summary>
     public const string ProgIdPrefix = "Andzip.";
+
+    /// <summary>安装目录里那个能双击的卸载入口（跟着程序文件走，所以由目录算出来）。</summary>
+    public string UninstallScript => Path.Combine(InstallDirectory, InstallLayout.UninstallScriptName);
 }
 
 /// <summary>
@@ -57,6 +60,24 @@ public static class InstallLayout
 
     /// <summary>安装器那一份 exe 的名字前缀：同一个二进制，换个名字跑就是安装界面。</summary>
     public const string InstallerFileNamePrefix = "andzip-setup";
+
+    /// <summary>
+    /// 安装目录里那个能双击的卸载入口。
+    /// <para>为什么是 .bat 而不是 <c>uninstall.exe</c>：真正的卸载逻辑在 <c>Andzip.exe /uninstall</c> 里
+    /// （它知道两种作用域、快捷方式、注册表与"删掉正在运行的自己"那件事）。
+    /// 一个真的 <c>uninstall.exe</c> 要么是那一份 20 MB 字节的第二份拷贝，
+    /// 要么是一个只会启动上面那一条的壳 —— 壳用 90 字节的批处理就是同一个东西，
+    /// 还不需要目标机器上有编译器。</para>
+    /// </summary>
+    public const string UninstallScriptName = "uninstall.bat";
+
+    /// <summary>批处理的内容。<see cref="ExeName"/> 拼进去，两边不会各自漂移。</summary>
+    public static string UninstallScriptText => string.Join("\r\n",
+        "@echo off",
+        "rem Andzip -- double-click to uninstall. The real uninstaller lives inside Andzip.exe;",
+        "rem this file only exists so the install folder has an obvious way out.",
+        $"\"%~dp0{ExeName}\" /uninstall",
+        string.Empty);
 
     public const string UninstallKey =
         @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Andzip";

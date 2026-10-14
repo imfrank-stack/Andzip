@@ -204,6 +204,60 @@ public class InstallScopeTests : IDisposable
         Assert.Equal(_machine.InstallDirectory, VisualQuery.Of<TextBox>(window).Single().Text);
     }
 
+    /// <summary>
+    /// 机器级那一份<strong>收掉它也要先问一句</strong>（2.4.0）。
+    /// <para>2.1.0 只给"装"那一路接了提权，"卸"那一路没有：从安装目录里双击
+    /// <c>uninstall.bat</c> 进来是普通权限，于是跑到进度条上才失败，留下"点了卸载，那份却没动"。
+    /// 这条把安装那一路的判据原样搬过来 —— 同一个位置，写与删要的是同一份权限。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AMachineCopyThatNeedsAdminAsksBeforeRemovingAnything()
+    {
+        var lang = TestLang.Chinese();
+
+        // 先把机器级那一份真的装上（落点是临时目录里的替身，注册表根换成探针键）
+        var installer = new InstallerWindow(lang, _machine, registryRoot: BothUsers,
+            startsAsUninstaller: false, preselectedScope: InstallScope.AllUsers, elevate: null).Shown();
+        UncheckExtras(installer);
+        Click(installer, lang, "TEXT_BTN_INSTALL");
+        WaitUntil(installer, lang, "TEXT_SETUP_DONE_TITLE");
+
+        var asked = new List<InstallScope>();
+        var window = new InstallerWindow(lang, BlockedMachine(), registryRoot: BothUsers,
+            startsAsUninstaller: true, preselectedScope: null,
+            elevate: scope => { asked.Add(scope); return false; }).Shown();
+
+        Click(window, lang, "TEXT_BTN_UNINSTALL");
+
+        Assert.Single(asked);
+        Assert.Equal(InstallScope.AllUsers, asked[0]);
+
+        var shown = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.True(shown.Contains(lang.Label("TEXT_SETUP_CONFIRM_TITLE"), StringComparison.Ordinal),
+            $"提权没成，就该停在确认那一页：{shown}");
+        Assert.Contains(lang.Label("TEXT_SETUP_UNINSTALL_DENIED"), shown);
+        Assert.DoesNotContain(lang.Label("TEXT_SETUP_WORKING_TITLE"), shown);
+
+        // 界面上那句"什么都没动"要真的什么都没动
+        Assert.True(File.Exists(_machine.ExecutablePath), "没拿到管理员权限，程序文件却已经删了。");
+        Assert.True(Registry.CurrentUser.OpenSubKey(ProbeKey) is not null, "没拿到管理员权限，卸载表那条却已经删了。");
+    }
+
+    /// <summary>卸载这一路提权成功后，这一份同样该收窗退出，让提了权的那一个接着卸。</summary>
+    [AvaloniaFact]
+    public void HandingTheUninstallOverToAnElevatedInstanceClosesThisOne()
+    {
+        var lang = TestLang.Chinese();
+        var closed = false;
+        var window = new InstallerWindow(lang, BlockedMachine(), registryRoot: BothUsers,
+            startsAsUninstaller: true, preselectedScope: null, elevate: _ => true).Shown();
+        window.Closed += (_, _) => closed = true;
+
+        Click(window, lang, "TEXT_BTN_UNINSTALL");
+
+        Assert.True(closed, "卸载交出去了，这一份却还开着 —— 屏幕上会有两个卸载向导，用户不知道哪个在删。");
+    }
+
     // ------------------------------------- 机器级那一条整条往返（根被换到探针键）
 
     /// <summary>
@@ -233,6 +287,7 @@ public class InstallScopeTests : IDisposable
         Assert.True(File.Exists(_machine.StartMenuShortcut), "公共开始菜单里没有那一项。");
         Assert.True(File.Exists(_machine.StartMenuUninstallShortcut), "公共开始菜单里没有「卸载 Andzip」。");
         Assert.True(File.Exists(_machine.DesktopShortcut), "公共桌面上没有那一项。");
+        Assert.True(File.Exists(_machine.UninstallScript), "机器级那一份的安装目录里没有 uninstall.bat。");
 
         using (var key = Registry.CurrentUser.OpenSubKey(ProbeKey))
         {

@@ -89,6 +89,9 @@ public sealed class InstallerWindow : Window
     private readonly RadioButton _forUser = new();
     private readonly RadioButton _forAll = new();
     private readonly TextBlock _scopeError = new() { IsVisible = false };
+
+    /// <summary>确认页上那句"没拿到管理员权限，收不了机器级那一份"。平时不占地方。</summary>
+    private readonly TextBlock _uninstallError = new() { IsVisible = false };
     private readonly CheckBox _runAfter = new();
     private readonly SettingToggle _associate;
     private readonly SettingToggle _contextMenu;
@@ -208,6 +211,7 @@ public sealed class InstallerWindow : Window
     /// </summary>
     private void GoTo(WizardPage page)
     {
+        HoldHeight();
         Title = _uninstaller ? _lang.Label("TEXT_TITLE_UNINSTALLER") : _lang.Label("TEXT_TITLE_INSTALLER");
 
         if (!_pages.TryGetValue(page, out var control))
@@ -233,6 +237,19 @@ public sealed class InstallerWindow : Window
 
     /// <summary>提权重启时带上这个开关：那一份实例据此跳过「安装范围」那一页。</summary>
     internal const string ArgumentAllUsers = "/all-users";
+
+    /// <summary>
+    /// 记下这一页正文的高度，作为之后每一页的下限 —— 页与页之间<strong>只长不缩</strong>。
+    /// <para>为什么值得单独一招：这扇窗的高度是跟着内容走的（<c>SizeToContent.Height</c>），
+    /// 而「选定安装位置」那一页比「正在安装」高两百多像素。点「安装」的那一瞬间页面就换成了进度页，
+    /// 窗口当场缩掉一截，用户的<strong>松手</strong>事件却还在原来那个坐标上 —— 那一下落在了窗口外面。
+    /// 真机核对里它的样子是"完成页一闪而过，向导自己关了，还顺手把 Andzip 启动了"：
+    /// 没收到松手的那一份 Avalonia 一直以为左键按着，等完成页把窗口撑回来、
+    /// 「完成」正好长在静止不动的指针底下，那一次积压的按下就在它身上结了账。</para>
+    /// <para>高度不缩之后，进度页的页脚与位置页在同一格，松手落在页脚那块空白上，碰不到任何按钮。
+    /// 参考软件（Inno Setup）那张向导也是所有页同一个高度，这不是为了修 bug 才发明的规矩。</para>
+    /// </summary>
+    private void HoldHeight() => _host.MinHeight = Math.Max(_host.MinHeight, _host.Bounds.Height);
 
     private Control Build(WizardPage page) => page switch
     {
@@ -518,6 +535,11 @@ public sealed class InstallerWindow : Window
         _confirmText.LineHeight = Design.Type.BodyLineHeight;
         body.Children.Add(_confirmText);
 
+        _uninstallError.Foreground = Design.Semantic.Danger;
+        _uninstallError.FontSize = Design.Type.Caption;
+        _uninstallError.TextWrapping = TextWrapping.Wrap;
+        body.Children.Add(_uninstallError);
+
         return body;
     }
 
@@ -555,7 +577,31 @@ public sealed class InstallerWindow : Window
         Run(installing: true);
     }
 
-    private void Uninstall() => Run(installing: false);
+    /// <summary>
+    /// 卸载确认页的「卸载」：和安装一样，<strong>先看这个位置现在写不写得进去</strong>。
+    /// <para>机器级那一份要收的是 <c>HKLM</c> 那条与 <c>Program Files</c> 里的目录。从安装目录里
+    /// 双击 <c>uninstall.bat</c> 进来是普通权限，不问一句就会跑到进度条上失败，
+    /// 留下"点了卸载，那份却没动"—— 这正是 2.0.0 那档用户抱怨的形状。</para>
+    /// <para>提不到权限就停在确认页说明白，<strong>不悄悄只收当前用户那一处</strong>：
+    /// 那是用户没同意过的动作。</para>
+    /// </summary>
+    private void Uninstall()
+    {
+        if (!Elevation.Needed(_plan))
+        {
+            Run(installing: false);
+            return;
+        }
+
+        if (_elevate(_plan.Scope))
+        {
+            Close();
+            return;
+        }
+
+        _uninstallError.Text = _lang.Label("TEXT_SETUP_UNINSTALL_DENIED");
+        _uninstallError.IsVisible = true;
+    }
 
     /// <summary>
     /// 只换程序文件那两处，其余（开始菜单、桌面、卸载表键名）保持构造时算好的那份。

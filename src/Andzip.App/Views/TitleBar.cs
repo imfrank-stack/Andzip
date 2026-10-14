@@ -33,7 +33,20 @@ internal sealed class TitleBar : Border
 
     /// <param name="resizable">给不给最小化/最大化两个按钮。对话框与进度窗口不给。</param>
     /// <param name="onClose">叉号要做的事，默认"关掉窗口"；进度窗口换成"取消这件事并关掉"。</param>
-    public TitleBar(Window window, LangCatalog lang, bool resizable, Action? onClose = null)
+    /// <param name="leading">图标右边那一块。**主窗口给的是菜单栏** —— 参考软件那一行就是
+    /// "图标 + 菜单 + 三个按钮"，而我们以前把标题文字单独占一行，两行才装完。
+    /// 给了它就<strong>不再显示标题文字</strong>：那一行的位置让给菜单了。
+    /// 窗口自己的 <c>Title</c> 照旧（任务栏、Alt+Tab、读屏器都读它，"标题栏显示完整路径"
+    /// 那项设置也仍然生效），只是不在这条上再印一遍。</param>
+    /// <param name="trailing">挤在按钮左边的那一小块（主窗口放版本号 —— 截图要能自报身份，
+    /// 这是 1.9.1 定的规矩；把它从标题里挪到这里，而不是删掉）。</param>
+    public TitleBar(
+        Window window,
+        LangCatalog lang,
+        bool resizable,
+        Action? onClose = null,
+        Control? leading = null,
+        Control? trailing = null)
     {
         _window = window;
         _lang = lang;
@@ -71,13 +84,28 @@ internal sealed class TitleBar : Border
             VerticalAlignment = VerticalAlignment.Center,
         };
         left.Children.Add(icon);
-        left.Children.Add(_caption);
+        if (leading is not null)
+        {
+            leading.VerticalAlignment = VerticalAlignment.Center;
+            left.Children.Add(leading);
+        }
+        else
+        {
+            left.Children.Add(_caption);
+        }
 
         var right = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
         };
+
+        if (trailing is not null)
+        {
+            trailing.VerticalAlignment = VerticalAlignment.Center;
+            trailing.Margin = new Thickness(0, 0, Design.Space.X2, 0);
+            right.Children.Add(trailing);
+        }
 
         if (resizable)
         {
@@ -222,11 +250,16 @@ internal sealed class TitleBar : Border
             _maximize, _lang.Label(maximized ? "TEXT_TITLEBAR_RESTORE" : "TEXT_TITLEBAR_MAXIMIZE"));
     }
 
+    /// <summary>
+    /// 这一下点在了"自己会处理点击"的东西上，别抢去当拖动。
+    /// <para><c>MenuItem</c> 必须算进来：2.4.0 把菜单栏搬进这一行之后，
+    /// 只认 <c>Button</c> 的话，点「文件(F)」会同时做两件事 —— 展开菜单<strong>和</strong>拖动窗口。</para>
+    /// </summary>
     private bool IsInsideButton(Control source)
     {
         for (Control? at = source; at is not null && at != this; at = at.Parent as Control)
         {
-            if (at is Button)
+            if (at is Button or MenuItem)
             {
                 return true;
             }

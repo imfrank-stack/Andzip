@@ -73,6 +73,8 @@ internal static class SelfTest
                 $"{new FileInfo(plan.ExecutablePath).Length} vs {new FileInfo(source).Length}");
             Check("开始菜单快捷方式建出来了（这一步走 COM）", File.Exists(plan.StartMenuShortcut));
             Check("桌面快捷方式建出来了", File.Exists(plan.DesktopShortcut));
+            // 安装目录里那个"看得见、双击得动"的卸载入口（用户第二次提这件事）。
+            Check("安装目录里有 uninstall.bat", File.Exists(plan.UninstallScript), plan.UninstallScript);
 
             var (iconPath, iconIndex) = ShellLink.ReadIcon(plan.DesktopShortcut!);
             Check("桌面图标的图标源是装好的那个 exe",
@@ -118,6 +120,7 @@ internal static class SelfTest
             Check("卸载后快捷方式不见",
                 !File.Exists(plan.StartMenuShortcut) && !File.Exists(plan.DesktopShortcut));
             Check("卸载后「卸载 Andzip」那一项也不见", !File.Exists(plan.StartMenuUninstallShortcut));
+            Check("卸载后 uninstall.bat 也跟着目录收回", !File.Exists(plan.UninstallScript));
             Check("卸载后注册表那条不见", Registry.CurrentUser.OpenSubKey(ProbeKey) is null);
 
             // 向导里那个位置可以改，所以装到别处这一条也得在产物上跑一遍：

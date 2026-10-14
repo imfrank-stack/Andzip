@@ -135,6 +135,45 @@ public class TitleBarTests
             $"按住时那一格只量到 {chip} 个淡红芯片像素 —— 灰是没有，但芯片也没画出来，等于看着像\"没反应\"");
     }
 
+    /// <summary>
+    /// 顶栏收成一行（2.4.0）：菜单搬进标题栏那一行，原来第一行那句标题文字删掉，工具栏整体上移一行。
+    /// <para>用户的原话是「将我们的首页（图2），上面的文字去掉（第一行），第二行整体上移」。
+    /// 版本号<strong>不能顺手删掉</strong> —— 1.9.1 定的规矩是每张截图自报身份，所以它挪到这一行的右端。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheMainWindowWearsItsMenuOnTheCaptionRow()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new Andzip.Core.Settings.AppSettings()).Shown();
+        UiWait.Pump(60);
+
+        var bar = VisualQuery.Of<TitleBar>(window).Single();
+        Assert.NotEmpty(VisualQuery.Of<Menu>(bar));
+
+        // 工具栏紧跟在标题栏那一行下面，中间没有第三行 —— 这就是"整体上移"。
+        var open = VisualQuery.Of<Button>(window)
+            .Single(b => Equals(VisualQuery.TextOf(b), lang.Label("TEXT_TOOLBAR_OPEN")));
+        var barBottom = bar.TranslatePoint(new Point(0, bar.Bounds.Height), window)!.Value.Y;
+        var toolbarTop = open.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        Assert.True(toolbarTop <= barBottom + 2,
+            $"标题栏底在 y={barBottom:0}，工具栏顶却在 y={toolbarTop:0} —— 中间还压着一行");
+
+        var shown = VisualQuery.VisibleTexts(window);
+        Assert.DoesNotContain(window.Title, shown, StringComparer.Ordinal);
+
+        // 版本号还在，只是换了地方：既在这一行的右端看得见，也还在窗口自己的 Title 里
+        var version = Version();
+        Assert.Contains(version, shown, StringComparer.Ordinal);
+        Assert.Contains(version, window.Title, StringComparison.Ordinal);
+    }
+
+    /// <summary>标题栏右端那一小截版本号，与 <c>MainWindow</c> 拼 Title 时用的是同一个算法。</summary>
+    private static string Version()
+    {
+        var v = typeof(MainWindow).Assembly.GetName().Version!;
+        return $"v{v.Major}.{v.Minor}.{v.Build}";
+    }
+
     private static (Window Window, TitleBar Bar) Host()
     {
         var lang = TestLang.Chinese();

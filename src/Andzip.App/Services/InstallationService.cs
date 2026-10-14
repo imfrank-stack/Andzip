@@ -138,6 +138,12 @@ internal sealed class InstallationService
             File.Copy(sourceExe, plan.ExecutablePath, overwrite: true);
         }
 
+        File.WriteAllText(plan.UninstallScript, InstallLayout.UninstallScriptText, System.Text.Encoding.ASCII);
+
+        // 安装目录里要有一个看得见、双击得动的卸载入口。卸载逻辑在 exe 里，
+        // 所以这是一个 90 字节的批处理而不是第二份 20 MB 的拷贝（理由写在 InstallLayout 上）。
+        // 它随目录一起被收回，卸载那边不需要单独记它一笔。
+
         done++;
 
         Step("TEXT_SETUP_STEP_LINKS");
