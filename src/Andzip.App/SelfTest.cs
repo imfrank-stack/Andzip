@@ -83,13 +83,48 @@ internal static class SelfTest
                 Check("卸载表里有这一条", key is not null);
                 Check("卸载命令带 /uninstall",
                     ((string?)key?.GetValue("UninstallString"))?.Contains("/uninstall", StringComparison.Ordinal) == true);
+
+                // 版本号里那段 "+45.718056…" 是 SourceLink 附的提交号，写进卸载表会让系统的
+                // 「设置 → 应用」显示成一长串（1.9.2 真机核对量到的）。
+                var display = (string?)key?.GetValue("DisplayVersion") ?? string.Empty;
+                Check("卸载表里的版本号干净（不带提交号）",
+                    display.Length > 0 && !display.Contains('+', StringComparison.Ordinal), display);
             }
+
+            Check("开始菜单里有「卸载 Andzip」那一项", File.Exists(plan.StartMenuUninstallShortcut));
 
             var cleaned = service.Uninstall(plan);
             Check("卸载后安装目录不见", cleaned && !Directory.Exists(plan.InstallDirectory));
             Check("卸载后快捷方式不见",
                 !File.Exists(plan.StartMenuShortcut) && !File.Exists(plan.DesktopShortcut));
+            Check("卸载后「卸载 Andzip」那一项也不见", !File.Exists(plan.StartMenuUninstallShortcut));
             Check("卸载后注册表那条不见", Registry.CurrentUser.OpenSubKey(ProbeKey) is null);
+
+            // 向导里那个位置可以改，所以装到别处这一条也得在产物上跑一遍：
+            // 路径归一化与"卸载要回到记着的那个目录"这两件事都在真机上才量得准。
+            var elsewhere = Path.Combine(root, "Custom", "Andzip 2");
+            var custom = InstallLayout.Plan(
+                Path.Combine(root, "Local"),
+                Path.Combine(root, "Roaming"),
+                desktop,
+                elsewhere,
+                "卸载 Andzip") with { UninstallKey = ProbeKey };
+
+            service.Install(custom, source, associate: false, contextMenu: false);
+            Check("装到自定义目录：程序文件在那里", File.Exists(custom.ExecutablePath), custom.ExecutablePath);
+            Check("装到自定义目录：卸载表记下了那个位置",
+                (string?)Registry.CurrentUser.OpenSubKey(ProbeKey)?.GetValue("InstallLocation") == custom.InstallDirectory);
+            Check("装到自定义目录：卸载快捷方式的名字来自语言包",
+                File.Exists(custom.StartMenuUninstallShortcut), custom.StartMenuUninstallShortcut);
+
+            // 卸载要按卸载表里记着的那个位置找回自己（向导里那个位置是可以改的）。
+            // 这里只核对"读回来的目录对不对"，删东西仍然用临时落点那份 —— RecordedPlan()
+            // 走的是这台机器的真实目录，拿它去卸会把开发机上的开始菜单快捷方式删掉。
+            Check("装到自定义目录：卸载时按记着的位置找回自己",
+                service.RecordedPlan(ProbeKey).InstallDirectory == custom.InstallDirectory,
+                service.RecordedPlan(ProbeKey).InstallDirectory);
+            Check("装到自定义目录：卸得回去", service.Uninstall(custom),
+                "卸不回去会在盘上留下一个没人知道的目录");
         }
         catch (Exception ex)
         {

@@ -10,13 +10,16 @@ using Microsoft.Win32;
 namespace Andzip.App.UiTests;
 
 /// <summary>
-/// 「正常安装」这条路径的往返实测：真的装一次，看桌面/开始菜单/卸载表三处都落了东西，
+/// 「正常安装」这条路径的往返实测：真的装一次，看桌面/开始菜单/卸载表几处都落了东西，
 /// 再真的卸一次，看它们都收回去了。
 /// <para>为什么不用假的文件系统：快捷方式是 shell 的 <c>.lnk</c> 二进制格式，
 /// 卸载表是注册表 —— 这两样"代码写了"与"系统里真有"是两件事，
 /// 而它们的失败方式恰好都是"用户看不见任何报错，只是没有图标"。</para>
 /// <para>落点全部指向临时目录，注册表写的是探针键；<c>associate</c> 与 <c>contextMenu</c>
 /// 一律传 false —— 那两条会动开发机上的真实关联表，测试不该有那种副作用。</para>
+/// <para>界面上那几条走的是<strong>用户那条路</strong>：欢迎页 → 位置页 → 安装 → 完成页。
+/// 2.0.0 之前这里只有一屏，测试也就只按一颗按钮；现在每一页都有"上一/下一"的走法，
+/// 少一步都会露出来（比如位置页没走到就直接装，等于那个可选目录是假的）。</para>
 /// </summary>
 [SupportedOSPlatform("windows")]
 public class InstallerTests : IDisposable
@@ -50,7 +53,12 @@ public class InstallerTests : IDisposable
         {
             // 临时目录留在 %TEMP% 里无所谓，不值得让一次测试因此变红
         }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
+
+    // ------------------------------------------------- 服务层：真的装、真的卸
 
     [Fact]
     [SupportedOSPlatform("windows")]
@@ -88,6 +96,44 @@ public class InstallerTests : IDisposable
             $"快捷方式里的图标字段是「{path}」，期望「{_plan.ExecutablePath}」");
     }
 
+    /// <summary>
+    /// 开始菜单里必须有「卸载 Andzip」那一项，而且它点开的是<strong>卸载</strong>，不是主窗口。
+    /// <para>用户的原话是"你这样都没有卸载 uninstall 和开始菜单等"。注册表里那条卸载项其实一直在，
+    /// 但只有会打开「设置 → 应用」的人才找得到；开始菜单这一项才是顺手的那一个。
+    /// 目标与参数两格都得读回来核对 —— 指错或丢了参数时它照样显示得好好的。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void StartMenuCarriesAnUninstallEntryThatActuallyUninstalls()
+    {
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        Assert.True(File.Exists(_plan.StartMenuUninstallShortcut), "开始菜单里没有「卸载 Andzip」那一项。");
+
+        var (target, arguments) = ShellLink.ReadTarget(_plan.StartMenuUninstallShortcut);
+        Assert.Equal(_plan.ExecutablePath, target);
+        Assert.Contains("/uninstall", arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 卸载表里的版本号不能带 SourceLink 那段提交号。
+    /// <para>1.9.2 真机核对：系统的「设置 → 应用」里显示的是
+    /// <c>1.9.2+45.718056ece53be97a34004652df38b3af68954316</c>。标题栏那一处 1.9.1 已经修过，
+    /// 这一处读的是复制过去那个 exe 的版本信息，所以得另外切一刀。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void UninstallEntryRecordsAVersionWithoutTheSourceLinkSuffix()
+    {
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        using var key = Registry.CurrentUser.OpenSubKey(_plan.UninstallKey);
+        var version = (string?)key?.GetValue("DisplayVersion") ?? string.Empty;
+
+        Assert.False(string.IsNullOrWhiteSpace(version), "卸载表里没有版本号。");
+        Assert.DoesNotContain("+", version, StringComparison.Ordinal);
+    }
+
     [Fact]
     [SupportedOSPlatform("windows")]
     public void UninstallTakesEverythingBackOut()
@@ -100,6 +146,7 @@ public class InstallerTests : IDisposable
         Assert.False(Directory.Exists(_plan.InstallDirectory), "安装目录还在。");
         Assert.False(File.Exists(_plan.StartMenuShortcut), "开始菜单的快捷方式还在。");
         Assert.False(File.Exists(_plan.DesktopShortcut!), "桌面的快捷方式还在。");
+        Assert.False(File.Exists(_plan.StartMenuUninstallShortcut), "开始菜单里「卸载 Andzip」那一项还在。");
         Assert.True(Registry.CurrentUser.OpenSubKey(_plan.UninstallKey) is null, "卸载表里那一条还在。");
     }
 
@@ -120,62 +167,306 @@ public class InstallerTests : IDisposable
     }
 
     /// <summary>
-    /// 安装器界面上的按钮与两个开关都在，而且<strong>没装过就看不见卸载那颗</strong>。
-    /// <para>这条不测装了什么 —— 上面那几条测的就是那个。它测的是"用户看得见哪些动作"，
-    /// 尤其是那颗会删掉整个程序的红色按钮不该在没东西可删的时候还摆在那里。</para>
+    /// 卸载表里的版本号不能带 SourceLink 那段提交号。
+    /// <para>1.9.2 真机核对：系统的「设置 → 应用」里显示的是
+    /// <c>1.9.2+45.718056ece53be97a34004652df38b3af68954316</c>。标题栏那一处 1.9.1 已经修过，
+    /// 这一处读的是复制过去那个 exe 的版本信息，所以得另外切一刀。</para>
+    /// <para>上面那条测的是"写进注册表的这一串里没有加号"，但测试用的源文件是一个 4 字节的假货，
+    /// 它根本没有版本资源 —— 所以那条即使把这一刀漏了也照样绿。这一条直接量切本身。</para>
+    /// </summary>
+    [Theory]
+    [InlineData("1.9.2+45.718056ece53be97a34004652df38b3af68954316", "1.9.2")]
+    [InlineData("2.0.0", "2.0.0")]
+    [InlineData(" 1.9.2 ", "1.9.2")]
+    [InlineData("+45.abc", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void TheVersionWrittenToTheUninstallEntryLosesTheSourceLinkSuffix(string? product, string? expected)
+    {
+        var clean = InstallationService.CleanVersion(product);
+
+        Assert.DoesNotContain("+", clean, StringComparison.Ordinal);
+
+        // 读不到版本时退回自己这份程序集的版本，而不是留一个空字符串给「设置 → 应用」显示
+        Assert.Equal(expected ?? typeof(InstallationService).Assembly.GetName().Version?.ToString() ?? "0.0.0", clean);
+    }
+
+    /// <summary>
+    /// 卸不掉的时候要说"留到退出后删"，不能把异常原文甩到界面上。
+    /// <para>1.9.2 真机核对抓到的正题：从<strong>已安装的那一份</strong>里卸载（控制面板那条路）时，
+    /// 删自己正在跑的那个 exe 报的是 <c>UnauthorizedAccessException</c>，而代码只接
+    /// <c>IOException</c> —— 于是延迟删除根本没启动，程序文件留在盘上，界面上是一行英文原文
+    /// "Access to the path 'Andzip.exe' is denied."。这里用只读属性造出同一个异常：
+    /// 只读文件删不掉时 .NET 报的正是 <c>UnauthorizedAccessException</c>。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void AProgramFileItCannotDeleteIsDeferredInsteadOfThrowing()
+    {
+        var service = Service();
+        service.Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        File.SetAttributes(_plan.ExecutablePath, FileAttributes.ReadOnly);
+
+        var cleaned = service.Uninstall(_plan);
+
+        Assert.False(cleaned, "文件删不掉却报告「删干净了」，那就是谎报。");
+        Assert.True(File.Exists(_plan.ExecutablePath), "延迟删除不该当场把文件删掉。");
+
+        File.SetAttributes(_plan.ExecutablePath, FileAttributes.Normal);
+    }
+
+    /// <summary>
+    /// 装到自定义目录之后，卸载要按卸载表里记着的那个位置找回自己。
+    /// <para>只看默认路径的后果是"卸完了 D:\Tools\Andzip 还留在那儿，而开始菜单与注册表里的
+    /// 东西没了" —— 半截卸载比不卸更难看。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void UninstallGoesBackToTheRecordedDirectoryRatherThanTheDefaultOne()
+    {
+        var service = Service();
+        var elsewhere = Path.Combine(_root, "自定义 位置", "Andzip");
+        var custom = _plan with
+        {
+            InstallDirectory = elsewhere,
+            ExecutablePath = Path.Combine(elsewhere, InstallLayout.ExeName),
+        };
+
+        service.Install(custom, SourceExe(), associate: false, contextMenu: false);
+
+        using (var key = Registry.CurrentUser.OpenSubKey(_plan.UninstallKey))
+        {
+            Assert.Equal(elsewhere, key?.GetValue("InstallLocation"));
+        }
+
+        // 探针键里记的是临时目录，所以这里只核对"读回来的那一个是不是它"，
+        // 真删仍然用 custom 那份（RecordedPlan 会按这台机器的真实目录算快捷方式）。
+        Assert.Equal(elsewhere, service.RecordedPlan(_plan.UninstallKey).InstallDirectory);
+
+        Assert.True(service.Uninstall(custom));
+        Assert.False(Directory.Exists(elsewhere), "自定义目录没被收回去。");
+    }
+
+    /// <summary>安装进行中的每一步都要报出来，而且百分比是往前走的。</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void InstallReportsEachStepSoTheWizardCanSayWhatItIsDoing()
+    {
+        var seen = new List<ProgressStep>();
+        var service = Service();
+
+        service.Install(_plan, SourceExe(), associate: false, contextMenu: false, new Collect(seen));
+
+        // 没勾关联与右键菜单时就该只有这三步：没做的事不能占一格里程碑，
+        // 否则那根条永远走不完，用户以为卡住了。
+        Assert.Equal(
+            new[] { "TEXT_SETUP_STEP_COPY", "TEXT_SETUP_STEP_LINKS", "TEXT_SETUP_STEP_REGISTRY" },
+            seen.Select(step => step.MessageKey).ToArray());
+        Assert.Equal(0, seen[0].Percent);
+        Assert.True(seen[^1].Percent > seen[0].Percent, "进度条原地不动，那根条就是假的。");
+        Assert.All(seen, step => Assert.InRange(step.Percent, 0, 100));
+
+        // 卸载那一路最后一步必须是"删程序文件"：它前面那些都在动快捷方式与注册表，
+        // 顺序倒了会把还在用的东西先删掉。
+        var back = new List<ProgressStep>();
+        service.Uninstall(_plan, new Collect(back));
+        Assert.Equal("TEXT_SETUP_STEP_UNFILES", back[back.Count - 1].MessageKey);
+    }
+
+    /// <summary>把报出来的每一步收进一个列表，好让上面的断言看得见"走到哪一步了"。</summary>
+    private sealed class Collect(List<ProgressStep> into) : IProgress<ProgressStep>
+    {
+        public void Report(ProgressStep value) => into.Add(value);
+    }
+
+    /// <summary>
+    /// "等退出再删"这条命令等的是<strong>这个进程真的没了</strong>，不是睡两秒。
+    /// <para>1.9.2 那版是 <c>ping -n 3</c> 之后 <c>rmdir</c>：界面上那句"已安排在退出后删除"
+    /// 说的是前者，做的却是后者。用户在完成页上多停几秒，rmdir 就已经在还锁着的文件上
+    /// 失败过了，目录永远留在盘上（2.0.0 真机核对：卸完之后程序文件还在）。</para>
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void TheDeferredDeleteWaitsForThisProcessRatherThanForAGuess()
+    {
+        var script = InstallationService.DeleteArguments(4321, @"C:\Users\frank\AppData\Local\Programs\Andzip");
+
+        // 开头也得钉住：2.0.0 第一版在这里留了一个 cmd 写法剩下的 /c，PowerShell 把它当成
+        // 要执行的命令名，于是"已安排在退出后删除"这句话永远兑不了现
+        Assert.StartsWith("-NoProfile", script, StringComparison.Ordinal);
+        Assert.Contains("Wait-Process -Id 4321", script, StringComparison.Ordinal);
+        Assert.Contains(@"Remove-Item -LiteralPath 'C:\Users\frank\AppData\Local\Programs\Andzip'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("ping", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 安装目录现在是用户能自己打的东西，所以它必须整个待在单引号字面量里，
+    /// 里面的单引号按 PowerShell 的规矩翻倍 —— 否则一个带 <c>'</c> 的目录名就能把这条命令改成别的。
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void AQuotedInstallDirectoryCannotRewriteTheDeferredDeleteCommand()
+    {
+        var script = InstallationService.DeleteArguments(7, @"D:\it's a 目录\Andzip");
+
+        Assert.Contains(@"'D:\it''s a 目录\Andzip'", script, StringComparison.Ordinal);
+
+        // 整条命令里只该有那两对定界用的单引号：路径自己没漏出任何一撇
+        Assert.Equal(4, script.Count(c => c == '\''));
+    }
+
+    // ------------------------------------------------------- 界面：向导走法
+
+    /// <summary>
+    /// 打开就是欢迎页：说清要做什么，给「下一步」；这台机器没装过就不该看见那颗红色「卸载」。
     /// </summary>
     [AvaloniaFact]
-    public void InstallerWindowOffersInstallAndHidesUninstallWhenNothingIsInstalled()
+    public void TheInstallerOpensOnAWelcomePageAndHidesUninstallWhenNothingIsInstalled()
     {
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang).Shown();
 
         var titles = VisualQuery.VisibleTexts(window);
-        Assert.Contains(lang.Label("TEXT_BTN_INSTALL"), titles);
-        Assert.Contains(lang.Label("TEXT_BTN_UNINSTALL"), titles);
-        Assert.Contains(lang.Label("TEXT_BTN_CLOSE"), titles);
-        Assert.Contains(lang.Label("TEXT_INSTALLER_ASSOCIATE"), titles);
-        Assert.Contains(lang.Label("TEXT_INSTALLER_CONTEXT"), titles);
+        Assert.Contains(lang.Label("TEXT_SETUP_WELCOME_TITLE"), titles);
+        Assert.Contains(lang.Label("TEXT_BTN_NEXT"), titles);
+        Assert.Contains(lang.Label("TEXT_BTN_CANCEL"), titles);
 
-        var uninstall = VisualQuery.Of<Button>(window)
-            .Single(b => Equals(VisualQuery.TextOf(b), lang.Label("TEXT_BTN_UNINSTALL")));
-        var installedOnThisMachine = File.Exists(new InstallationService(lang).CurrentPlan().ExecutablePath);
-        Assert.Equal(installedOnThisMachine, uninstall.IsVisible);
+        // 这条量的是"开发机上装没装"，所以钉的是相关性而不是某一侧：
+        // 那颗红色按钮必须在装过的时候才出现（没东西可删时摆着它更让人犹豫）。
+        var installed = File.Exists(new InstallationService(lang).CurrentPlan().ExecutablePath);
+        Assert.Equal(installed, titles.Contains(lang.Label("TEXT_BTN_UNINSTALL")));
+
+        // 标题栏那一句要跟着身份走：从控制面板进来卸载时窗口不该还写着"安装 Andzip"
+        Assert.Equal(lang.Label("TEXT_TITLE_INSTALLER"), window.Title);
+    }
+
+    /// <summary>已经装过时，欢迎页上才有那颗红色「卸载」。</summary>
+    [AvaloniaFact]
+    public void TheWelcomePageOffersUninstallOnceSomethingIsInstalled()
+    {
+        var lang = TestLang.Chinese();
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        var titles = VisualQuery.VisibleTexts(new InstallerWindow(lang, _plan).Shown());
+
+        Assert.Contains(lang.Label("TEXT_BTN_UNINSTALL"), titles);
+        Assert.Contains(lang.Format("TEXT_INSTALLER_ALREADY", ("dir", _plan.ExecutablePath)), titles);
     }
 
     /// <summary>
-    /// 真的点一次「安装」。
-    /// <para>1.8.1 装不上就是这个形状：安装跑在后台线程上，而后台线程里读的是
-    /// <c>SettingToggle.IsChecked</c>（背后是 Avalonia 的 <c>ToggleButton</c>）——
-    /// 跨线程碰控件属性直接抛 "Call from invalid thread"，界面上只剩这一行英文。
-    /// 上面那几条都是绕开界面直接调 <c>InstallationService</c> 的，所以拦不住；
-    /// 这一条走的是用户那条路：按按钮 → 等异步跑完 → 看界面上写了什么。</para>
-    /// <para>两个开关在这里关掉：关联与右键菜单会动开发机的真实配置，
-    /// 而这条要钉的是"按钮到落盘这条线通不通"，不是那两条注册表逻辑（上面已单独测）。</para>
+    /// 位置那一页：可改的路径框 + 所需空间 + 可用空间 + 附加任务，与 Inno 那张截图对上。
     /// </summary>
     [AvaloniaFact]
-    public void ClickingInstallActuallyInstallsAndReportsOnTheUi()
+    public void TheLocationPageShowsThePathAndBothSpaceNumbers()
     {
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        var shown = ClickInstallAndWait(window, lang);
+        Click(window, lang, "TEXT_BTN_NEXT");
 
-        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_DONE"), StringComparison.Ordinal),
-            $"点完安装，界面没有回话「{lang.Label("TEXT_INSTALLER_DONE")}」，实际是：{shown}");
-        Assert.DoesNotContain("invalid thread", shown, StringComparison.OrdinalIgnoreCase);
-        Assert.True(File.Exists(_plan.ExecutablePath), "界面说装好了，可安装目录里没有程序文件。");
-        Assert.True(File.Exists(_plan.StartMenuShortcut), "界面说装好了，可开始菜单没有快捷方式。");
+        var titles = VisualQuery.VisibleTexts(window);
+        Assert.Contains(lang.Label("TEXT_SETUP_LOCATION_TITLE"), titles);
+        Assert.Contains(lang.Label("TEXT_INSTALLER_TARGET"), titles);
+        Assert.Contains(lang.Label("TEXT_SETUP_SPACE_REQUIRED"), titles);
+        Assert.Contains(lang.Label("TEXT_SETUP_SPACE_AVAILABLE"), titles);
+        Assert.Contains(lang.Label("TEXT_SETUP_OPTIONS_TITLE"), titles);
+        Assert.Contains(lang.Label("TEXT_INSTALLER_ASSOCIATE"), titles);
+        Assert.Contains(lang.Label("TEXT_INSTALLER_CONTEXT"), titles);
+        Assert.Contains(lang.Label("TEXT_BTN_BACK"), titles);
+        Assert.Contains(lang.Label("TEXT_BTN_INSTALL"), titles);
+
+        var box = VisualQuery.Of<TextBox>(window).Single();
+        Assert.Equal(_plan.InstallDirectory, box.Text);
+
+        // 两个附加任务的初值跟着"这台机器装没装过"走：没装过就该是开着的。
+        // 2.0.0 真机核对时它们是灰的 —— 初值判据问的是 IsChecked 是不是 null，
+        // 而 ToggleButton 的初值是 false，那个判断永远不成立，于是新装的人默认什么都不做。
+        var rows = VisualQuery.Of<SettingToggle>(window).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, row => Assert.True(row.IsChecked == true, $"「{row.Label}」这一项这时应该是开着的"));
+
+        // 所需空间不能是"–"或 0：它量的是真的那个源文件的字节数
+        var values = VisualQuery.Of<TextBlock>(window).Select(t => t.Text).ToList();
+        Assert.Contains(SizeText.Format(InstallTarget.RequiredBytes(Environment.ProcessPath!)), values);
     }
 
     /// <summary>
-    /// 取不到桌面目录时，界面上那句回话<strong>不能提桌面</strong>。
+    /// 已经装过时，两个附加任务默认<strong>不</strong>打开。
+    /// <para>那时点「安装」是要重装/补关联，悄悄再改一遍他的默认程序设置是意外后果
+    /// （与 1.8.x 那版界面同一个约定，只是那时候它写在构造里，没人测过）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheExtrasStartOffWhenReinstallingOverAnExistingInstall()
+    {
+        var lang = TestLang.Chinese();
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        var window = new InstallerWindow(lang, _plan).Shown();
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        var rows = VisualQuery.Of<SettingToggle>(window).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, row => Assert.False(row.IsChecked == true, $"重装时不该默认再动一遍他的系统设置：「{row.Label}」"));
+    }
+
+    /// <summary>
+    /// 上一步 / 下一步来回走，不该把用户刚改过的选择抹掉。
+    /// </summary>
+    [AvaloniaFact]
+    public void WalkingBackAndForthKeepsTheChoicesTheUserMade()
+    {
+        var lang = TestLang.Chinese();
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        Click(window, lang, "TEXT_BTN_NEXT");
+        var rows = VisualQuery.Of<SettingToggle>(window).ToList();
+        Assert.Equal(2, rows.Count);
+        rows[0].IsChecked = false;
+        rows[1].IsChecked = false;
+
+        Click(window, lang, "TEXT_BTN_BACK");
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        var again = VisualQuery.Of<SettingToggle>(window).ToList();
+        Assert.Equal(2, again.Count);
+        Assert.All(again, row => Assert.False(row.IsChecked == true,
+            $"回到位置页时，用户关掉的那一项被偷偷打开了：「{row.Label}」"));
+    }
+
+    /// <summary>
+    /// 真的走完一次向导：欢迎 → 位置 → 安装 → 完成，而且磁盘上真有东西。
+    /// <para>1.8.1 装不上那个形状（后台线程读 <c>SettingToggle.IsChecked</c> 抛
+    /// "Call from invalid thread"）只有走这条路才拦得住。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void WalkingTheWizardActuallyInstallsAndSaysSoOnTheFinishPage()
+    {
+        var lang = TestLang.Chinese();
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        Click(window, lang, "TEXT_BTN_NEXT");
+        UncheckExtras(window);
+        Click(window, lang, "TEXT_BTN_INSTALL");
+
+        var shown = WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
+
+        Assert.Contains(lang.Label("TEXT_INSTALLER_DONE"), shown);
+        Assert.Contains(lang.Label("TEXT_SETUP_UNINSTALL_HINT"), shown);
+        Assert.DoesNotContain("invalid thread", shown, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(_plan.ExecutablePath), "完成页说装好了，可安装目录里没有程序文件。");
+        Assert.True(File.Exists(_plan.StartMenuShortcut), "完成页说装好了，可开始菜单没有快捷方式。");
+        Assert.True(File.Exists(_plan.StartMenuUninstallShortcut), "完成页说装好了，可开始菜单没有「卸载 Andzip」。");
+    }
+
+    /// <summary>
+    /// 取不到桌面目录时，完成页那句回话<strong>不能提桌面</strong>。
     /// <para>1.8.4 真机核对抓到的就是这一类：装完显示"桌面与开始菜单的快捷方式已创建"，
     /// 桌面上却什么也没有 —— 因为 <c>FOLDERID_Desktop</c> 的 GUID 凭记忆写错了，
     /// 桌面路径解析成 null，那一枚快捷方式被静默跳过，而回话是写死的。</para>
     /// </summary>
     [AvaloniaFact]
-    public void UiStopsClaimingTheDesktopShortcutWhenThereIsNoDesktopFolder()
+    public void TheFinishPageStopsClaimingTheDesktopShortcutWhenThereIsNoDesktopFolder()
     {
         var lang = TestLang.Chinese();
         var noDesktop = InstallLayout.Plan(
@@ -183,12 +474,184 @@ public class InstallerTests : IDisposable
             with { UninstallKey = _plan.UninstallKey };
 
         var window = new InstallerWindow(lang, noDesktop).Shown();
-        var shown = ClickInstallAndWait(window, lang);
+        Click(window, lang, "TEXT_BTN_NEXT");
+        UncheckExtras(window);
+        Click(window, lang, "TEXT_BTN_INSTALL");
+
+        var shown = WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
 
         Assert.True(File.Exists(noDesktop.StartMenuShortcut), "开始菜单那一个也没建出来，那就不是桌面目录的事了。");
         Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_DONE_NO_DESKTOP"), StringComparison.Ordinal),
             $"界面没有照实说「{lang.Label("TEXT_INSTALLER_DONE_NO_DESKTOP")}」，实际是：{shown}");
         Assert.DoesNotContain(lang.Label("TEXT_INSTALLER_DONE"), shown, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 在位置那一页改目录，装完东西就落在那一个，卸载表里记的也是那一个。
+    /// <para>这条是"可选安装位置"不是装饰的凭据：只把路径显示出来、装的时候仍然用默认目录，
+    /// 界面上看不出任何区别。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TypingADifferentFolderInstallsThere()
+    {
+        var lang = TestLang.Chinese();
+        var elsewhere = Path.Combine(_root, "另一个位置");
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        Click(window, lang, "TEXT_BTN_NEXT");
+        UncheckExtras(window);
+        VisualQuery.Of<TextBox>(window).Single().Text = elsewhere;
+        Click(window, lang, "TEXT_BTN_INSTALL");
+
+        WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
+
+        Assert.True(File.Exists(Path.Combine(elsewhere, InstallLayout.ExeName)),
+            "改了位置却还装在原来的地方。");
+        Assert.False(File.Exists(_plan.ExecutablePath), "默认目录里不该有那一个文件。");
+
+        using var key = Registry.CurrentUser.OpenSubKey(_plan.UninstallKey);
+        Assert.Equal(InstallTarget.Normalize(elsewhere), key?.GetValue("InstallLocation"));
+    }
+
+    /// <summary>
+    /// 写一个写不进去的位置：停在原地说明白，不要开始装。
+    /// <para>不等进度条走到一半才报错的理由：那一处会留下一个装了一半的目录，
+    /// 而我们没有回滚可做（只会复制一个文件，不会先备份旧的）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AnUnwritableLocationStopsOnThatPageInsteadOfInstalling()
+    {
+        var lang = TestLang.Chinese();
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        Click(window, lang, "TEXT_BTN_NEXT");
+        UncheckExtras(window);
+        VisualQuery.Of<TextBox>(window).Single().Text = @"X:\Andzip 装不进来";
+        Click(window, lang, "TEXT_BTN_INSTALL");
+
+        UiWait.Pump(200);
+        var shown = string.Join("|", VisualQuery.VisibleTexts(window));
+
+        Assert.Contains(lang.Label("TEXT_SETUP_LOCATION_TITLE"), shown);
+        Assert.True(shown.Contains(lang.Format("TEXT_SETUP_DIR_UNWRITABLE", ("dir", _plan.InstallDirectory)),
+                StringComparison.Ordinal),
+            $"位置没通过校验时要把原因说清楚，屏幕上却是：{shown}");
+        Assert.False(File.Exists(_plan.ExecutablePath), "位置没通过校验却还是装了。");
+    }
+
+    /// <summary>
+    /// 卸载走的是另一套页：确认 → 进行中 → 完成，标题也换成「卸载 Andzip」。
+    /// <para>带 <c>/uninstall</c> 进来时（控制面板那条卸载命令、开始菜单那一项）直接开在这一页 ——
+    /// 让人家先看见一个安装向导再自己找红色按钮，就是"没有 uninstall"那句抱怨的一半原因。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheUninstallerOpensOnAConfirmPageAndRemovesEverything()
+    {
+        var lang = TestLang.Chinese();
+        var service = Service();
+        service.Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        var window = new InstallerWindow(lang, _plan, startsAsUninstaller: true).Shown();
+
+        Assert.Equal(lang.Label("TEXT_TITLE_UNINSTALLER"), window.Title);
+        var before = VisualQuery.VisibleTexts(window);
+        Assert.Contains(lang.Label("TEXT_SETUP_CONFIRM_TITLE"), before);
+        Assert.Contains(lang.Label("TEXT_BTN_UNINSTALL"), before);
+
+        Click(window, lang, "TEXT_BTN_UNINSTALL");
+        var shown = WaitUntil(window, lang, "TEXT_SETUP_UNINSTALL_DONE_TITLE");
+
+        Assert.Contains(lang.Label("TEXT_INSTALLER_REMOVED"), shown);
+
+        // 刚卸完的那一页不该再问"完成后运行 Andzip"，也不该再教人去哪儿卸载：
+        // 那颗勾选框按下去什么也不会发生（Finish() 里挡着），而一颗不动的控件比少一颗更糟。
+        Assert.DoesNotContain(lang.Label("TEXT_SETUP_RUN_AFTER"), shown);
+        Assert.DoesNotContain(lang.Label("TEXT_SETUP_UNINSTALL_HINT"), shown);
+
+        Assert.False(File.Exists(_plan.StartMenuShortcut), "界面上说卸完了，开始菜单的快捷方式还在。");
+        Assert.False(File.Exists(_plan.StartMenuUninstallShortcut), "界面上说卸完了，「卸载 Andzip」那一项还在。");
+        Assert.True(Registry.CurrentUser.OpenSubKey(_plan.UninstallKey) is null, "界面上说卸完了，卸载表里那条还在。");
+    }
+
+    /// <summary>
+    /// 从安装向导的欢迎页翻到卸载：那颗红色按钮不该另开一个窗口，也不该丢下落点。
+    /// </summary>
+    [AvaloniaFact]
+    public void TheUninstallButtonOnTheWelcomePageWalksIntoTheUninstaller()
+    {
+        var lang = TestLang.Chinese();
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        var window = new InstallerWindow(lang, _plan).Shown();
+        Click(window, lang, "TEXT_BTN_UNINSTALL");
+
+        var shown = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.Contains(lang.Label("TEXT_SETUP_CONFIRM_TITLE"), shown);
+        Assert.Equal(lang.Label("TEXT_TITLE_UNINSTALLER"), window.Title);
+    }
+
+    /// <summary>
+    /// 卸完之后，"这台机器上已经装过"那一句必须跟着改口。
+    /// <para>真机截图里抓到的矛盾：红色卸载按钮按磁盘状态自己消失了，同一屏上那句
+    /// "这台机器上已经装过 C:\…\Andzip.exe" 却还留着 —— 一件事的两个说法，
+    /// 一个跟着状态走一个不走，比两个都不走更容易骗到人。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheWelcomePageStopsClaimingInstalledAfterUninstallingFromTheUi()
+    {
+        var lang = TestLang.Chinese();
+        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
+
+        var window = new InstallerWindow(lang, _plan).Shown();
+        Assert.Contains(lang.Format("TEXT_INSTALLER_ALREADY", ("dir", _plan.ExecutablePath)),
+            VisualQuery.VisibleTexts(window));
+
+        Click(window, lang, "TEXT_BTN_UNINSTALL");
+        Click(window, lang, "TEXT_BTN_UNINSTALL");
+        WaitUntil(window, lang, "TEXT_SETUP_UNINSTALL_DONE_TITLE");
+
+        Assert.False(File.Exists(_plan.ExecutablePath), "界面上说卸完了，程序文件还在。");
+        var reopened = string.Join("|", VisualQuery.VisibleTexts(new InstallerWindow(lang, _plan).Shown()));
+        Assert.True(reopened.Contains(lang.Label("TEXT_INSTALLER_NOT_YET"), StringComparison.Ordinal),
+            $"东西已经删干净了，重新打开的欢迎页却还写着装过：{reopened}");
+    }
+
+    /// <summary>
+    /// 进行中那一页不给任何可点的动作：复制一个文件停不下来，
+    /// 放一颗"点了没用的取消"比不放更让人犹豫（1.9.2 删掉进度框那颗被切掉的按钮是同一件事）。
+    /// <para>这里按完按钮<strong>立刻</strong>看，一次都不 pump：处理器是 async void，
+    /// 切到后台线程之前那段（把页翻到「正在安装」）是同步跑完的，而 4 个字节的复制
+    /// 在下一个 pump 里就能结束 —— 晚看一眼，这一页就已经翻过去了。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheWorkingPageShowsTheStepAndNoButtons()
+    {
+        var lang = TestLang.Chinese();
+        var window = new InstallerWindow(lang, _plan).Shown();
+
+        Click(window, lang, "TEXT_BTN_NEXT");
+        UncheckExtras(window);
+
+        var install = VisualQuery.Of<Button>(window)
+            .Single(b => Equals(VisualQuery.TextOf(b), lang.Label("TEXT_BTN_INSTALL")));
+        Clicker.Invoke(install);
+
+        var shown = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.Contains(lang.Label("TEXT_SETUP_WORKING_TITLE"), shown);
+        Assert.Single(VisualQuery.Of<ProgressBar>(window));
+
+        // 按文字量而不是按"有没有按钮"：标题栏那几枚图标按钮也是 Button，
+        // 而"正在安装"里含着"安装"两个字，拿子串比会自己骗自己。
+        var labels = VisualQuery.Of<Button>(window)
+            .Select(VisualQuery.TextOf)
+            .Where(text => !string.IsNullOrEmpty(text))
+            .ToList();
+        Assert.DoesNotContain(lang.Label("TEXT_BTN_CANCEL"), labels);
+        Assert.DoesNotContain(lang.Label("TEXT_BTN_INSTALL"), labels);
+        Assert.DoesNotContain(lang.Label("TEXT_BTN_FINISH"), labels);
+
+        WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
+        Assert.True(File.Exists(_plan.ExecutablePath), "走完进度却没装上的话，那根条就是装饰。");
     }
 
     /// <summary>
@@ -211,67 +674,47 @@ public class InstallerTests : IDisposable
             Path.TrimEndingDirectorySeparator(desktop!));
     }
 
-    /// <summary>按「安装」并等界面把话说完，返回那一刻界面上所有可见文字。</summary>
-    private static string ClickInstallAndWait(InstallerWindow window, LangCatalog lang)
+    // --------------------------------------------------------------- 小工具
+
+    /// <summary>把两个会动开发机配置的开关关掉（关联与右键菜单）。</summary>
+    private static void UncheckExtras(InstallerWindow window)
     {
         foreach (var row in VisualQuery.Of<SettingToggle>(window))
         {
             row.IsChecked = false;
         }
+    }
 
-        return ClickAndWait(window, lang, Button(window, lang, "TEXT_BTN_INSTALL"), lang.Label("TEXT_INSTALLER_WORKING"));
+    private static void Click(InstallerWindow window, LangCatalog lang, string labelKey)
+    {
+        var button = VisualQuery.Of<Button>(window)
+            .Single(b => Equals(VisualQuery.TextOf(b), lang.Label(labelKey)));
+
+        Clicker.Invoke(button);
+        UiWait.Pump(80);
     }
 
     /// <summary>
-    /// 按一颗按钮并等界面把话说完（状态行不再写着"正在……"），返回那一刻的所有可见文字。
+    /// 等向导自己走到完成页（而不是等某个目标文件出现）：文件在复制刚开始就被创建出来，
+    /// 拿它当信号等于在测一个半成品。
     /// </summary>
-    private static string ClickAndWait(InstallerWindow window, LangCatalog lang, Button button, string busyText)
+    private static string WaitUntil(InstallerWindow window, LangCatalog lang, string doneKey)
     {
-        Clicker.Invoke(button);
-
-        // 等的是<strong>界面自己把话说完</strong>，不是"目标文件出现了"：
-        // File.Exists 在复制刚开始（文件被创建出来）就为真，那样等于在测一个半成品。
-        var deadline = Environment.TickCount64 + 20_000;
+        var deadline = Environment.TickCount64 + 30_000;
         var shown = string.Empty;
+
         while (Environment.TickCount64 < deadline)
         {
             UiWait.Pump(50);
             shown = string.Join("|", VisualQuery.VisibleTexts(window));
-            if (!shown.Contains(busyText, StringComparison.Ordinal))
+            if (shown.Contains(lang.Label(doneKey), StringComparison.Ordinal))
             {
-                break;
+                return shown;
             }
         }
 
+        Assert.Fail($"向导没走到「{lang.Label(doneKey)}」，屏幕上停在：{shown}");
         return shown;
-    }
-
-    private static Button Button(InstallerWindow window, LangCatalog lang, string labelKey)
-        => VisualQuery.Of<Button>(window).Single(b => Equals(VisualQuery.TextOf(b), lang.Label(labelKey)));
-
-    /// <summary>
-    /// 从界面上卸完，那一句"这台机器上已经装过"必须跟着改口。
-    /// <para>真机截图里抓到的矛盾：红色卸载按钮按磁盘状态自己消失了，同一屏上那句
-    /// "这台机器上已经装过 C:\…\Andzip.exe" 却还留着 —— 一件事的两个说法，一个跟着状态走一个不走。</para>
-    /// </summary>
-    [AvaloniaFact]
-    public void UiStopsClaimingInstalledAfterUninstallingFromTheUi()
-    {
-        var lang = TestLang.Chinese();
-        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
-
-        var window = new InstallerWindow(lang, _plan).Shown();
-        var before = string.Join("|", VisualQuery.VisibleTexts(window));
-        Assert.True(before.Contains(lang.Format("TEXT_INSTALLER_ALREADY", ("dir", _plan.ExecutablePath)), StringComparison.Ordinal),
-            $"刚装好时界面上没写「装过」，那这条测试的前提就没了：{before}");
-
-        var shown = ClickAndWait(window, lang,
-            Button(window, lang, "TEXT_BTN_UNINSTALL"), lang.Label("TEXT_INSTALLER_REMOVING"));
-
-        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_REMOVED"), StringComparison.Ordinal),
-            $"点完卸载，界面没有回话「{lang.Label("TEXT_INSTALLER_REMOVED")}」，实际是：{shown}");
-        Assert.True(shown.Contains(lang.Label("TEXT_INSTALLER_NOT_YET"), StringComparison.Ordinal),
-            $"东西已经删干净了，界面上却还写着装过：{shown}");
     }
 
     private InstallationService Service() => new(TestLang.Chinese());

@@ -87,7 +87,33 @@ namespace Andzip.App.UiTests
         /// <summary>这棵树上会显示给用户的全部文案。用来问"用户到底看得见什么"，
         /// 而不是"某个键在不在"。</summary>
         public static IReadOnlyList<string> VisibleTexts(Control root)
-            => [.. Descendants(root).Select(ContentText).Where(text => !string.IsNullOrEmpty(text)).Select(text => text!)];
+            => [.. ShownDescendants(root).Select(ContentText).Where(text => !string.IsNullOrEmpty(text)).Select(text => text!)];
+
+        /// <summary>
+        /// 只走<strong>这时真看得见</strong>的那一支。
+        /// <para>不能直接用 <see cref="Descendants"/>：Avalonia 的 <c>IsVisible</c> 不继承 ——
+        /// 父节点藏着时子节点的 <c>IsVisible</c> 仍然是 true，所以可见性要自己一路带下去。
+        /// 安装向导按页切可见性（见 <c>InstallerWindow.GoTo</c>），按逻辑树读就会把
+        /// 不在当前这一页上的文案也算成"用户看得见"，于是"卸载完成页上没有那颗按不动的
+        /// 完成后运行勾选框"这类断言会假绿。</para>
+        /// </summary>
+        private static IEnumerable<Control> ShownDescendants(Control control)
+        {
+            if (!control.IsVisible)
+            {
+                yield break;
+            }
+
+            yield return control;
+
+            foreach (var child in control.GetLogicalChildren().OfType<Control>())
+            {
+                foreach (var nested in ShownDescendants(child))
+                {
+                    yield return nested;
+                }
+            }
+        }
 
         /// <summary>这个控件对用户写着什么。测试按文案找控件时用它，不要自己 <c>Content.ToString()</c>
         /// —— 有的按钮把视觉画在 Content 里的一颗 Border 上（设置页导航），那样读回来是类型名。</summary>

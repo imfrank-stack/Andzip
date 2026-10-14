@@ -66,14 +66,19 @@ public sealed class App : Application
             }
 
             // 同一个二进制，两种身份：文件名是 Andzip-Setup* （用户从资源管理器双击的那一个），
-            // 或者带了 /uninstall（控制面板里那条卸载命令），就开安装器窗口而不是主窗口。
+            // 或者带了 /uninstall（控制面板与开始菜单里那条卸载命令），就开向导而不是主窗口。
+            // 带 /uninstall 进来时开的是卸载那一套页 —— 让人家双击了安装向导再自己找红色按钮，
+            // 是 1.9.2 真机核对里"没有卸载 uninstall"那句抱怨的一半原因。
             // 安装这件事只在 Windows 上存在，所以先问一句操作系统 —— 项目还要在 Linux 上构建。
             if (OperatingSystem.IsWindows()
                 && (InstallLayout.IsInstallerFile(Environment.ProcessPath ?? string.Empty)
                     || (desktop.Args?.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(arg, "/install", StringComparison.OrdinalIgnoreCase)) ?? false)))
             {
-                desktop.MainWindow = new InstallerWindow(lang);
+                desktop.MainWindow = new InstallerWindow(
+                    lang,
+                    startsAsUninstaller: desktop.Args?.Any(arg =>
+                        string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)) ?? false);
                 base.OnFrameworkInitializationCompleted();
                 return;
             }

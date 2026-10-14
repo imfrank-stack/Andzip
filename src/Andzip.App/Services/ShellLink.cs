@@ -80,6 +80,33 @@ internal static class ShellLink
         }
     }
 
+    /// <summary>
+    /// 读回快捷方式指向哪个程序、带什么参数。
+    /// <para>开始菜单里那一项「卸载 Andzip」的全部作用就是这两格 —— 目标指错或参数丢了，
+    /// 它照样显示得好好的，点了却开出主窗口。所以这一处要能读回来测。</para>
+    /// </summary>
+    public static (string Path, string Arguments) ReadTarget(string linkPath)
+    {
+        var link = new ShellLinkNative();
+        try
+        {
+            var cast = (IShellLinkW)link;
+            ((IPersistFile)link).Load(linkPath, 0);
+
+            var target = new StringBuilder(260);
+            cast.GetPath(target, target.Capacity, IntPtr.Zero, 0);
+
+            var arguments = new StringBuilder(260);
+            cast.GetArguments(arguments, arguments.Capacity);
+
+            return (target.ToString(), arguments.ToString());
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(link);
+        }
+    }
+
     public static void Delete(string linkPath)
     {
         if (File.Exists(linkPath))
