@@ -4,6 +4,7 @@ using Andzip.App.Views;
 using Andzip.Core.Archive;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 
 namespace Andzip.App.UiTests;
@@ -98,21 +99,60 @@ public class ProgressWindowThreadingTests : IDisposable
         Assert.Null(escaped);
     }
 
+    /// <summary>
+    /// 进度窗口没有「取消」按钮了（1.9.2）：那颗按钮被窗口下边界切掉一半，用户的处置是删掉它。
+    /// 这里钉三件事：按钮确实不在、叉号真的取消操作、调用方随后再 <c>Close()</c> 一次不炸
+    /// （<c>DirectExtract</c> / <c>DirectCompress</c> 的 <c>finally</c> 就是这么写的）。
+    /// </summary>
     [AvaloniaFact]
-    public void ProgressWindowShowsTheTestingCaptionAndCanBeCancelled()
+    public void TheCrossCancelsTheJobAndThereIsNoCancelButton()
     {
         var lang = TestLang.Chinese();
         using var cts = new CancellationTokenSource();
         var window = new ProgressWindow(lang, cts, "TEXT_STATUS_TESTING").Shown();
 
         Assert.Equal(lang.Get("TEXT_STATUS_TESTING"), window.Title);
+        Assert.DoesNotContain(VisualQuery.Of<Button>(window),
+            b => Equals(VisualQuery.TextOf(b), lang.Get("TEXT_BTN_CANCEL")));
 
-        var cancel = VisualQuery.Of<Button>(window).Single(b =>
-            Equals(VisualQuery.TextOf(b), lang.Get("TEXT_BTN_CANCEL")));
-        Clicker.Invoke(cancel);
+        Clicker.Invoke(CrossOf(window));
 
-        Assert.True(cts.IsCancellationRequested);
+        Assert.True(cts.IsCancellationRequested, "右上角的叉号必须取消这件事，不是只把框藏起来");
+        Assert.False(window.IsVisible, "取消之后这个框就该没了");
+
+        var twice = Record.Exception(() => window.Close());
+        Assert.Null(twice);
     }
+
+    /// <summary>那项设置只管键盘；叉号不受它管。</summary>
+    [AvaloniaFact]
+    public void EscFollowsTheSettingWhileTheCrossAlwaysCancels()
+    {
+        var lang = TestLang.Chinese();
+        using var allowed = new CancellationTokenSource();
+        using var guarded = new CancellationTokenSource();
+        var withEsc = new ProgressWindow(lang, allowed, "TEXT_STATUS_EXTRACTING").Shown();
+        var withoutEsc = new ProgressWindow(lang, guarded, "TEXT_STATUS_EXTRACTING", cancelViaEsc: false).Shown();
+
+        PressEscape(withEsc);
+        PressEscape(withoutEsc);
+
+        Assert.True(allowed.IsCancellationRequested, "开关开着时 Esc 必须能取消（那项设置的本来用途）");
+        Assert.False(guarded.IsCancellationRequested, "开关关掉后 Esc 不该动正在跑的活儿 —— 误按会把大文件前功尽弃");
+
+        Clicker.Invoke(CrossOf(withoutEsc));
+        Assert.True(guarded.IsCancellationRequested, "Esc 被关掉的那扇窗，叉号照样得是「取消这件事」");
+    }
+
+    private static Button CrossOf(Window window) => VisualQuery.Of<Button>(window).First(b =>
+        Avalonia.Automation.AutomationProperties.GetName(b).Contains("关闭", StringComparison.Ordinal));
+
+    private static void PressEscape(Window window) => window.RaiseEvent(new KeyEventArgs
+    {
+        RoutedEvent = InputElement.KeyDownEvent,
+        Key = Key.Escape,
+        Source = window,
+    });
 
     private string BuildArchive()
     {

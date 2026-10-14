@@ -301,14 +301,19 @@ internal static class Chrome
     /// <para>可行性是实测过的：这台 Windows 10 19045 上透明窗口确实生效
     /// （圆角外能看见后面的窗口，见开发记录第七节第 31 条），不像 DWM 深色标题栏那条"返回成功但屏幕不动"。</para>
     /// </summary>
-    public static void Chromeless(this Window window, LangCatalog lang, Control content, bool resizable = false)
+    /// <param name="onClose">
+    /// 右上角那枚叉号要做的事，默认是"关掉这个窗口"。进度窗口把它换成"取消这件事并关掉" ——
+    /// 光关窗等于把框藏起来，后台还在搬字节，而用户以为停了。
+    /// </param>
+    public static void Chromeless(this Window window, LangCatalog lang, Control content,
+        bool resizable = false, Action? onClose = null)
     {
         window.TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
         window.ExtendClientAreaToDecorationsHint = true;
         window.ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
 
         var dock = new DockPanel();
-        var bar = new TitleBar(window, lang, resizable);
+        var bar = new TitleBar(window, lang, resizable, onClose);
         DockPanel.SetDock(bar, Dock.Top);
         dock.Children.Add(bar);
         dock.Children.Add(content);

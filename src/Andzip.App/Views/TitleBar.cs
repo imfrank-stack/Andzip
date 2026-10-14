@@ -32,7 +32,8 @@ internal sealed class TitleBar : Border
     private readonly List<(Button Button, Border Chip, Path Glyph, bool Danger)> _buttons = new();
 
     /// <param name="resizable">给不给最小化/最大化两个按钮。对话框与进度窗口不给。</param>
-    public TitleBar(Window window, LangCatalog lang, bool resizable)
+    /// <param name="onClose">叉号要做的事，默认"关掉窗口"；进度窗口换成"取消这件事并关掉"。</param>
+    public TitleBar(Window window, LangCatalog lang, bool resizable, Action? onClose = null)
     {
         _window = window;
         _lang = lang;
@@ -88,7 +89,8 @@ internal sealed class TitleBar : Border
             right.Children.Add(maximize.Host);
         }
 
-        var close = WindowSlot(Icons.Close, "TEXT_TITLEBAR_CLOSE", () => _window.Close(), danger: true);
+        var close = WindowSlot(Icons.Close, "TEXT_TITLEBAR_CLOSE",
+            onClose ?? (() => window.Close()), danger: true);
         _close = close.Button;
         right.Children.Add(close.Host);
 

@@ -11,15 +11,19 @@ using Avalonia.Threading;
 namespace Andzip.App.Views;
 
 /// <summary>
-/// 进度窗口（FR-2.7 / FR-3）：确定进度条 + 百分比 + 已处理体积 + 预估剩余时间 + 当前条目 + 取消。
+/// 进度窗口（FR-2.7 / FR-3）：确定进度条 + 百分比 + 已处理体积 + 预估剩余时间 + 当前条目。
 /// <para>
 /// <see cref="Update"/> 只能从 UI 线程调用；交给 Core 的那条路一律用 <see cref="CreateSink"/>，
 /// 它显式走 Dispatcher，不要换成裸 <c>Progress&lt;T&gt;</c>（原因写在那里）。
 /// </para>
 /// <para>引擎报不出总量时（例如未知体积的流式压缩包）自动退回不确定进度条，也不报剩余时间。</para>
+/// <para><strong>取消没有按钮</strong>（1.9.2）：Esc 与右上角那枚叉号就是取消。
+/// 原来右下角那颗「取消」被窗口下边界切掉一半（高度按"标题栏 + 一行字 + 进度条 + 按钮"排，
+/// 而 168 装不下），用户的反馈是"有遮挡，删掉它"。叉号现在走 <c>onClose: Cancel</c> ——
+/// 它<strong>取消这件事并关窗</strong>，不是把框藏起来让后台继续搬字节。</para>
 /// <para>
 /// <paramref name="cancelViaEsc"/> 对应「常规 → 解压过程中允许按 Esc 取消」：大文件解压到一半
-/// 一次误触 Esc 就前功尽弃，所以这个开关得能关掉。
+/// 一次误触 Esc 就前功尽弃，所以这个开关得能关掉（叉号不受它管，永远能取消）。
 /// </para>
 /// <para><paramref name="standalone"/> 用于「双击直接解压」那条路径 —— 它没有主窗口当宿主，
 /// 因此要居中于屏幕并出现在任务栏上，否则用户看不到正在进行的解压。</para>
@@ -30,8 +34,10 @@ public sealed class ProgressWindow : Window
     private readonly string _textKey;
     private readonly TextBlock _text;
     private readonly ProgressBar _bar;
-    private readonly Button _cancel;
     private readonly CancellationTokenSource _cancellation;
+
+    /// <summary>按过一次就不再来：重复 Cancel 会把已结束的令牌再取消一次。</summary>
+    private bool _cancelled;
 
     /// <summary>
     /// 从<strong>第一帧进度</strong>开始计时，不是从窗口构造开始。
@@ -52,7 +58,10 @@ public sealed class ProgressWindow : Window
         _cancellation = cancellation;
         Title = lang.Label(textKey);
         Width = 520;
-        Height = 168;
+        // 高度不写死：这颗框的内容是"一行进度说明 + 一根进度条"，写死过一次 168，
+        // 那时下面还有一颗「取消」按钮 —— 装不下，按钮被卡片的下边界切掉一半，
+        // 用户的说法是"这个进度条有遮挡"。让窗口跟着内容长，这类"改一处内容就切一刀"从此不可能。
+        SizeToContent = SizeToContent.Height;
         CanResize = false;
         ShowInTaskbar = standalone;
         WindowStartupLocation = standalone ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner;
@@ -74,14 +83,6 @@ public sealed class ProgressWindow : Window
             IsIndeterminate = true,
         };
 
-        _cancel = new Button
-        {
-            Content = lang.Label("TEXT_BTN_CANCEL"),
-            MinWidth = 88,
-            HorizontalAlignment = HorizontalAlignment.Right,
-        }.Ghost();
-        _cancel.Click += (_, _) => Cancel();
-
         if (cancelViaEsc)
         {
             KeyDown += (_, e) =>
@@ -98,15 +99,21 @@ public sealed class ProgressWindow : Window
         {
             Margin = new Thickness(Design.Space.X6),
             Spacing = Design.Space.X4,
-            Children = { _text, _bar, _cancel },
-        });
+            Children = { _text, _bar },
+        }, onClose: Cancel);
     }
 
-    /// <summary>取消当前操作。按钮点一次就禁用，避免重复取消把已结束的令牌再 Cancel 一次。</summary>
+    /// <summary>取消当前操作并收掉这个框。Esc 与右上角的叉号走的都是这里。</summary>
     public void Cancel()
     {
-        _cancel.IsEnabled = false;
+        if (_cancelled)
+        {
+            return;
+        }
+
+        _cancelled = true;
         _cancellation.Cancel();
+        Close();
     }
 
     /// <summary>刷新一帧进度。只能从 UI 线程调用 —— 用 <see cref="CreateSink"/> 就自动满足。</summary>

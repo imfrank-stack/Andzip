@@ -1,4 +1,5 @@
 using Andzip.App.Views;
+using Andzip.Core.Archive;
 using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
@@ -6,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.VisualTree;
 
 namespace Andzip.App.UiTests;
 
@@ -55,6 +57,40 @@ public class ScreenshotTests
                 File.Delete(settingsPath);
             }
         }
+    }
+
+    /// <summary>
+    /// 进度窗口画出来：一行进度说明 + 一根进度条，<strong>下面不许有任何东西被切掉</strong>。
+    /// <para>1.9.2 之前那里还有一颗「取消」按钮，而窗口高度写的是 168 —— 装不下，
+    /// 按钮被卡片的下边界切掉一半，用户的说法是"这个进度条有遮挡，删掉被遮挡的取消按钮"。
+    /// 按钮删了，这条断言留下：它同时管住"不许再有东西被切"和"不许谁把高度改回去"。</para>
+    /// <para>量的是<strong>进度条下沿到卡片下沿之间还剩多少</strong> —— 那就是 StackPanel 的下内距，
+    /// 一个像素都不该被吃掉。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ProgressWindowPaintsWithoutAnythingCutOff()
+    {
+        var lang = TestLang.Chinese();
+        using var cts = new CancellationTokenSource();
+        var window = new ProgressWindow(lang, cts, "TEXT_STATUS_EXTRACTING").Shown();
+        window.Update(new ArchiveProgress(ArchiveOperation.Extract, 15_600_000, 65_500_000,
+            "backend/tests/test_layout.py", 7, 24));
+        UiWait.Pump(120);
+
+        Save(window, "progress-extracting.png");
+
+        var card = window.GetVisualDescendants().OfType<Border>()
+            .First(b => b.CornerRadius.TopLeft == Design.Radius.Panel.TopLeft);
+        var bar = VisualQuery.Of<ProgressBar>(window).Single();
+
+        var barBottom = bar.TranslatePoint(new Point(0, bar.Bounds.Height), window)!.Value.Y;
+        var cardBottom = card.TranslatePoint(new Point(0, card.Bounds.Height), window)!.Value.Y;
+
+        Assert.True(cardBottom - barBottom >= Design.Space.X6 - 1,
+            $"进度条下沿离卡片下沿只剩 {cardBottom - barBottom:F0}（下内距要 {Design.Space.X6}）—— "
+            + "下面有东西被切掉了，或者窗口高度又被人改小；那颗「取消」按钮就是这么被吃掉一半的");
+        Assert.True(bar.Bounds.Height > 0 && bar.Value > 0,
+            $"进度条这时该是 24% 的确定态，量到 高 {bar.Bounds.Height} 值 {bar.Value}");
     }
 
     [AvaloniaFact]
