@@ -214,12 +214,36 @@ public sealed class ArchiveReader : IDisposable
         ExtractCore(indices.ToArray(), destDir, options);
     }
 
-    /// <summary>Decompresses and CRC-verifies without writing files (<c>test_only</c>).</summary>
-    public void Test(ExtractOptions? options = null)
+    /// <summary>
+    /// Decompresses and CRC-verifies without writing files (<c>test_only</c>).
+    /// <para><paramref name="indices"/> narrows the pass to those entries; null or empty means
+    /// every entry. The handle stays open either way — that is the whole point: a caller that
+    /// hit a bad member can resume from the next one instead of re-opening the archive, which
+    /// for a solid block would otherwise mean decoding it again from scratch.</para>
+    /// </summary>
+    public void Test(ExtractOptions? options = null, IEnumerable<ulong>? indices = null)
     {
         ThrowIfDisposed();
+        var selected = indices?.ToArray() ?? [];
         using var args = NativeArgs.Extract(options ?? new ExtractOptions(), testOnly: true);
-        NativeMethods.Check(NativeMethods.az_archive_extract(_archive, IntPtr.Zero, IntPtr.Zero, UIntPtr.Zero, args.Ptr), "az_archive_extract (test)");
+
+        if (selected.Length == 0)
+        {
+            NativeMethods.Check(NativeMethods.az_archive_extract(_archive, IntPtr.Zero, IntPtr.Zero, UIntPtr.Zero, args.Ptr), "az_archive_extract (test)");
+            return;
+        }
+
+        var handle = GCHandle.Alloc(selected, GCHandleType.Pinned);
+        try
+        {
+            NativeMethods.Check(NativeMethods.az_archive_extract(
+                _archive, IntPtr.Zero, handle.AddrOfPinnedObject(), (UIntPtr)(ulong)selected.Length, args.Ptr),
+                "az_archive_extract (test)");
+        }
+        finally
+        {
+            handle.Free();
+        }
     }
 
     private void ExtractCore(ulong[]? indices, string destDir, ExtractOptions? options)

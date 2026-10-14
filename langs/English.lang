@@ -125,6 +125,12 @@ TEXT_TITLE_TEST_FAILED                  = Test failed
 ; format) from "read it and the data is broken"; they mean very different things to a user
 ; and must not both be reported as "the archive is corrupt".
 TEXT_TEST_NOT_VERIFIED                  = The test could not run (this is not data damage):
+; The broken-member list: one pass stops at the first bad member, so "what else is broken"
+; needs the pass resumed. ${bad} / ${total} count data members only (a directory has no
+; bytes to verify, so it is not in the denominator).
+TEXT_TEST_BROKEN_HEADER                  = Members that failed the check (${bad} of ${total}):
+TEXT_TEST_AND_MORE                       = … plus ${n} more members that were not checked
+TEXT_BTN_TRY_REPAIR                      = Try to repair…
 
 ; ---- Repair archive (the user picks one of three modes) ----
 TEXT_TITLE_REPAIR                       = Repair archive
@@ -140,6 +146,7 @@ TEXT_REPAIR_OUTPUT                      = Output to:
 TEXT_REPAIR_START                       = Start repair
 TEXT_REPAIR_FINDINGS                    = What the scan found:
 TEXT_REPAIR_HEALTHY                     = The structure of this archive is intact: the central directory and the entry count agree, so there is nothing to repair. An intact structure is not the same as intact data — use Test for that, it decompresses every entry and checks the CRC.
+TEXT_REPAIR_HEALTHY_AFTER_TEST           = The skeleton of this archive is intact -- what is damaged is the member data itself. Mode 3 (recover what can be recovered) repacks the members that still read into an archive you can open; whatever those broken bytes held is not coming back.
 TEXT_REPAIR_ZIP_ONLY                    = Repair only handles .zip containers: it rebuilds the ZIP skeleton (end record / central directory / local headers) byte by byte. Formats such as 7z or tar have no equivalent structure to rebuild.
 TEXT_STATUS_REPAIRING                   = Repairing...
 TEXT_STATUS_INSPECTING                  = Checking the archive structure...
@@ -149,6 +156,12 @@ TEXT_REPAIR_RESULT                      = Recovered ${recovered} member(s), skip
 TEXT_REPAIR_NOTHING                     = Nothing could be recovered, so no new archive was written; the original is untouched.
 TEXT_REPAIR_RECOVERED                   = Recovered
 TEXT_REPAIR_SKIPPED                     = Skipped
+; Reading the repaired archive back is the point: "recovered N members" is only the repairer's
+; own bookkeeping -- whether the file is usable is what the engine says when it reads it.
+TEXT_STATUS_VERIFYING                    = Re-checking the repaired archive...
+TEXT_REPAIR_RECHECK_PASSED               = Re-check: the whole archive was read and all ${total} member(s) verified.
+TEXT_REPAIR_RECHECK_BROKEN               = Re-check: ${bad} of ${total} member(s) still fail verification -- do not treat this file as healthy.
+TEXT_REPAIR_RECHECK_SKIPPED              = Not re-checked: 
 
 ; ---- Duplicate file prompt (FR-3.7) / extract password (dialog #7) ----
 TEXT_TITLE_ASK_DUPEFILE                 = Duplicate file

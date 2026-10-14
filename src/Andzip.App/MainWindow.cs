@@ -125,7 +125,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandCloseArchive] = CloseArchive,
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
             [MainMenuModel.CommandTestArchive] = TestArchiveAsync,
-            [MainMenuModel.CommandRepairArchive] = RepairArchiveAsync,
+            [MainMenuModel.CommandRepairArchive] = () => RepairArchiveAsync(),
             [MainMenuModel.CommandSaveArchiveAs] = SaveArchiveAsAsync,
             [MainMenuModel.CommandDeleteArchive] = DeleteArchiveToRecycleBin,
             [MainMenuModel.CommandPermanentDeleteArchive] = PermanentlyDeleteArchive,
@@ -837,6 +837,7 @@ public sealed class MainWindow : Window
 
         string titleKey;
         string body;
+        var broken = false;
         var sink = progress.CreateSink();
 
         // 进度窗口要<strong>先摆出来</strong>再开测：整个包读一遍 CRC 在照片包上是好几秒，
@@ -846,12 +847,14 @@ public sealed class MainWindow : Window
 
         try
         {
-            await Task.Run(() => ArchiveTester.Test(archivePath, password, sink, cts.Token), cts.Token);
+            var report = await Task.Run(
+                () => ArchiveTester.TestAll(archivePath, password, sink, cts.Token), cts.Token);
 
-            titleKey = "TEXT_TITLE_TEST_PASSED";
-            // 不报成员数：没打开包时是先挑文件再测的，手上没有清单，报个数就得再读一遍目录。
-            // 「全部通过」本身就是答案，数字是状态栏早就给过的东西。
-            body = _lang.Get("TEXT_TEST_PASSED");
+            broken = !report.Passed;
+            titleKey = broken ? "TEXT_TITLE_TEST_FAILED" : "TEXT_TITLE_TEST_PASSED";
+            // 通过的那一句不报成员数：没打开包时是先挑文件再测的，手上没有清单，
+            // 报个数就得再读一遍目录。「全部通过」本身就是答案，数字是状态栏早就给过的东西。
+            body = broken ? DescribeBroken(report) : _lang.Get("TEXT_TEST_PASSED");
         }
         catch (OperationCanceledException)
         {
@@ -860,29 +863,80 @@ public sealed class MainWindow : Window
         }
         catch (InvalidDataException ex)
         {
-            // 数据真的坏了（CRC 对不上 / 解压失败）：引擎点到谁就是谁。
+            // 数据真的坏了，可内核这句没点到清单里的某个成员（"corrupt archive headers" 那一类）：
+            // 原样转达，不替他概括成「包坏了」。这仍然是"坏"，所以下面照样给修复那一颗按钮。
+            broken = true;
             titleKey = "TEXT_TITLE_TEST_FAILED";
             body = ex.Message;
         }
         catch (Exception ex)
         {
-            // 连读都没读成（缺文件、口令错、格式不支持）—— 那不是「包坏了」，别混为一谈。
+            // 连读都没读成（缺文件、口令错、格式不支持）—— 那不是「包坏了」，别混为一谈，
+            // 也别在这种包上劝人修复。
             titleKey = "TEXT_TITLE_TEST_FAILED";
             body = _lang.Get("TEXT_TEST_NOT_VERIFIED") + ex.Message;
         }
 
         progress.Close();
-        await new MessageWindow(_lang, _lang.Get(titleKey), body).ShowDialog(this);
+
+        // 坏的是 ZIP 时，"要不要修"就在这一屏问完：用户刚看完坏成员名单，让他自己去找
+        // 「工具 → 修复压缩包」是把一件事拆成两件事。别的格式修不了（7z 的头是编码过的一整块），
+        // 那一种就只有关闭 —— 给一颗注定失败的按钮比少一颗更糟。
+        var canRepair = OffersRepair(archivePath, broken);
+
+        if (!canRepair)
+        {
+            await new MessageWindow(_lang, _lang.Get(titleKey), body).ShowDialog(this);
+            return;
+        }
+
+        if (await new MessageWindow(
+                _lang, _lang.Get(titleKey), body, "TEXT_BTN_TRY_REPAIR", "TEXT_BTN_CLOSE")
+                .ShowDialog<bool>(this))
+        {
+            await RepairArchiveAsync(archivePath, cameFromTest: true);
+        }
     }
 
     /// <summary>
-    /// 修复压缩包（工具菜单）。<strong>先量，再问</strong>：进度窗口里跑一遍结构扫描，
-    /// 骨架对得上就直接说"没发现问题"，对不上才把三种模式摆出来 ——
-    /// 好包不该逼用户去猜该选哪个模式（猜错的代价是白等一次全量重压）。
+    /// 测出坏成员之后，这一屏要不要给「尝试修复…」那颗按钮。
+    /// <para>两个条件都是"给了才有意义"：没坏就不用修；<strong>只有 ZIP 修得了</strong>
+    /// （7z 的头是编码过的一整块，残缺后无从重建 —— 见 <c>TEXT_REPAIR_ZIP_ONLY</c>）。
+    /// 在修不了的包上摆一颗点了只会说"修不了"的按钮，比不摆更糟。</para>
     /// </summary>
-    private async void RepairArchiveAsync()
+    internal static bool OffersRepair(string archivePath, bool broken)
+        => broken && Path.GetExtension(archivePath).Equals(".zip", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 坏成员名单 → 界面文案。只列前 6 个名字：这一屏是让人决定"要不要修"的，
+    /// 不是让人抄一遍文件名的；名单再长，那句"另有 N 个没查完"已经把规模说清楚了。
+    /// </summary>
+    internal string DescribeBroken(ArchiveTestReport report)
     {
-        var archivePath = _listing?.ArchivePath ?? await PickArchiveAsync();
+        var header = _lang.Format(
+            "TEXT_TEST_BROKEN_HEADER",
+            ("bad", report.Failures.Count.ToString()),
+            ("total", report.Members.ToString()));
+
+        var names = report.Failures.Take(6).Select(failure => "  " + failure.Name);
+        var tail = report.Unexamined > 0
+            ? new[] { _lang.Format("TEXT_TEST_AND_MORE", ("n", report.Unexamined.ToString())) }
+            : [];
+
+        return string.Join(Environment.NewLine, [header, .. names, .. tail]);
+    }
+
+    /// <summary>
+    /// 修复压缩包（工具菜单，以及「测试结果 → 尝试修复」那条路）。<strong>先量，再问</strong>：
+    /// 进度窗口里跑一遍结构扫描，骨架对得上就直接说"没发现问题"，对不上才把三种模式摆出来 ——
+    /// 好包不该逼用户去猜该选哪个模式（猜错的代价是白等一次全量重压）。
+    /// <para><paramref name="presetPath"/>：刚看完坏成员名单的人不该再被问一次"你要修哪个包"。</para>
+    /// <para><paramref name="cameFromTest"/>：同一句"结构没问题"，从菜单进来和从测试结果进来意思
+    /// 不一样 —— 后者已经知道数据坏了，再劝他"数据有没有坏要用测试"就是自相矛盾。</para>
+    /// </summary>
+    private async Task RepairArchiveAsync(string? presetPath = null, bool cameFromTest = false)
+    {
+        var archivePath = presetPath ?? _listing?.ArchivePath ?? await PickArchiveAsync();
         if (archivePath is null)
         {
             return;
@@ -905,7 +959,9 @@ public sealed class MainWindow : Window
 
         if (findings.Count == 0)
         {
-            await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_REPAIR"), _lang.Get("TEXT_REPAIR_HEALTHY"))
+            // 从测试结果过来时不能重复那句"数据有没有坏要用测试"：用户正是从那一步来的。
+            await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_REPAIR"), _lang.Get(
+                cameFromTest ? "TEXT_REPAIR_HEALTHY_AFTER_TEST" : "TEXT_REPAIR_HEALTHY"))
                 .ShowDialog(this);
             return;
         }
@@ -951,12 +1007,56 @@ public sealed class MainWindow : Window
             return;
         }
 
+        // 修完当场把新包读一遍："收回 N 个成员"是修复器自己的说法，能不能用要靠引擎读回来才算。
+        var recheck = await RecheckRepairedAsync(result, progress, repairSink, cts);
+
         progress.Close();
-        await new MessageWindow(_lang, _lang.Get("TEXT_TITLE_REPAIR_RESULT"), DescribeRepair(result))
+        await new MessageWindow(
+            _lang,
+            _lang.Get("TEXT_TITLE_REPAIR_RESULT"),
+            DescribeRepair(result) + (recheck.Length == 0 ? string.Empty : Environment.NewLine + recheck))
             .ShowDialog(this);
 
         // 故意不自动打开修好的包：用户先要看的是"救回了什么、丢了什么"，
         // 而不是被领进一个看起来完好、其实缺成员的窗口。
+    }
+
+    /// <summary>
+    /// 在<strong>同一个</strong>进度框里复查修好的那一份，返回要拼在结果后面的一行。
+    /// <para>新开一框会变成"点一次要关两个框"，所以这里只换措辞（<c>NextPhase</c>）：
+    /// 修复刚跑完时进度框还写着「正在修复」，那时它其实在读回来验货。</para>
+    /// <para>取消或读不成也要留一行字。静默少一行，用户读到的就只有修复器自己的成绩单。</para>
+    /// </summary>
+    private async Task<string> RecheckRepairedAsync(
+        ZipRepairResult result,
+        ProgressWindow progress,
+        IProgress<ArchiveProgress> sink,
+        CancellationTokenSource cancellation)
+    {
+        if (!result.ProducedAnything)
+        {
+            // 没生成新包，也就没什么可复查 —— 不报这一句，免得结果框多一行废话。
+            return string.Empty;
+        }
+
+        progress.NextPhase("TEXT_STATUS_VERIFYING");
+        try
+        {
+            var report = await Task.Run(
+                () => ArchiveTester.TestAll(result.OutputPath, password: null, sink, cancellation.Token),
+                cancellation.Token);
+
+            return report.Passed
+                ? _lang.Format("TEXT_REPAIR_RECHECK_PASSED", ("total", report.Members.ToString()))
+                : _lang.Format("TEXT_REPAIR_RECHECK_BROKEN",
+                    ("bad", report.Failures.Count.ToString()),
+                    ("total", report.Members.ToString()));
+        }
+        catch (Exception ex)
+        {
+            return _lang.Get("TEXT_REPAIR_RECHECK_SKIPPED")
+                + (ex is OperationCanceledException ? _lang.Get("TEXT_BTN_CANCEL") : ex.Message);
+        }
     }
 
     /// <summary>

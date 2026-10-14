@@ -124,6 +124,11 @@ TEXT_TITLE_TEST_FAILED                  = 测试未通过
 ; 下面这条区分的是"读都没读成"（缺文件、口令错、格式不支持）与"读到了但数据坏了"，
 ; 两者对用户的意义完全不同，不能都写成"包坏了"。
 TEXT_TEST_NOT_VERIFIED                  = 没能完成校验（这不是数据损坏）：
+; 坏成员名单：整包读一遍会在第一个坏成员上停下，所以"还有哪些坏"要逐个续跑才问得出来。
+; ${bad} / ${total} 用的是有数据的成员数（目录没有字节可校验，不算进分母）。
+TEXT_TEST_BROKEN_HEADER                  = 校验不过的成员（${bad} / ${total}）：
+TEXT_TEST_AND_MORE                       = …… 另有 ${n} 个成员没查完
+TEXT_BTN_TRY_REPAIR                      = 尝试修复…
 
 ; ---- 修复压缩包（三种模式由用户选）----
 TEXT_TITLE_REPAIR                       = 修复压缩包
@@ -139,6 +144,7 @@ TEXT_REPAIR_OUTPUT                      = 输出到：
 TEXT_REPAIR_START                       = 开始修复
 TEXT_REPAIR_FINDINGS                    = 扫到的问题：
 TEXT_REPAIR_HEALTHY                     = 这个包的骨架是完整的：中央目录与成员数量都对得上，没有需要修复的结构问题。结构完好不等于数据完好 —— 数据有没有坏要用「测试」，它会把每个成员真解一遍再对 CRC。
+TEXT_REPAIR_HEALTHY_AFTER_TEST           = 这个包的骨架是完整的 —— 坏的是成员数据本身。模式三（能修多少修多少）会把还能读出来的成员重新打包成一个打得开的包；坏掉的那几个救不回来。
 TEXT_REPAIR_ZIP_ONLY                    = 修复只支持 .zip 容器：它做的是 ZIP 那套骨架（结束记录 / 中央目录 / 局部头）的字节级重建，7z、tar 这些格式没有对应的结构可修。
 TEXT_STATUS_REPAIRING                   = 正在修复...
 TEXT_STATUS_INSPECTING                  = 正在检查压缩包结构...
@@ -148,6 +154,11 @@ TEXT_REPAIR_RESULT                      = 收回 ${recovered} 个成员，跳过
 TEXT_REPAIR_NOTHING                     = 没有恢复出任何成员，因此不生成新包；原包未动。
 TEXT_REPAIR_RECOVERED                   = 收回
 TEXT_REPAIR_SKIPPED                     = 跳过
+; 修完当场把新包读一遍：「收回 N 个成员」只是修复器自己的说法，能不能用要靠引擎读回来才算。
+TEXT_STATUS_VERIFYING                    = 正在复查修好的包...
+TEXT_REPAIR_RECHECK_PASSED               = 复查：整包读了一遍，${total} 个成员全部校验通过。
+TEXT_REPAIR_RECHECK_BROKEN               = 复查：仍有 ${bad} / ${total} 个成员校验不过，别把这份当成完好的包用。
+TEXT_REPAIR_RECHECK_SKIPPED              = 没有复查：
 
 ; ---- 重名询问（FR-3.7）/ 解压密码（对话框 #7）----
 TEXT_TITLE_ASK_DUPEFILE                 = 要解压的文件

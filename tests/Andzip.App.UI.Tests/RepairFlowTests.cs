@@ -101,7 +101,208 @@ public class RepairFlowTests : IDisposable
         ClickButton(report, lang.Label("TEXT_BTN_OK"));
     }
 
+    // -------------------------------------------- 测试 → 修复：一条路走完，不让人自己接
+
+    /// <summary>
+    /// 测出坏成员之后，"要不要修"就在同一屏问完。
+    /// <para>这一条走的是用户那条线：点「测试」→ 结果框上有「尝试修复…」和「关闭」两颗 →
+    /// 点前者 → 结构扫描说"骨架是完整的"，而<strong>那句"数据有没有坏要用测试"不许再出现</strong>
+    /// —— 用户正是从那一步来的，再劝一次就是自相矛盾（<c>cameFromTest</c> 那一条分支）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ABrokenZipAsksToRepairOnTheResultScreen()
+    {
+        var lang = TestLang.Chinese();
+        var archive = BuildZip("box.zip", "a.txt", "b.txt");
+        // 成员名就是输入文件的文件名，而 WriteSource 落的是 src-b.txt —— 认成员要按包里那个名字来。
+        CorruptMemberData(archive, "src-b.txt");
+
+        var window = OpenWith(lang, archive);
+        ClickTest(window);
+
+        var result = AwaitWindow<MessageWindow>(window, "坏包该给出结果框");
+        var shown = string.Join("|", VisualQuery.VisibleTexts(result));
+
+        Assert.Contains("src-b.txt", shown, StringComparison.Ordinal);
+        Assert.Contains(lang.Format("TEXT_TEST_BROKEN_HEADER", ("bad", "1"), ("total", "2")), shown,
+            StringComparison.Ordinal);
+        AssertButton(result, lang.Label("TEXT_BTN_TRY_REPAIR"));
+        AssertButton(result, lang.Label("TEXT_BTN_CLOSE"));
+
+        ClickButton(result, lang.Label("TEXT_BTN_TRY_REPAIR"));
+
+        var handoff = AwaitWindow<MessageWindow>(window, "点了尝试修复该接着量结构");
+        var said = string.Join("|", VisualQuery.VisibleTexts(handoff));
+        Assert.Contains(lang.Label("TEXT_REPAIR_HEALTHY_AFTER_TEST"), said, StringComparison.Ordinal);
+        Assert.DoesNotContain("要用「测试」", said, StringComparison.Ordinal);
+
+        ClickButton(handoff, lang.Label("TEXT_BTN_OK"));
+    }
+
+    [AvaloniaFact]
+    public void AHealthyArchiveGetsOneButtonAndNoRepairOffer()
+    {
+        var lang = TestLang.Chinese();
+        var window = OpenWith(lang, BuildZip("good.zip", "a.txt", "b.txt"));
+
+        ClickTest(window);
+
+        var result = AwaitWindow<MessageWindow>(window, "好包该得到一句通过");
+        var shown = string.Join("|", VisualQuery.VisibleTexts(result));
+
+        Assert.Contains(lang.Label("TEXT_TEST_PASSED"), shown, StringComparison.Ordinal);
+        Assert.DoesNotContain(lang.Label("TEXT_BTN_TRY_REPAIR"), shown, StringComparison.Ordinal);
+        AssertButton(result, lang.Label("TEXT_BTN_OK"));
+
+        ClickButton(result, lang.Label("TEXT_BTN_OK"));
+    }
+
+    /// <summary>
+    /// 坏的是 7z 时<strong>不给</strong>那颗按钮：修复做的是 ZIP 那套骨架的字节级重建，
+    /// 7z 没有对应结构。摆一颗点了只会说"修不了"的按钮，比不摆更糟。
+    /// </summary>
+    [AvaloniaFact]
+    public void ADamagedSevenZipIsNotOfferedARepairThatCannotRun()
+    {
+        var lang = TestLang.Chinese();
+        var archive = Path.Combine(_root, "box.7z");
+        ArchiveCreator.Create(
+            [ArchiveInputItem.FromPath(WriteSource("a.txt"))],
+            new ArchiveCreationSettings(archive, CompressionLevelOption.Store, Format: ArchiveFormatOption.FromId("7Z")));
+
+        // 7z 没有"按名字找局部头"这条路（它的布局完全不同），所以按整包比例翻一个字节：
+        // 这一条要问的只是"坏包 + 非 ZIP 会不会给按钮"，谁坏了不重要。
+        var bytes = File.ReadAllBytes(archive);
+        bytes[bytes.Length / 2] ^= 0xFF;
+        File.WriteAllBytes(archive, bytes);
+
+        var window = OpenWith(lang, archive);
+        ClickTest(window);
+
+        var result = AwaitWindow<MessageWindow>(window, "坏掉的 7z 也该有结论");
+        var shown = string.Join("|", VisualQuery.VisibleTexts(result));
+
+        Assert.DoesNotContain(lang.Label("TEXT_BTN_TRY_REPAIR"), shown, StringComparison.Ordinal);
+        AssertButton(result, lang.Label("TEXT_BTN_OK"));
+
+        ClickButton(result, lang.Label("TEXT_BTN_OK"));
+    }
+
+    /// <summary>
+    /// 名单的截断规则：只列前 6 个，剩下的用一句"另有 N 个没查完"说清。
+    /// <para>这一屏是让人决定"要不要修"的，不是让人抄文件名的；而"没查完"必须写出来 ——
+    /// 一份看起来完整其实断掉的名单，比一份短名单危险得多。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheBrokenListIsCutShortAndSaysSo()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings()).Shown();
+
+        var report = new ArchiveTestReport(
+            Members: 30,
+            Verified: 20,
+            Failures: [.. Enumerable.Range(0, 8).Select(i => new TestFailure($"bad{i}.bin", "CRC mismatch"))]);
+
+        var shown = window.DescribeBroken(report);
+
+        Assert.Contains("bad0.bin", shown, StringComparison.Ordinal);
+        Assert.Contains("bad5.bin", shown, StringComparison.Ordinal);
+        Assert.DoesNotContain("bad6.bin", shown, StringComparison.Ordinal);
+        Assert.Contains(lang.Format("TEXT_TEST_AND_MORE", ("n", "2")), shown, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 修完必须当场读一遍。<strong>"收回 2 个成员"是修复器自己的说法</strong> —— 它按局部头把中央目录
+    /// 重建出来了，不等于那个包真能解压。这一条走完整条线（抹掉中央目录 → 模式一 → 开始修复 →
+    /// 结果框），并断言结果里带着引擎读回来的那句复查结论。
+    /// </summary>
+    [AvaloniaFact]
+    public void TheRepairResultCarriesWhatTheEngineFoundWhenItReadTheOutputBack()
+    {
+        var lang = TestLang.Chinese();
+        var archive = BuildZip("wiped.zip", "a.txt", "b.txt");
+
+        var map = ZipScanner.Inspect(archive);
+        var bytes = File.ReadAllBytes(archive);
+        Array.Clear(bytes, (int)map.CentralDirectoryOffset, (int)map.CentralDirectoryLength);
+        File.WriteAllBytes(archive, bytes);
+
+        var window = OpenWith(lang, archive);
+        ClickRepair(window);
+
+        var dialog = AwaitWindow<RepairWindow>(window, "中央目录被抹掉该问模式");
+        // 记下对话框当时给的那个名字再点开始：SuggestOutputPath 每次调用都会挑"下一个没被占用的"，
+        // 事后再问一遍拿到的是另一个名字，那条存在性断言就成了假红。
+        var output = dialog.OutputPath;
+        ClickButton(dialog, lang.Label("TEXT_REPAIR_START"));
+
+        var result = AwaitWindow<MessageWindow>(window, "修完该给结论");
+        var shown = string.Join("|", VisualQuery.VisibleTexts(result));
+
+        Assert.Contains(
+            lang.Format("TEXT_REPAIR_RECHECK_PASSED", ("total", "2")), shown, StringComparison.Ordinal);
+        Assert.True(File.Exists(output), $"结论说复查通过了，可那份新包不在盘上：{output}");
+
+        ClickButton(result, lang.Label("TEXT_BTN_OK"));
+    }
+
     // ------------------------------------------------------------------ 走一遍用户那条路
+
+    private static void ClickTest(MainWindow window)
+    {
+        var menu = Assert.Single(VisualQuery.Of<Menu>(window));
+        var item = MenuWalk.All(menu).Single(i => Equals(i.Tag as string, MainMenuModel.CommandTestArchive));
+
+        Clicker.Invoke(item);
+    }
+
+    /// <summary>这颗按钮必须<strong>在屏幕上看得见</strong>——"我们支持修复"写在代码里不算。</summary>
+    private static void AssertButton(Window dialog, string label)
+        => Assert.Contains(label, VisualQuery.VisibleTexts(dialog), StringComparer.Ordinal);
+
+    /// <summary>
+    /// 翻掉指名那个成员数据区里的一个字节（ZIP 局部头 + 名字长度 + 扩展字段之后就是数据）。
+    /// <para>靠名字认而不是数第几个 <c>PK\x03\x04</c>：随机数据里撞出这四个字节的概率不为零。
+    /// 与 <c>ArchiveTesterTests</c> 里那份是同一个道理，两个测试工程之间没有共享 helper 的项目，
+    /// 所以这里宁可留一份短的。</para>
+    /// </summary>
+    private static void CorruptMemberData(string archive, string entryName)
+    {
+        var bytes = File.ReadAllBytes(archive);
+        var name = System.Text.Encoding.UTF8.GetBytes(entryName);
+        var at = -1;
+
+        while ((at = IndexOfSignature(bytes, [0x50, 0x4B, 0x03, 0x04], at + 1)) >= 0)
+        {
+            var nameLength = BitConverter.ToUInt16(bytes, at + 26);
+            var extraLength = BitConverter.ToUInt16(bytes, at + 28);
+
+            if (nameLength != name.Length || !bytes.AsSpan(at + 30, nameLength).SequenceEqual(name))
+            {
+                continue;
+            }
+
+            bytes[at + 30 + nameLength + extraLength + 4] ^= 0xFF;
+            File.WriteAllBytes(archive, bytes);
+            return;
+        }
+
+        throw new InvalidOperationException($"包里找不到成员「{entryName}」的局部头。");
+    }
+
+    private static int IndexOfSignature(byte[] haystack, byte[] needle, int from)
+    {
+        for (var i = Math.Max(0, from); i <= haystack.Length - needle.Length; i++)
+        {
+            if (haystack.AsSpan(i, needle.Length).SequenceEqual(needle))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     private MainWindow OpenWith(LangCatalog lang, string archive)
     {

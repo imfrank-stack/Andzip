@@ -31,7 +31,7 @@ namespace Andzip.App.Views;
 public sealed class ProgressWindow : Window
 {
     private readonly LangCatalog _lang;
-    private readonly string _textKey;
+    private string _textKey;
     private readonly TextBlock _text;
     private readonly ProgressBar _bar;
     private readonly CancellationTokenSource _cancellation;
@@ -115,6 +115,14 @@ public sealed class ProgressWindow : Window
         _cancellation.Cancel();
         Close();
     }
+
+    /// <summary>
+    /// 换掉"这一屏正在做哪件事"的说法。
+    /// <para>修复完接着复查修好的包，进度框还写着「正在修复」就是在说假话 —— 而这件事值得
+    /// 用同一个框继续报（新开一框会变成"点了两次才关掉两个框"）。下一帧进度一到，
+    /// 标题与正文都会跟着换，所以这里只改键，不碰控件。</para>
+    /// </summary>
+    public void NextPhase(string textKey) => _textKey = textKey;
 
     /// <summary>刷新一帧进度。只能从 UI 线程调用 —— 用 <see cref="CreateSink"/> 就自动满足。</summary>
     public void Update(ArchiveProgress progress)
