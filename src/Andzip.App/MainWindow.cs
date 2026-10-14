@@ -83,6 +83,7 @@ public sealed class MainWindow : Window
     private readonly TextBlock _versionLabel;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
+    private FindWindow? _find;
     private readonly AppSettings _settings;
 
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
@@ -132,6 +133,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandOpenArchiveFolder] = OpenArchiveFolder,
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
+            [MainMenuModel.CommandFindFiles] = OpenFindDialog,
         };
 
         var root = new DockPanel();
@@ -365,6 +367,7 @@ public sealed class MainWindow : Window
         _browser?.Dispose();
         _browser = null;
         _listing = null;
+        CloseFindWindow();
         _contentHost.Content = _homeContent;
         Title = EngineTitle;
         SetArchiveOnlyCommandsEnabled(false);
@@ -375,9 +378,51 @@ public sealed class MainWindow : Window
         _browser?.Dispose();
         _browser = new ArchiveView(_lang, listing, _view);
         _listing = listing;
+        CloseFindWindow();
         _contentHost.Content = _browser.Root;
         Title = ArchiveTitle(listing.ArchivePath);
         SetArchiveOnlyCommandsEnabled(true);
+    }
+
+    // ---------- 查找 → 文件查找 ----------
+
+    /// <summary>
+    /// 换包或关包时把查找窗口一起收掉。
+    /// <para>它手里拿的是<strong>打开时那一份清单</strong>，包一换那些行就属于另一个文件了 ——
+    /// 留着它，用户点「定位」会跳到一个已经不存在的行。让它跟着清单一起结束，
+    /// 比在里面做"这份结果已经过期"的提示干净。</para>
+    /// </summary>
+    private void CloseFindWindow()
+    {
+        if (_find is { } window)
+        {
+            _find = null;
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// 打开（或唤回）查找窗口。<strong>非模态</strong>，而且同一时刻只留一扇 ——
+    /// 按两次 Ctrl+F 开出两扇一模一样的窗口，用户会开始数哪扇是新的。
+    /// </summary>
+    private void OpenFindDialog()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        if (_find is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new FindWindow(_lang, listing);
+        window.RevealRequested += entry => _browser?.RevealEntry(entry);
+        window.Closed += (_, _) => _find = null;
+        _find = window;
+        window.Show(this);
     }
 
     // ---------- 文件 → 另存为 / 删除 / 永久删除 / 打开位置 ----------

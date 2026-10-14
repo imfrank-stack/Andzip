@@ -203,6 +203,16 @@ TEXT_SAVE_AS_SUCCEEDED                  = Saved as: ${path}
 TEXT_ERR_SAVE_AS_SAME_PATH              = The destination is the archive itself, so nothing was changed.
 TEXT_ERR_SAVE_AS_FAILED                 = Save as failed:
 
+; ---- 查找 → 文件查找（Ctrl+F）----
+TEXT_TITLE_FIND                         = Find Files
+TEXT_FIND_QUERY                         = Search for
+TEXT_FIND_COLUMN_PATH                       = Path
+TEXT_FIND_HINT                          = Type a file name; matches the full path, case-insensitive
+TEXT_FIND_EMPTY                         = Type something to search for
+TEXT_FIND_NONE                          = No matching files
+TEXT_FIND_COUNT                         = ${n} found (${m} in the archive)
+TEXT_BTN_REVEAL                         = Go to
+
 ; ---- Settings window (Options -> Settings, F5) ----
 TEXT_TITLE_SETTINGS                     = Settings
 TEXT_SETTINGS_GENERAL                   = General
@@ -444,7 +454,7 @@ MENUSTR_COPY_FILES2CLIPBOARD            = Copy files to clipboard
 MENUSTR_PASTE_FILESFROMCLIPBOARD        = Paste files from clipboard
 MENUSTR_COPY_FULL_PATHNAMES             = Copy full file path
 
-MENUSTR_FIND_ITEM                       = Find file (&I)
+MENUSTR_FIND_ITEM                       = Find Files (&I)
 
 MENUSTR_SETTING_SUB                     = &Settings
 MENUSTR_REGISTER                        = Register Andzip

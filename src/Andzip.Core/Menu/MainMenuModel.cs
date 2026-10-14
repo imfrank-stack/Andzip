@@ -61,6 +61,9 @@ public static class MainMenuModel
     /// <summary>设置窗口（F5）。</summary>
     public const string CommandSettings = "options.settings";
 
+    /// <summary>在当前打开的压缩包清单里找文件（Ctrl+F）。</summary>
+    public const string CommandFindFiles = "find.files";
+
     /// <summary>
     /// 「最近的文件」子菜单。它的条目是运行时按存储列表生成的，所以这里只登记"这一项有子菜单"，
     /// 具体内容由 <c>MainMenuBar</c> 在展开时填 —— 菜单建一次就冻住的话，
@@ -79,6 +82,7 @@ public static class MainMenuModel
         CommandDeleteArchive,
         CommandPermanentDeleteArchive,
         CommandOpenArchiveFolder,
+        CommandFindFiles,
     ];
 
     public static IReadOnlyList<MenuModel> Create() =>
@@ -121,7 +125,7 @@ public static class MainMenuModel
 
         new("find", "MENUSTR_FIND",
         [
-            new("find.item", "MENUSTR_FIND_ITEM", "Ctrl+F"),
+            new("find.item", "MENUSTR_FIND_ITEM", "Ctrl+F", Enabled: true, CommandId: CommandFindFiles),
         ]),
 
         new("options", "MENUSTR_SETTING",

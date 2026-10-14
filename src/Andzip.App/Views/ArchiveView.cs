@@ -76,6 +76,8 @@ internal sealed class ArchiveView : IDisposable
     private readonly Button _locateButton;
 
     private ArchiveFolderNode _current;
+    private bool _navigating;
+    private ListBox? _detailList;
     private bool _iconView;
     private int _sortColumn;
     private bool _sortAscending = true;
@@ -199,21 +201,118 @@ internal sealed class ArchiveView : IDisposable
 
     private void Navigate(ArchiveFolderNode node)
     {
-        if (ReferenceEquals(node, _current))
+        // 重入守卫：这里给树写入选中状态，会同步回调到 _tree.SelectionChanged，
+        // 而那一刻 TreeView 报回来的"当前选中项"可能还是**上一个**节点 ——
+        // 于是那次回调会把刚定下来的 _current 又改回去。用户点树的时候看不出问题
+        // （事件报的就是被点的那一项），程序化跳层（查找窗口的「定位」）必然被弹回。
+        if (ReferenceEquals(node, _current) || _navigating)
         {
             return;
         }
 
-        _current = node;
-        if (_treeItems.TryGetValue(node, out var item))
+        _navigating = true;
+        try
         {
-            item.IsSelected = true;
-            item.IsExpanded = true;
-            item.BringIntoView();
+            // 上一项要**显式取消选中**，不能只指望"给下一项写 true 就会把它挤掉"。
+            // TreeView 的单选是在容器被重新实现时才回放的：查找窗口的「定位」把选中写进树之后
+            // 一关掉，主窗口重新拿到焦点、根节点那一格被重新实现，它带着自己那份"我是选中的"
+            // 回来 —— 于是列表还在 docs/notes，树却把高亮退回压缩包根，两边各说各话。
+            if (_treeItems.TryGetValue(_current, out var leaving))
+            {
+                leaving.IsSelected = false;
+            }
+
+            _current = node;
+            if (_treeItems.TryGetValue(node, out var item))
+            {
+                // 从根一路摊到这一层。只摊最后那一格没有用：父级收着的时候，它压根不在屏幕上，
+                // 选中与滚动都落不到它身上。
+                var chain = new List<string>();
+                for (var path = node.Path; path.Length > 0;)
+                {
+                    chain.Add(path);
+                    var cut = path.LastIndexOf('/');
+                    path = cut < 0 ? string.Empty : path[..cut];
+                }
+
+                chain.Reverse();
+                foreach (var ancestor in chain)
+                {
+                    if (FindFolder(_root, ancestor) is { } folder && _treeItems.TryGetValue(folder, out var cell))
+                    {
+                        cell.IsExpanded = true;
+                    }
+                }
+
+                item.IsSelected = true;
+                item.BringIntoView();
+            }
+
+            Render();
+            UpdateSummary();
+        }
+        finally
+        {
+            _navigating = false;
+        }
+    }
+
+    /// <summary>
+    /// 把某一项<strong>在主列表里选到并滚过去</strong>（查找窗口的「定位」）。
+    /// <para>三件事都要做，少一件用户都会以为没反应：先跳到它所在的<strong>那一层文件夹</strong>
+    /// （列表只显示当前层的成员，深层的东西不跳层根本不在屏幕上）、
+    /// 图标视图下先换回详情列表（图标页没有"选中一行"这回事）、最后选中并滚动到位。</para>
+    /// </summary>
+    public bool RevealEntry(ArchiveEntryInfo entry)
+    {
+        var folder = FindFolder(_root, ArchiveHierarchy.ParentPathOf(entry.Path));
+        if (folder is null)
+        {
+            return false;
         }
 
-        Render();
-        UpdateSummary();
+        if (_iconView)
+        {
+            SetIconView(false);
+        }
+
+        Navigate(folder);
+
+        if (_detailList is not { } list)
+        {
+            return false;
+        }
+
+        // 只能给 SelectedItem：多选模式下 SelectedItems 是只读的（"fixed size selection"），
+        // 而定位要的恰恰是"只选它一个"。
+        list.SelectedItem = entry;
+        list.ScrollIntoView(entry);
+        UpdateSelectionSummary(list);
+        return true;
+    }
+
+    /// <summary>
+    /// 现在显示的是哪一层、选中了哪几行。
+    /// <para>存在的理由只有一个：headless 里换层之后详情区那张新列表要等一次真布局才会
+    /// 挂进可视树，测试从窗口往下找只能找到旧的那张（真机没这个问题）。
+    /// 于是"定位到底跳没跳层、选没选上"这件事改由视图自己回答，
+    /// 屏幕上到底长什么样交给发布前的真机核对那一步（清单里有那一条）。</para>
+    /// </summary>
+    internal string CurrentFolderPath => _current.Path;
+
+    internal IReadOnlyList<ArchiveEntryInfo> SelectedRows
+        => _detailList?.SelectedItems?.OfType<ArchiveEntryInfo>().ToArray() ?? [];
+
+    private ArchiveFolderNode? FindFolder(ArchiveFolderNode node, string path)
+    {
+        if (string.Equals(node.Path, path, StringComparison.Ordinal))
+        {
+            return node;
+        }
+
+        return node.Folders
+            .Select(child => FindFolder(child, path))
+            .FirstOrDefault(hit => hit is not null);
     }
 
     private void Render()
@@ -330,6 +429,10 @@ internal sealed class ArchiveView : IDisposable
                 OpenRow(row);
             }
         };
+
+        // 查找窗口的「定位」要能选到某一行，所以留一份当前那张列表的引用。
+        // 每次 Render() 都会重建详情区，因此这个字段跟着重建，不能只赋值一次。
+        _detailList = list;
 
         var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
         Grid.SetRow(headerHost, 0);
@@ -719,7 +822,7 @@ internal sealed class ArchiveView : IDisposable
         new(lang.Label("TEXT_COLUMN_COMPRESSED_SIZE"), e => e.IsDirectory ? string.Empty : e.CompressedSize.ToString("N0"), Number(e => e.CompressedSize)),
         new(lang.Label("TEXT_COLUMN_ORIGINAL_SIZE"), e => e.IsDirectory ? string.Empty : e.Size.ToString("N0"), Number(e => e.Size)),
         new(lang.Label("TEXT_COLUMN_TYPE"), e => TypeText(lang, e), (a, b) => string.CompareOrdinal(TypeText(lang, a), TypeText(lang, b))),
-        new(lang.Label("TEXT_COLUMN_MODIFIED"), e => e.Modified?.ToString("yyyy/M/d H:mm") ?? string.Empty,
+        new(lang.Label("TEXT_COLUMN_MODIFIED"), ModifiedText,
             (a, b) => DateTime.Compare(a.Modified ?? default, b.Modified ?? default)),
         new(lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), e => e.Method ?? string.Empty,
             (a, b) => string.CompareOrdinal(a.Method ?? string.Empty, b.Method ?? string.Empty)),
@@ -734,8 +837,13 @@ internal sealed class ArchiveView : IDisposable
     private static Comparison<ArchiveEntryInfo> Number(Func<ArchiveEntryInfo, long> selector)
         => (a, b) => selector(a).CompareTo(selector(b));
 
+    /// <summary>日期列的写法。查找窗口用的是同一个，两处不许长得不一样。</summary>
+    internal static string ModifiedText(ArchiveEntryInfo entry)
+        => entry.Modified?.ToString("yyyy/M/d H:mm") ?? string.Empty;
+
     /// <summary>类型列：目录 → 「文件夹」；文件 → 「JPG 文件」；无扩展名 → 「文件」。</summary>
-    private static string TypeText(LangCatalog lang, ArchiveEntryInfo entry)
+    /// <remarks>查找窗口那一列走的是同一个方法 —— 两处各写一份，改一处就会不一样。</remarks>
+    internal static string TypeText(LangCatalog lang, ArchiveEntryInfo entry)
     {
         if (entry.IsDirectory)
         {

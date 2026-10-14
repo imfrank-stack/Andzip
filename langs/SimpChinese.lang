@@ -200,6 +200,16 @@ TEXT_SAVE_AS_SUCCEEDED                  = 已另存为：${path}
 TEXT_ERR_SAVE_AS_SAME_PATH              = 另存为的目标和原包是同一个文件，没有做任何改动。
 TEXT_ERR_SAVE_AS_FAILED                 = 另存为失败：
 
+; ---- 查找 → 文件查找（Ctrl+F）----
+TEXT_TITLE_FIND                         = 查找文件
+TEXT_FIND_QUERY                         = 查找内容
+TEXT_FIND_COLUMN_PATH                       = 路径
+TEXT_FIND_HINT                          = 输入要查找的文件名，匹配完整路径，不区分大小写
+TEXT_FIND_EMPTY                         = 先输入要查找的内容
+TEXT_FIND_NONE                          = 没有找到匹配的文件
+TEXT_FIND_COUNT                         = 找到 ${n} 项（包里共 ${m} 项）
+TEXT_BTN_REVEAL                         = 定位
+
 ; ---- 设置窗口（选项 → 设置，F5）----
 TEXT_TITLE_SETTINGS                     = 设置
 TEXT_SETTINGS_GENERAL                   = 常规
@@ -441,7 +451,7 @@ MENUSTR_COPY_FILES2CLIPBOARD            = 将文件复制到剪贴板
 MENUSTR_PASTE_FILESFROMCLIPBOARD        = 从剪贴板粘贴文件
 MENUSTR_COPY_FULL_PATHNAMES             = 复制文件完整路径
 
-MENUSTR_FIND_ITEM                       = 查找文件(&I)
+MENUSTR_FIND_ITEM                       = 文件查找(&I)
 
 MENUSTR_SETTING_SUB                     = 设置(&S)
 MENUSTR_REGISTER                        = 注册 Andzip

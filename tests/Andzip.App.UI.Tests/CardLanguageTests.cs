@@ -1,4 +1,5 @@
 using Andzip.App.Views;
+using Andzip.Core.Archive;
 using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
@@ -18,6 +19,11 @@ namespace Andzip.App.UiTests;
 [Collection("界面状态")]
 public class CardLanguageTests
 {
+    /// <summary>查找窗口要一份清单才开得起来；这里只关心它长什么样，给一条成员就够。</summary>
+    private static ArchiveListing FindListing() => new(
+        @"C:\somewhere\box.zip",
+        [new ArchiveEntryInfo("a.txt", "a.txt", false, 1, 1, false, "Store", new DateTime(2026, 3, 4, 5, 6, 0))],
+        1, 0, 1, 1, null);
     /// <summary>
     /// 提示框里的长文案必须<strong>折行</strong>，不能被窗口右边界裁掉。
     /// <para>1.8.6 真机截图抓到的：修复那条"这个包的骨架是完整的：…都对得上，没" —— 后面半句
@@ -57,6 +63,9 @@ public class CardLanguageTests
             new VolumeSizeWindow(lang, 100),
             new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),
             new ProgressWindow(lang, new CancellationTokenSource()),
+
+            // 查找那一扇是这张清单里唯一**非模态**的 —— 卡片那一套不该因为"它不挡主窗口"就少一层
+            new FindWindow(lang, FindListing()),
 
             // 安装器也是同一个界面语言里的一员：它不该长得像另一个程序
             new InstallerWindow(lang),
@@ -108,6 +117,7 @@ public class CardLanguageTests
             ("分卷大小框", new VolumeSizeWindow(lang, 100)),
             ("修复框", new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip")),
             ("进度框", new ProgressWindow(lang, new CancellationTokenSource())),
+            ("查找窗口", new FindWindow(lang, FindListing())),
             ("设置窗口", new SettingsWindow(lang, new AppSettings(), settingsPath)),
         };
 
