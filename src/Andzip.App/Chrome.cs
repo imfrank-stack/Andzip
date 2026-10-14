@@ -277,9 +277,12 @@ internal static class Chrome
     }
 
     /// <summary>
-    /// 每个窗口构造时调一次：底色、字体族、默认字号、任务栏图标。
+    /// 窗口构造时调一次：底色、字体族、默认字号、任务栏图标。
     /// 收成一个方法而不是各写各的，是因为"窗口底色"这种事一旦散开，
     /// 就会出现某个对话框忘了设、还是系统默认灰底的情况 —— 那正是改版要消灭的东西。
+    /// <para><strong>走 <see cref="Chromeless"/> 的窗口不用自己调</strong>（2.4.1 起由它代调）：
+    /// 无边框面板底下那一圈必须是空的，这件事跟着"做成无边框面板"那一步发生才不会再漏。
+    /// 主窗口不用 <c>Chromeless</c>（它自己搭那层面板），所以它照旧显式设一遍。</para>
     /// <para>1.7.0 起窗口底色是<strong>画布</strong>而不是卡片白：卡片要浮起来，
     /// 底下那层必须比卡片暗一档，否则白上放白只能靠阴影硬撑。</para>
     /// <para>图标也要在这里发一次：不设 <c>Window.Icon</c> 时任务栏拿的是 Avalonia 的默认图标，
@@ -308,6 +311,11 @@ internal static class Chrome
     public static void Chromeless(this Window window, LangCatalog lang, Control content,
         bool resizable = false, Action? onClose = null)
     {
+        // 窗口自己的底色必须在这里就设成透明，不能指望调用方记得另调一次 WindowSurface()：
+        // 安装向导与提示框两扇就是这么漏的，屏幕上就是"圆角面板外面一圈方方的纯白"
+        // —— 阴影等于画在白纸上（用户对着卸载确认页截的图，量到蓝色桌面在窗口边上戛然而止）。
+        // 谁负责把窗口做成一张浮起的面板，谁就得负责面板底下那一圈是空的。
+        window.WindowSurface();
         window.TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
         window.ExtendClientAreaToDecorationsHint = true;
         window.ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;

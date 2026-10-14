@@ -75,6 +75,70 @@ public class CardLanguageTests
     }
 
     /// <summary>
+    /// 每一张无边框窗口，圆角外面那一圈必须是<strong>透明的</strong>（2.4.1）。
+    /// <para>用户对着安装与卸载向导截的图：圆角面板外面是一整块方方的纯白，蓝色桌面被挡在它外面 ——
+    /// 那层阴影等于画在白纸上，"浮起来"这件事整个丢了。量给开发记录第七节第 55 条：
+    /// 同一列上桌面蓝 <c>#01A0F4</c> 到 y=38 直接跳成 <c>#FFFFFF</c>，中间没有影子过渡；
+    /// 影子是在白里衰减的（<c>#FDFDFD → #E2E5E7</c>），不是垫在桌面上。</para>
+    /// <para>为什么只有这两扇窗这样：底色写在 <c>WindowSurface()</c> 里，而"每个窗口构造时调一次"
+    /// 靠的是自觉 —— 安装器与提示框谁都没调，属性读回来是主题那支白，屏幕上就是一块白。
+    /// 现在这件事归 <c>Chromeless()</c> 管，所以这条量的是<strong>每一扇</strong>无边框窗口，
+    /// 而不是"安装器有没有补上那一句" —— 补那一句只能保证这一扇，漏的那两扇恰恰证明"记得调"这条规矩靠不住。</para>
+    /// <para>量 alpha 不量颜色：白底与透明在一张截图上都可能是 <c>#FFFFFF</c>，
+    /// 只有 alpha 分得开"窗口没画"与"窗口画了白"。</para>
+    /// </summary>
+    [AvaloniaFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public void TheRingOutsideThePanelIsTransparentOnEveryWindow()
+    {
+        Design.Use(dark: false);
+        var lang = TestLang.Chinese();
+        var archive = @"C:\somewhere\box.zip";
+        var settingsPath = Path.Combine(Path.GetTempPath(), $"andzip-ring-{Guid.NewGuid():N}.ini");
+
+        var windows = new (string Where, Window Window)[]
+        {
+            ("主窗口", new MainWindow(lang, new AppSettings())),
+            ("安装向导", new InstallerWindow(lang)),
+            ("提示框", new MessageWindow(lang, "标题", "正文")),
+            ("新建压缩框", new NewArchiveWindow(lang)),
+            ("口令框", new PasswordWindow(lang)),
+            ("解压路径框", new ExtractPathWindow(lang, archive)),
+            ("重名询问框", new DuplicateFileWindow(lang, "a.txt")),
+            ("分卷大小框", new VolumeSizeWindow(lang, 100)),
+            ("修复框", new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip")),
+            ("进度框", new ProgressWindow(lang, new CancellationTokenSource())),
+            ("设置窗口", new SettingsWindow(lang, new AppSettings(), settingsPath)),
+        };
+
+        try
+        {
+            foreach (var (where, window) in windows)
+            {
+                window.Shown();
+                UiWait.Pump(50);
+
+                var alpha = Pixels.AlphaAt(window, new Point(0, window.Bounds.Height / 2));
+                var far = Pixels.AlphaAt(window, new Point(1, window.Bounds.Height / 2));
+
+                window.Close();
+                UiWait.Pump(20);
+
+                Assert.True(alpha == 0 && far == 0,
+                    $"{where}最外一圈 alpha={alpha}/{far} —— 圆角外面不是透明的，是窗口自己那块底色，"
+                    + "屏幕上就是一圈方方的白板把阴影垫掉（规范 5.1）");
+            }
+        }
+        finally
+        {
+            if (File.Exists(settingsPath))
+            {
+                File.Delete(settingsPath);
+            }
+        }
+    }
+
+    /// <summary>
     /// 整块窗口就是一张圆角阴影面板，顶部不再是蓝带、也不再是"外壳卡"。
     /// <para>断言的是四件互相独立的事：窗口自己透明（圆角外要能看见桌面）、
     /// 客户端区外扩且系统按钮关掉（否则标题栏会是系统那条方的）、
