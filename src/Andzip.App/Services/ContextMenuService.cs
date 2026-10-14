@@ -1,15 +1,21 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Andzip.Core.Installation;
 using Microsoft.Win32;
 
 namespace Andzip.App.Services;
 
 /// <summary>
-/// 资源管理器右键菜单里的「压缩为 …」项，用静态注册表动词实现（不需要管理员，也不需要 COM shell 扩展）。
+/// 资源管理器右键菜单里的「压缩为 …」项，用静态注册表动词实现（不需要 COM shell 扩展）。
 /// <para>
-/// 文件写在 <c>HKCU\Software\Classes\*\shell</c> 下，文件夹写在 <c>…\Directory\shell</c> 下，
+/// 文件写在 <c>Software\Classes\*\shell</c> 下，文件夹写在 <c>…\Directory\shell</c> 下，
 /// 两个范围各一个开关。键名一律带 <see cref="VerbPrefix"/> 前缀，因此撤销就是把这几个子树删掉，
 /// 不碰别的软件加的动词。
+/// </para>
+/// <para>
+/// <strong>写哪个根由作用域决定</strong>：默认 <c>HKCU</c>（当前用户，不需要管理员）；
+/// 机器级安装写 <c>HKLM</c>（所有用户，要管理员）。"范围"（<c>*</c> 与 <c>Directory</c>）
+/// 与"作用域"（当前用户 / 所有用户）是两件事，所以这里的局部变量一律叫 <c>target</c>。
 /// </para>
 /// <para>
 /// <strong>Windows 11 的限制</strong>：静态动词会落在右键菜单的「显示更多选项」二级菜单里，
@@ -21,8 +27,13 @@ namespace Andzip.App.Services;
 /// <para>命令带 <c>%1</c> 而不是 <c>%V</c>：静态动词拿不到多选的可信列表，因此一次只压一个文件或一个文件夹。</para>
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class ContextMenuService
+internal sealed class ContextMenuService(InstallScope scope = InstallScope.CurrentUser)
 {
+    private readonly InstallScope _scope = scope;
+
+    /// <summary>这一次写进哪个根。用完即弃：<c>OpenBaseKey</c> 只是拿句柄，不读内容。</summary>
+    private RegistryKey Root() => RegistryScope.Open(_scope);
+
     /// <summary>我们自己动词的键名前缀，用于识别与清理。</summary>
     public const string VerbPrefix = "Andzip.";
 
@@ -52,15 +63,16 @@ internal sealed class ContextMenuService
 
         Remove();
 
-        foreach (var (scope, enabled) in Scopes(forFiles, forFolders))
+        using var root = Root();
+        foreach (var (target, enabled) in Scopes(forFiles, forFolders))
         {
             if (!enabled)
             {
                 continue;
             }
 
-            using var shell = Registry.CurrentUser.CreateSubKey(ClassesRoot + scope + @"\shell");
-            WriteVerbs(shell, verbs, executablePath, filterByExtension: scope == FilesScope);
+            using var shell = root.CreateSubKey(ClassesRoot + target + @"\shell");
+            WriteVerbs(shell, verbs, executablePath, filterByExtension: target == FilesScope);
         }
     }
 
@@ -77,17 +89,18 @@ internal sealed class ContextMenuService
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
 
         var touched = 0;
-        foreach (var (scope, _) in Scopes(forFiles: true, forFolders: true))
+        using var root = Root();
+        foreach (var (target, _) in Scopes(forFiles: true, forFolders: true))
         {
-            if (!IsInstalled(scope))
+            if (!IsInstalled(target))
             {
                 continue;
             }
 
-            using var shell = Registry.CurrentUser.OpenSubKey(ClassesRoot + scope + @"\shell", writable: true);
+            using var shell = root.OpenSubKey(ClassesRoot + target + @"\shell", writable: true);
             if (shell is not null)
             {
-                WriteVerbs(shell, verbs, executablePath, filterByExtension: scope == FilesScope);
+                WriteVerbs(shell, verbs, executablePath, filterByExtension: target == FilesScope);
                 touched++;
             }
         }
@@ -138,9 +151,10 @@ internal sealed class ContextMenuService
     /// <summary>撤销：删掉两个范围里属于我们的动词子树。</summary>
     public void Remove()
     {
-        foreach (var (scope, _) in Scopes(forFiles: true, forFolders: true))
+        using var root = Root();
+        foreach (var (target, _) in Scopes(forFiles: true, forFolders: true))
         {
-            using var shell = Registry.CurrentUser.OpenSubKey(ClassesRoot + scope + @"\shell", writable: true);
+            using var shell = root.OpenSubKey(ClassesRoot + target + @"\shell", writable: true);
             if (shell is null)
             {
                 continue;
@@ -156,10 +170,12 @@ internal sealed class ContextMenuService
         }
     }
 
-    /// <summary>某个范围的压缩动词是否已装好（设置页据此回显状态，而不是凭设置文件猜）。</summary>
-    public bool IsInstalled(string scope)
+    /// <summary>某个范围（<c>*</c> / <c>Directory</c>）的压缩动词是否已装好
+    /// —— 设置页据此回显状态，而不是凭设置文件猜。作用域由构造时决定。</summary>
+    public bool IsInstalled(string target)
     {
-        using var shell = Registry.CurrentUser.OpenSubKey(ClassesRoot + scope + @"\shell");
+        using var root = Root();
+        using var shell = root.OpenSubKey(ClassesRoot + target + @"\shell");
         if (shell is null)
         {
             return false;

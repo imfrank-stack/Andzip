@@ -1,5 +1,19 @@
 namespace Andzip.Core.Installation;
 
+/// <summary>
+/// 这一次装到"谁"名下。
+/// <para><see cref="CurrentUser"/> 是默认也是推荐：<c>%LOCALAPPDATA%</c> + <c>%APPDATA%</c> 的开始菜单
+/// + <c>HKCU</c> 的卸载表与关联表，一处都不需要管理员。<see cref="AllUsers"/> 走的是机器级那一套
+/// （<c>Program Files</c> + <c>%ProgramData%</c> 的开始菜单 + <c>HKLM</c>），
+/// 代价是必须提权一次 —— 两个作用域<strong>不能混用</strong>：机器级的安装一处都不写
+/// 当前用户那半，否则"给所有人装了"却留下只有安装者看得见的东西。</para>
+/// </summary>
+public enum InstallScope
+{
+    CurrentUser,
+    AllUsers,
+}
+
 /// <summary>一次"正常安装"要落下的每一件东西，以及它们落在哪里。</summary>
 /// <param name="InstallDirectory">程序文件所在目录（默认是每个用户自己的，不需要管理员）。</param>
 /// <param name="ExecutablePath">安装后的 exe 全路径。文件关联、快捷方式、卸载表都指向它。</param>
@@ -7,14 +21,18 @@ namespace Andzip.Core.Installation;
 /// <param name="StartMenuUninstallShortcut">开始菜单里那一个「卸载 Andzip」。名字来自语言包，
 /// 所以卸载时要按注册表里记下的那个路径收回（见 <c>InstallationService</c>）。</param>
 /// <param name="DesktopShortcut">桌面快捷方式；为 null 表示这台机器的桌面目录取不到，跳过。</param>
-/// <param name="UninstallKey">注册表「应用和功能」那一条的键名（HKCU 下，不需要管理员）。</param>
+/// <param name="UninstallKey">注册表「应用和功能」那一条的键名。两个作用域下的<strong>相对路径是同一个</strong>
+/// （<c>Software\Microsoft\Windows\CurrentVersion\Uninstall\Andzip</c>），差别只在挂在哪个根上 ——
+/// 根由 <see cref="Scope"/> 决定。</param>
+/// <param name="Scope">装给谁。默认当前用户。</param>
 public sealed record InstallPlan(
     string InstallDirectory,
     string ExecutablePath,
     string StartMenuShortcut,
     string StartMenuUninstallShortcut,
     string? DesktopShortcut,
-    string UninstallKey)
+    string UninstallKey,
+    InstallScope Scope = InstallScope.CurrentUser)
 {
     /// <summary>卸载时要按同一个名字找回自己写过的 ProgId（<c>Andzip.*</c>）。</summary>
     public const string ProgIdPrefix = "Andzip.";
@@ -24,12 +42,13 @@ public sealed record InstallPlan(
 /// 安装路径的计算。<strong>纯字符串</strong>：目录从外面传进来，
 /// 所以"装到哪、快捷方式叫什么、卸载表写在哪"这些事实能在任何机器上被测试钉住，
 /// 不需要真的装一次。
-/// <para>为什么默认装 <c>%LOCALAPPDATA%\Programs</c>：<c>Program Files</c> 要管理员，
-/// 而 Andzip 整条产品线（文件关联、右键动词、设置文件）都是按"当前用户"设计的，
-/// 没有一处需要写机器级配置。用户级目录同时避开了 UAC 虚拟化那一堆坑。</para>
-/// <para>向导里那个位置可以改（<paramref name="installDirectory"/>），但<strong>只有程序文件跟着走</strong>：
-/// 快捷方式与卸载表仍在当前用户目录下 —— 那两处本来就不需要管理员，把它们也搬到用户选的地方
-/// 只会让"装到 D 盘"变成"要管理员"。</para>
+/// <para>为什么默认装 <c>%LOCALAPPDATA%\Programs</c>：那是唯一一处不需要管理员的常规位置，
+/// 而 Andzip 的文件关联、右键动词、设置文件在默认作用域下都按"当前用户"设计。
+/// 用户级目录同时避开了 UAC 虚拟化那一堆坑。</para>
+/// <para>向导里那个位置可以改（<paramref name="installDirectory"/>），但在当前用户作用域下
+/// <strong>只有程序文件跟着走</strong>：快捷方式与卸载表仍在用户目录下 —— 那两处本来就不需要管理员，
+/// 把它们也搬到用户选的地方只会让"装到 D 盘"变成"要管理员"。</para>
+/// <para>机器级那一份在 <see cref="PlanForAllUsers"/>。</para>
 /// </summary>
 public static class InstallLayout
 {
@@ -59,23 +78,97 @@ public static class InstallLayout
         ArgumentException.ThrowIfNullOrWhiteSpace(localAppData);
         ArgumentException.ThrowIfNullOrWhiteSpace(roamingAppData);
 
-        var directory = string.IsNullOrWhiteSpace(installDirectory)
-            ? Path.Combine(localAppData, "Programs", AppFolder)
+        return Shape(
+            Directory(installDirectory, () => Path.Combine(localAppData, "Programs", AppFolder), nameof(installDirectory)),
+            Path.Combine(roamingAppData, "Microsoft", "Windows", "Start Menu", "Programs"),
+            desktop,
+            InstallScope.CurrentUser,
+            uninstallShortcutName);
+    }
+
+    /// <summary>
+    /// 机器级那一份：<c>%ProgramFiles%\Andzip</c>、<c>%ProgramData%</c> 下那个<strong>所有用户都看得见</strong>
+    /// 的开始菜单与公共桌面，卸载表写 <c>HKLM</c>。
+    /// <para>与 <see cref="Plan"/> 的关键区别是<strong>一处都不落在个人目录下</strong>：提权之后
+    /// 那个进程的"当前用户"可能已经不是双击安装的人（用别的账户过 UAC 时就是），
+    /// 混着写会得到"给所有人装了，但只有安装者的开始菜单里有"。</para>
+    /// </summary>
+    /// <param name="programFiles">通常是 <c>%ProgramFiles%</c>（64 位进程拿到的就是 64 位那个）。</param>
+    /// <param name="commonPrograms">公共开始菜单的 Programs 目录，
+    /// 通常是 <c>%ProgramData%\Microsoft\Windows\Start Menu\Programs</c>。</param>
+    /// <param name="commonDesktop">公共桌面（<c>%PUBLIC%\Desktop</c>）；取不到传 null 就跳过。</param>
+    public static InstallPlan PlanForAllUsers(
+        string programFiles,
+        string commonPrograms,
+        string? commonDesktop,
+        string? installDirectory = null,
+        string? uninstallShortcutName = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(programFiles);
+        ArgumentException.ThrowIfNullOrWhiteSpace(commonPrograms);
+
+        return Shape(
+            Directory(installDirectory, () => Path.Combine(programFiles, AppFolder), nameof(installDirectory)),
+            commonPrograms,
+            commonDesktop,
+            InstallScope.AllUsers,
+            uninstallShortcutName);
+    }
+
+    private static string Directory(string? chosen, Func<string> fallback, string parameter)
+        => string.IsNullOrWhiteSpace(chosen)
+            ? fallback()
             // 用户填的路径先归一化：带尾斜杠、写成相对路径、混着 / 与 \ 这几种写法
             // 都会一路传到注册表的 InstallLocation 里，卸载时按它找回自己就对不上。
-            : InstallTarget.Normalize(installDirectory)
-                ?? throw new ArgumentException($"这个路径没法归一化：{installDirectory}", nameof(installDirectory));
+            : InstallTarget.Normalize(chosen)
+                ?? throw new ArgumentException($"这个路径没法归一化：{chosen}", parameter);
 
-        var programs = Path.Combine(
-            roamingAppData, "Microsoft", "Windows", "Start Menu", "Programs");
-
-        return new InstallPlan(
+    private static InstallPlan Shape(
+        string directory,
+        string programs,
+        string? desktop,
+        InstallScope scope,
+        string? uninstallShortcutName)
+        => new(
             directory,
             Path.Combine(directory, ExeName),
             Path.Combine(programs, AppFolder + ".lnk"),
             Path.Combine(programs, ShortcutFile(uninstallShortcutName ?? $"Uninstall {AppFolder}")),
-            desktop is null ? null : Path.Combine(desktop, AppFolder + ".lnk"),
-            UninstallKey);
+            desktop is null ? null : Path.Combine(desktop.TrimEnd(Path.DirectorySeparatorChar), AppFolder + ".lnk"),
+            UninstallKey,
+            scope);
+
+    /// <summary>
+    /// 卸载时该收哪一处：<strong>先看"运行中的这一份"装在哪个位置</strong>，再退而看两处卸载表各记着什么。
+    /// <para>为什么要这么绕：机器级与当前用户级可以<strong>同时存在</strong>（先给自己装、后来又叫管理员
+    /// 给所有人装一次），而卸载程序是被 <c>UninstallString</c> 从某个具体 exe 拉起来的 ——
+    /// 那个 exe 在哪，卸的就是哪一份。按"哪个键先存在"来判会卸错：HKCU 那条还在的时候卸机器级，
+    /// 用户看到的正是"我点了卸载，Program Files 里那份却没动"。</para>
+    /// <para>两处都对不上（用户自己把目录搬走 / 只留了注册表）时退回卸载表记着的那一处，
+    /// 两处都记着就退机器级 —— 那一处留着更碍事。</para>
+    /// </summary>
+    public static InstallScope ScopeFor(string? runningDirectory, string? machineLocation, string? userLocation)
+    {
+        var here = InstallTarget.Normalize(runningDirectory);
+
+        if (here is not null)
+        {
+            if (SameFolder(here, machineLocation))
+            {
+                return InstallScope.AllUsers;
+            }
+
+            if (SameFolder(here, userLocation))
+            {
+                return InstallScope.CurrentUser;
+            }
+        }
+
+        return machineLocation is { Length: > 0 } ? InstallScope.AllUsers : InstallScope.CurrentUser;
+
+        static bool SameFolder(string a, string? b)
+            => b is { Length: > 0 }
+            && string.Equals(InstallTarget.Normalize(b), a, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

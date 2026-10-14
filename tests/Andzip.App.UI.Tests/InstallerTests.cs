@@ -363,7 +363,7 @@ public class InstallerTests : IDisposable
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
 
         var titles = VisualQuery.VisibleTexts(window);
         Assert.Contains(lang.Label("TEXT_SETUP_LOCATION_TITLE"), titles);
@@ -403,7 +403,7 @@ public class InstallerTests : IDisposable
         Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
 
         var window = new InstallerWindow(lang, _plan).Shown();
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
 
         var rows = VisualQuery.Of<SettingToggle>(window).ToList();
         Assert.Equal(2, rows.Count);
@@ -419,12 +419,13 @@ public class InstallerTests : IDisposable
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
         var rows = VisualQuery.Of<SettingToggle>(window).ToList();
         Assert.Equal(2, rows.Count);
         rows[0].IsChecked = false;
         rows[1].IsChecked = false;
 
+        // 位置页的「上一步」回到范围页，再「下一步」走回来
         Click(window, lang, "TEXT_BTN_BACK");
         Click(window, lang, "TEXT_BTN_NEXT");
 
@@ -435,7 +436,7 @@ public class InstallerTests : IDisposable
     }
 
     /// <summary>
-    /// 真的走完一次向导：欢迎 → 位置 → 安装 → 完成，而且磁盘上真有东西。
+    /// 真的走完一次向导：欢迎 → 范围 → 位置 → 安装 → 完成，而且磁盘上真有东西。
     /// <para>1.8.1 装不上那个形状（后台线程读 <c>SettingToggle.IsChecked</c> 抛
     /// "Call from invalid thread"）只有走这条路才拦得住。</para>
     /// </summary>
@@ -445,7 +446,7 @@ public class InstallerTests : IDisposable
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
         UncheckExtras(window);
         Click(window, lang, "TEXT_BTN_INSTALL");
 
@@ -474,7 +475,7 @@ public class InstallerTests : IDisposable
             with { UninstallKey = _plan.UninstallKey };
 
         var window = new InstallerWindow(lang, noDesktop).Shown();
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
         UncheckExtras(window);
         Click(window, lang, "TEXT_BTN_INSTALL");
 
@@ -498,7 +499,7 @@ public class InstallerTests : IDisposable
         var elsewhere = Path.Combine(_root, "另一个位置");
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
         UncheckExtras(window);
         VisualQuery.Of<TextBox>(window).Single().Text = elsewhere;
         Click(window, lang, "TEXT_BTN_INSTALL");
@@ -524,7 +525,7 @@ public class InstallerTests : IDisposable
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
         UncheckExtras(window);
         VisualQuery.Of<TextBox>(window).Single().Text = @"X:\Andzip 装不进来";
         Click(window, lang, "TEXT_BTN_INSTALL");
@@ -629,7 +630,7 @@ public class InstallerTests : IDisposable
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
-        Click(window, lang, "TEXT_BTN_NEXT");
+        ToLocationPage(window, lang);
         UncheckExtras(window);
 
         var install = VisualQuery.Of<Button>(window)
@@ -683,6 +684,16 @@ public class InstallerTests : IDisposable
         {
             row.IsChecked = false;
         }
+    }
+
+    /// <summary>
+    /// 走到「选定安装位置」那一页。2.1.0 起中间多了一页「为哪位用户安装」，
+    /// 所以这里连点两下「下一步」—— 少一下就会停在范围页上，看起来像"位置那一页不见了"。
+    /// </summary>
+    private static void ToLocationPage(InstallerWindow window, LangCatalog lang)
+    {
+        Click(window, lang, "TEXT_BTN_NEXT");
+        Click(window, lang, "TEXT_BTN_NEXT");
     }
 
     private static void Click(InstallerWindow window, LangCatalog lang, string labelKey)

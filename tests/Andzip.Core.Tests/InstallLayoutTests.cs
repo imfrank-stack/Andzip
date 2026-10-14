@@ -129,6 +129,86 @@ public class InstallLayoutTests
             StringComparison.Ordinal);
     }
 
+    // ---------------------------------------- 机器级那一份：装给所有用户（2.1.0）
+
+    /// <summary>
+    /// 机器级那一份<strong>一处都不落在个人目录下</strong>。
+    /// <para>提权之后那个进程的"当前用户"可能已经不是双击安装的人（用别的账户过 UAC 时就是），
+    /// 混着写会得到"给所有人装了，却只有安装者看得见"。</para>
+    /// </summary>
+    [Fact]
+    public void TheAllUsersPlanPutsEverythingUnderTheMachineFolders()
+    {
+        var plan = InstallLayout.PlanForAllUsers(
+            programFiles: @"C:\Program Files",
+            commonPrograms: @"C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
+            commonDesktop: @"C:\Users\Public\Desktop");
+
+        Assert.Equal(InstallScope.AllUsers, plan.Scope);
+        Assert.Equal(Path.Combine(@"C:\Program Files", "Andzip"), plan.InstallDirectory);
+        Assert.Equal(Path.Combine(@"C:\Program Files", "Andzip", "Andzip.exe"), plan.ExecutablePath);
+        Assert.Equal(
+            Path.Combine(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs", "Andzip.lnk"),
+            plan.StartMenuShortcut);
+        Assert.Equal(
+            Path.Combine(@"C:\Users\Public\Desktop", "Andzip.lnk"),
+            plan.DesktopShortcut);
+
+        // 两个作用域下的相对键路径是同一个，只有根不同 —— 少维护一套键名，也少一处写错的可能
+        Assert.Equal(InstallLayout.UninstallKey, plan.UninstallKey);
+        Assert.DoesNotContain(@"\Users\", plan.StartMenuShortcut, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheAllUsersPlanStillHonoursAChosenDirectory()
+    {
+        var plan = InstallLayout.PlanForAllUsers(
+            @"C:\Program Files", @"C:\ProgramData\Start Menu\Programs", null,
+            installDirectory: @"D:\Tools\Andzip\\");
+
+        Assert.Equal(@"D:\Tools\Andzip", plan.InstallDirectory);
+        Assert.Equal(InstallScope.AllUsers, plan.Scope);
+
+        // 公共桌面取不到时跳过那一个，其余照常 —— 与用户级同一套规矩
+        Assert.Null(plan.DesktopShortcut);
+        Assert.NotNull(plan.StartMenuShortcut);
+    }
+
+    /// <summary>不传作用域时仍是"仅当前用户"：那一条路不需要管理员，是默认也是推荐。</summary>
+    [Fact]
+    public void TheOrdinaryPlanIsMarkedAsCurrentUserScoped()
+    {
+        var plan = InstallLayout.Plan(@"X:\Local", @"X:\Roaming", null);
+
+        Assert.Equal(InstallScope.CurrentUser, plan.Scope);
+    }
+
+    /// <summary>
+    /// 卸载该收哪一处：<strong>运行中的这个 exe 在哪，卸的就是哪一份</strong>。
+    /// <para>两种作用域可以同时在（先给自己装、后来又给所有人装一次）。按"哪个键先存在"来判会卸错：
+    /// 从 <c>Program Files</c> 那份点卸载，却因为 HKCU 那条也在就只收了用户级的东西 ——
+    /// 用户看到的就是"我点了卸载，Program Files 里那份没动"。</para>
+    /// </summary>
+    [Theory]
+    // 运行位置对得上机器级：卸机器级（HKCU 那条也在）
+    [InlineData(@"C:\Program Files\Andzip\Andzip.exe", @"C:\Program Files\Andzip", @"C:\Users\frank\AppData\Local\Programs\Andzip", InstallScope.AllUsers)]
+    // 运行位置对得上用户级：卸用户级（HKLM 那条也在）
+    [InlineData(@"C:\Users\frank\AppData\Local\Programs\Andzip\Andzip.exe", @"C:\Program Files\Andzip", @"C:\Users\frank\AppData\Local\Programs\Andzip", InstallScope.CurrentUser)]
+    // 路径写法不一致（尾斜杠、大小写）也要认得出来是同一处
+    [InlineData(@"c:\program files\andzip\Andzip.exe", @"C:\Program Files\Andzip\", @"C:\Users\frank\x", InstallScope.AllUsers)]
+    // 对不上任何一处（比如从下载目录里那个安装器点卸载）：退到记着的那一处，两处都记着退机器级
+    [InlineData(@"C:\Users\frank\Downloads\setup.exe", @"C:\Program Files\Andzip", @"C:\Users\frank\x", InstallScope.AllUsers)]
+    [InlineData(@"C:\Users\frank\Downloads\setup.exe", null, @"C:\Users\frank\x", InstallScope.CurrentUser)]
+    [InlineData(null, @"C:\Program Files\Andzip", null, InstallScope.AllUsers)]
+    [InlineData(null, null, null, InstallScope.CurrentUser)]
+    public void UninstallFollowsTheCopyThatIsActuallyRunning(
+        string? running, string? machine, string? user, InstallScope expected)
+    {
+        var directory = running is null ? null : Path.GetDirectoryName(running);
+
+        Assert.Equal(expected, InstallLayout.ScopeFor(directory, machine, user));
+    }
+
     /// <summary>所需空间 = 源文件实际字节，不是估的。</summary>
     [Fact]
     public void RequiredSpaceIsExactlyTheSourceFileSize()

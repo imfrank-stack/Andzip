@@ -30,34 +30,83 @@ internal sealed class InstallationService
 
     private readonly LangCatalog _lang;
 
-    public InstallationService(LangCatalog lang) => _lang = lang;
+    /// <summary>
+    /// 作用域 → 注册表根。默认按 <see cref="RegistryScope"/> 走（HKCU / HKLM 的 64 位视图）。
+    /// <para>测试与 <c>/selftest</c> 把它换成"两个作用域都指 HKCU 下的探针键"，于是机器级那一条
+    /// 往返（Program Files 换成临时目录）可以整条真跑一遍而不碰 <c>HKLM</c> —— 否则"装给所有用户"
+    /// 这件事在这台非管理员的机器上连一次都跑不了，只能靠读代码相信它对了。</para>
+    /// </summary>
+    private readonly Func<InstallScope, RegistryKey> _root;
 
-    /// <summary>按这台机器的真实目录算出该装到哪（桌面被 OneDrive 改指向时也跟着走）。</summary>
-    /// <param name="installDirectory">用户在向导里选的位置；null 用默认的
-    /// <c>%LOCALAPPDATA%\Programs\Andzip</c>。</param>
-    public InstallPlan CurrentPlan(string? installDirectory = null) => InstallLayout.Plan(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        DesktopFolder(),
-        installDirectory,
-        _lang.Label("TEXT_INSTALLER_UNINSTALL_SHORTCUT"));
+    public InstallationService(LangCatalog lang, Func<InstallScope, RegistryKey>? root = null)
+    {
+        _lang = lang;
+        _root = root ?? RegistryScope.Open;
+    }
+
+    private RegistryKey Root(InstallPlan plan) => _root(plan.Scope);
+
+    /// <summary>
+    /// 按这台机器的真实目录算出该装到哪（桌面被 OneDrive 改指向时也跟着走）。
+    /// </summary>
+    /// <param name="scope">装给谁。<see cref="InstallScope.CurrentUser"/> 用
+    /// <c>%LOCALAPPDATA%\Programs\Andzip</c>（不需要管理员）；
+    /// <see cref="InstallScope.AllUsers"/> 用 <c>%ProgramFiles%\Andzip</c>、
+    /// <c>%ProgramData%</c> 下那个所有人都看得见的开始菜单与公共桌面，卸载表写 <c>HKLM</c>。</param>
+    /// <param name="installDirectory">用户在向导里选的位置；null 用该作用域的默认目录。</param>
+    public InstallPlan CurrentPlan(InstallScope scope = InstallScope.CurrentUser, string? installDirectory = null)
+    {
+        var shortcut = _lang.Label("TEXT_INSTALLER_UNINSTALL_SHORTCUT");
+
+        return scope == InstallScope.AllUsers
+            ? InstallLayout.PlanForAllUsers(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), "Programs"),
+                Folder(Environment.SpecialFolder.CommonDesktopDirectory),
+                installDirectory,
+                shortcut)
+            : InstallLayout.Plan(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                DesktopFolder(),
+                installDirectory,
+                shortcut);
+
+        // 精简过的系统上已知文件夹可能取不到（返回空串），那时 null 比空串好：
+        // 空串会拼出一个指向根目录的路径，而 null 是"这一项跳过"，界面会照实说。
+        static string? Folder(Environment.SpecialFolder folder)
+            => Environment.GetFolderPath(folder) is { Length: > 0 } path ? path : null;
+    }
 
     /// <summary>
     /// 卸载用的落点：<strong>优先按卸载表里记着的那个安装位置</strong>。
     /// <para>装到自定义目录之后，卸载必须回到那个目录去删。只看默认路径的后果是"卸完了
     /// D:\Tools\Andzip 还留在那儿，而开始菜单和注册表里的东西没了" —— 半截卸载比不卸更难看。</para>
     /// </summary>
-    /// <param name="uninstallKey">读哪一条卸载表。真机是默认那一条（HKCU 下）；
+    /// <param name="uninstallKey">读哪一条卸载表。真机是默认那一条（两个根下同一个相对路径）；
     /// 测试与 <c>/selftest</c> 传探针键名，于是这一条可以在不碰开发机的前提下真跑。</param>
     public InstallPlan RecordedPlan(string uninstallKey = InstallLayout.UninstallKey)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(uninstallKey);
-        var recorded = key?.GetValue("InstallLocation") as string;
+        var machine = Recorded(InstallScope.AllUsers, uninstallKey);
+        var user = Recorded(InstallScope.CurrentUser, uninstallKey);
+
+        // 机器级与当前用户级可以同时在（先给自己装、后来又给所有人装一次），
+        // 而卸载程序是被某个具体 exe 的 UninstallString 拉起来的 —— 那个 exe 在哪，卸的就是哪一份。
+        var scope = InstallLayout.ScopeFor(
+            Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty), machine, user);
+        var recorded = scope == InstallScope.AllUsers ? machine : user;
 
         // 记着的位置已经不在盘上了（用户自己删了目录）也要照用：卸载要做的是
         // "把记着的那几处收干净"，指回默认目录反而会去删一个跟这次无关的位置。
-        return CurrentPlan(string.IsNullOrWhiteSpace(recorded) ? null : recorded)
+        return CurrentPlan(scope, string.IsNullOrWhiteSpace(recorded) ? null : recorded)
             with { UninstallKey = uninstallKey };
+
+        string? Recorded(InstallScope scope, string key)
+        {
+            using var root = _root(scope);
+            using var opened = root.OpenSubKey(key);
+            return opened?.GetValue("InstallLocation") as string;
+        }
     }
 
     /// <summary>
@@ -123,7 +172,7 @@ internal sealed class InstallationService
         if (associate)
         {
             Step("TEXT_SETUP_STEP_ASSOC");
-            var associations = new FileAssociationService();
+            var associations = new FileAssociationService(plan.Scope);
             var labels = ShellVerbLabels.Extraction(_lang);
             foreach (var id in FileAssociationCatalog.InstallerDefaults)
             {
@@ -142,7 +191,7 @@ internal sealed class InstallationService
         if (contextMenu)
         {
             Step("TEXT_SETUP_STEP_MENU");
-            var menu = new ContextMenuService();
+            var menu = new ContextMenuService(plan.Scope);
             menu.Install(ShellVerbLabels.Compression(_lang), plan.ExecutablePath, forFiles: true, forFolders: true);
             menu.NotifyChanged();
         }
@@ -179,11 +228,14 @@ internal sealed class InstallationService
         done++;
 
         Step("TEXT_SETUP_STEP_UNREG");
-        Registry.CurrentUser.DeleteSubKeyTree(plan.UninstallKey, throwOnMissingSubKey: false);
+        using (var root = Root(plan))
+        {
+            root.DeleteSubKeyTree(plan.UninstallKey, throwOnMissingSubKey: false);
+        }
 
         done++;
 
-        var associations = new FileAssociationService();
+        var associations = new FileAssociationService(plan.Scope);
         if (associated)
         {
             Step("TEXT_SETUP_STEP_UNASSOC");
@@ -199,7 +251,7 @@ internal sealed class InstallationService
             done++;
         }
 
-        var menu = new ContextMenuService();
+        var menu = new ContextMenuService(plan.Scope);
         if (contextMenu)
         {
             Step("TEXT_SETUP_STEP_UNMENU");
@@ -298,11 +350,15 @@ internal sealed class InstallationService
 
     private void WriteUninstallEntry(InstallPlan plan, bool associate, bool contextMenu)
     {
-        using var key = Registry.CurrentUser.CreateSubKey(plan.UninstallKey);
+        using var root = Root(plan);
+        using var key = root.CreateSubKey(plan.UninstallKey);
 
         key.SetValue("DisplayName", "Andzip");
         key.SetValue("DisplayVersion", DisplayVersion(plan.ExecutablePath));
         key.SetValue("Publisher", Publisher);
+
+        // 机器级那一条写在 HKLM 下，看着不会混，但卸载时"该收哪一处"要靠它 + 运行路径一起判
+        key.SetValue("AndzipScope", plan.Scope == InstallScope.AllUsers ? "Machine" : "User");
         key.SetValue("InstallLocation", plan.InstallDirectory);
         key.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
 
@@ -349,9 +405,10 @@ internal sealed class InstallationService
             : clean;
     }
 
-    private static (bool Associate, bool ContextMenu, string? UninstallShortcut) ReadUninstallEntry(InstallPlan plan)
+    private (bool Associate, bool ContextMenu, string? UninstallShortcut) ReadUninstallEntry(InstallPlan plan)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(plan.UninstallKey);
+        using var root = Root(plan);
+        using var key = root.OpenSubKey(plan.UninstallKey);
         return (
             AsBool(key?.GetValue(ValueAssociate)),
             AsBool(key?.GetValue(ValueContextMenu)),

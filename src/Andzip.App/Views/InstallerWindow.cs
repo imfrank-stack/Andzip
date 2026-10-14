@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Microsoft.Win32;
 
 namespace Andzip.App.Views;
 
@@ -15,7 +16,7 @@ namespace Andzip.App.Views;
 /// <para><strong>为什么要分成几页</strong>：1.9.2 及以前这是一整屏（一个路径 + 两个开关 +
 /// 安装/卸载两颗按钮），点一下就动。用户的说法是"这个安装流程不对，应该是这样的"，
 /// 附了两张 Inno Setup 的截图 —— 要的是<strong>先看要做什么、再决定、再看它做</strong>：
-/// 欢迎 → 选定安装位置（带所需空间 / 可用空间）→ 正在安装（分步进度）→ 完成。
+/// 欢迎 → 为哪位用户安装 → 选定安装位置（带所需空间 / 可用空间）→ 正在安装（分步进度）→ 完成。
 /// 卸载也有自己的确认页与进度页，标题跟着变成「卸载 Andzip」。</para>
 /// <para><strong>同一个二进制，两种身份</strong>：判据是它自己的文件名 —— 叫
 /// <c>Andzip-Setup-*.exe</c> 时开安装向导，带 <c>/uninstall</c> 时开卸载向导，
@@ -23,19 +24,23 @@ namespace Andzip.App.Views;
 /// （出包只是复制改名一份文件），卸载表里那条也不会指向一个特制的壳。
 /// 代价是不出 <c>uninstall.exe</c> 那一个文件：它得是同一份 20 MB 字节的第二份拷贝，
 /// 而"卸载"这件事由 <c>Andzip.exe /uninstall</c> 做，开始菜单里那一项就是它。</para>
-/// <para><strong>没有「为所有用户安装」那一页</strong>（截图里的第一页）：整条产品线
-/// （关联、右键动词、设置文件）都按当前用户设计，装到 <c>Program Files</c> 要管理员，
-/// 而 Andzip 一处都不需要写机器级配置。位置这一页仍然可以改目录，只是改完之后
-/// 那一处写不写得进去由 <see cref="InstallTarget.IsWritable"/> 在点「安装」时就说明白，
-/// 不等进度条走到一半才报错。</para>
+/// <para><strong>两种作用域，一次问清</strong>（2.1.0）：默认「仅为我自己」—— 关联、右键动词、
+/// 设置文件、卸载表全在当前用户名下，一处都不需要管理员；「为所有用户」走 <c>Program Files</c>
+/// 与 <c>HKLM</c>，这是这台软件唯一一处需要管理员的动作，判据不是"这个账户是不是管理员"而是
+/// <c>Elevation.Needed</c>（那个位置现在写不写得进去），提不到就停在原地说明白，
+/// <strong>不悄悄退回只给自己装</strong>。</para>
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class InstallerWindow : Window
 {
-    /// <summary>走到哪一页。安装：欢迎 → 位置 → 进行中 → 完成；卸载：确认 → 进行中 → 完成。</summary>
+    /// <summary>
+    /// 走到哪一页。安装：欢迎 → <strong>安装范围</strong> → 位置 → 进行中 → 完成；
+    /// 卸载：确认 → 进行中 → 完成。
+    /// </summary>
     private enum WizardPage
     {
         Welcome,
+        Scope,
         Location,
         Working,
         Done,
@@ -47,6 +52,13 @@ public sealed class InstallerWindow : Window
 
     /// <summary>测试传进来的落点（临时目录 + 探针注册表键）。为 null 时按这台机器算。</summary>
     private readonly InstallPlan? _given;
+
+    /// <summary>
+    /// 要管理员时怎么提权。测试换成假的：真的 UAC 框在这里按不了，也不该由测试去按。
+    /// <para>返回 true 表示"已经有一个提了权的实例接手了"，这一份就该收窗退出 ——
+    /// 它没有权限，留着只会做半截安装。</para>
+    /// </summary>
+    private readonly Func<InstallScope, bool> _elevate;
 
     private InstallPlan _plan;
     private bool _uninstaller;
@@ -74,6 +86,9 @@ public sealed class InstallerWindow : Window
     private readonly TextBlock _doneText = new();
     private readonly TextBlock _confirmText = new();
     private readonly TextBlock _uninstallHint = new();
+    private readonly RadioButton _forUser = new();
+    private readonly RadioButton _forAll = new();
+    private readonly TextBlock _scopeError = new() { IsVisible = false };
     private readonly CheckBox _runAfter = new();
     private readonly SettingToggle _associate;
     private readonly SettingToggle _contextMenu;
@@ -96,13 +111,44 @@ public sealed class InstallerWindow : Window
     /// 于是"点安装真的会跑一遍"这件事可以在不碰开发机配置的前提下验证。</param>
     /// <param name="startsAsUninstaller">带 <c>/uninstall</c> 进来时开卸载向导 ——
     /// 控制面板里那条卸载命令与开始菜单里那一项走的都是这一条。</param>
-    public InstallerWindow(LangCatalog lang, InstallPlan? plan = null, bool startsAsUninstaller = false)
+    /// <param name="preselectedScope">提权之后那一个新的实例带着 <c>/all-users</c> 进来：
+    /// 范围在那一步已经定了（而且这一份有权限了），所以直接从「选定安装位置」那一页开始，
+    /// 不再问第二遍"装给谁"。</param>
+    /// <param name="elevate">要管理员时怎么提权（默认以管理员身份重启自己）。测试传假的。</param>
+    public InstallerWindow(
+        LangCatalog lang,
+        InstallPlan? plan = null,
+        bool startsAsUninstaller = false,
+        InstallScope? preselectedScope = null,
+        Func<InstallScope, bool>? elevate = null)
+        : this(lang, plan, null, startsAsUninstaller, preselectedScope, elevate)
+    {
+    }
+
+    /// <param name="root">作用域 → 注册表根。<strong>只有测试用</strong>：传一个"两个作用域都指 HKCU
+    /// 探针键"的函数，机器级那一条整条往返就能在临时目录上真跑一遍（这台机器上的账户不是管理员，
+    /// 真的 <c>HKLM</c> 写不进去，那条路否则永远只能靠读代码相信它对了）。</param>
+    internal InstallerWindow(
+        LangCatalog lang,
+        InstallPlan? plan,
+        Func<InstallScope, RegistryKey>? registryRoot,
+        bool startsAsUninstaller,
+        InstallScope? preselectedScope,
+        Func<InstallScope, bool>? elevate)
     {
         _lang = lang;
-        _service = new InstallationService(lang);
+        _service = registryRoot is null ? new InstallationService(lang) : new InstallationService(lang, registryRoot);
         _given = plan;
-        _plan = plan ?? (startsAsUninstaller ? _service.RecordedPlan() : _service.CurrentPlan());
         _uninstaller = startsAsUninstaller;
+        _elevate = elevate ?? (scope => Elevation.TryRelaunch(
+            _uninstaller ? "/uninstall" : $"/install {ArgumentAllUsers}"));
+
+        _plan = plan ?? (startsAsUninstaller ? _service.RecordedPlan() : _service.CurrentPlan());
+
+        if (!startsAsUninstaller && preselectedScope is { } chosen)
+        {
+            _plan = PlanForScope(chosen);
+        }
 
         Width = 560;
         SizeToContent = SizeToContent.Height;
@@ -145,7 +191,9 @@ public sealed class InstallerWindow : Window
         _host.Content = _stack;
         this.Chromeless(lang, root);
 
-        GoTo(_uninstaller ? WizardPage.ConfirmUninstall : WizardPage.Welcome);
+        GoTo(_uninstaller ? WizardPage.ConfirmUninstall
+            : preselectedScope is null ? WizardPage.Welcome
+            : WizardPage.Location);
     }
 
     // -------------------------------------------------------------- 页与页脚
@@ -183,9 +231,13 @@ public sealed class InstallerWindow : Window
         }
     }
 
+    /// <summary>提权重启时带上这个开关：那一份实例据此跳过「安装范围」那一页。</summary>
+    internal const string ArgumentAllUsers = "/all-users";
+
     private Control Build(WizardPage page) => page switch
     {
         WizardPage.Welcome => Welcome(),
+        WizardPage.Scope => ScopePage(),
         WizardPage.Location => Location(),
         WizardPage.Working => Working(),
         WizardPage.Done => Done(),
@@ -240,11 +292,17 @@ public sealed class InstallerWindow : Window
                 }
 
                 yield return Cancel();
-                yield return Push("TEXT_BTN_NEXT", () => GoTo(WizardPage.Location), accent: true, isDefault: true);
+                yield return Push("TEXT_BTN_NEXT", () => GoTo(WizardPage.Scope), accent: true, isDefault: true);
+                break;
+
+            case WizardPage.Scope:
+                yield return Push("TEXT_BTN_BACK", () => GoTo(WizardPage.Welcome));
+                yield return Cancel();
+                yield return Push("TEXT_BTN_NEXT", ContinueFromScope, accent: true, isDefault: true);
                 break;
 
             case WizardPage.Location:
-                yield return Push("TEXT_BTN_BACK", () => GoTo(WizardPage.Welcome));
+                yield return Push("TEXT_BTN_BACK", () => GoTo(WizardPage.Scope));
                 yield return Cancel();
                 yield return Push("TEXT_BTN_INSTALL", Install, accent: true, isDefault: true);
                 break;
@@ -298,6 +356,81 @@ public sealed class InstallerWindow : Window
 
         return body;
     }
+
+    /// <summary>
+    /// 「为哪位用户安装」那一页。默认是当前用户（不需要管理员），
+    /// 选「所有用户」就要过一次 UAC —— 这是这台软件唯一一处需要管理员的动作。
+    /// </summary>
+    private Control ScopePage()
+    {
+        var body = Stack();
+        body.Children.Add(Heading("TEXT_SETUP_SCOPE_TITLE"));
+        body.Children.Add(Paragraph("TEXT_SETUP_SCOPE_HINT"));
+
+        _forUser.Content = _lang.Label("TEXT_SETUP_SCOPE_USER");
+        _forAll.Content = _lang.Label("TEXT_SETUP_SCOPE_ALL");
+        _forUser.IsChecked = _plan.Scope == InstallScope.CurrentUser;
+        _forAll.IsChecked = _plan.Scope == InstallScope.AllUsers;
+        _forUser.FontSize = Design.Type.Body;
+        _forAll.FontSize = Design.Type.Body;
+
+        // 两枚单选钮靠同一个父面板自动成组（Avalonia 按父级分组，不写 GroupName）
+        var options = new StackPanel { Spacing = Design.Space.X2 };
+        options.Children.Add(_forUser);
+        options.Children.Add(_forAll);
+        body.Children.Add(options);
+
+        body.Children.Add(Text("TEXT_SETUP_SCOPE_NOTE", Design.Type.Caption, secondary: true));
+
+        _scopeError.Foreground = Design.Semantic.Danger;
+        _scopeError.FontSize = Design.Type.Caption;
+        _scopeError.TextWrapping = TextWrapping.Wrap;
+        body.Children.Add(_scopeError);
+
+        return body;
+    }
+
+    /// <summary>
+    /// 范围定了之后的那一步：先看这个作用域落哪儿写不写得进去，写不进去就提权，
+    /// 提不到就停在原地说明白。
+    /// <para>判据用<strong>可写性探针</strong>而不是"这个账户是不是管理员"：前者与安装真正会失败的
+    /// 条件是同一件事，后者还要引 <c>WindowsIdentity</c>（非 Windows 目标上没有），
+    /// 而且两者迟早会给出不同答案 —— 比如管理员账户被策略挡在 Program Files 外面。</para>
+    /// </summary>
+    private void ContinueFromScope()
+    {
+        var scope = _forAll.IsChecked == true ? InstallScope.AllUsers : InstallScope.CurrentUser;
+        var chosen = PlanForScope(scope);
+
+        if (Elevation.Needed(chosen))
+        {
+            if (_elevate(scope))
+            {
+                Close();
+                return;
+            }
+
+            _scopeError.Text = _lang.Label("TEXT_SETUP_SCOPE_DENIED");
+            _scopeError.IsVisible = true;
+            return;
+        }
+
+        _scopeError.IsVisible = false;
+        _plan = chosen;
+
+        // 换作用域就把位置换成那一个作用域自己的默认目录（Program Files ↔ %LOCALAPPDATA%\Programs）。
+        // 用户在位置页填的那一个跟着没掉，这是故意的：两个作用域的默认值根本不是一回事，
+        // 留着 C:\Users\…\Programs\Andzip 去装机器级，等于把"给所有人"偷偷降级成"只给自己"。
+        _location.Text = chosen.InstallDirectory;
+        GoTo(WizardPage.Location);
+    }
+
+    /// <summary>
+    /// 换作用域算一份新落点。<strong>测试给的落点不换目录</strong>：那几处临时目录与探针键是
+    /// "整条往返真跑一遍而不碰开发机"的全部凭据，换成真的 Program Files 就等于往开发机上装东西。
+    /// </summary>
+    private InstallPlan PlanForScope(InstallScope scope)
+        => _given is null ? _service.CurrentPlan(scope) : _given with { Scope = scope };
 
     private Control Location()
     {

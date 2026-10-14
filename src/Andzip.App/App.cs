@@ -75,10 +75,15 @@ public sealed class App : Application
                     || (desktop.Args?.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(arg, "/install", StringComparison.OrdinalIgnoreCase)) ?? false)))
             {
+                var args = desktop.Args ?? [];
+                bool Has(string flag) => args.Any(arg => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase));
+
                 desktop.MainWindow = new InstallerWindow(
                     lang,
-                    startsAsUninstaller: desktop.Args?.Any(arg =>
-                        string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)) ?? false);
+                    startsAsUninstaller: Has("/uninstall"),
+                    // 提权之后那一个新的实例带着这个开关：范围在那一步已经定了，
+                    // 而且这一份有了管理员权限，再问一遍"装给谁"是白问
+                    preselectedScope: Has("/all-users") ? InstallScope.AllUsers : null);
                 base.OnFrameworkInitializationCompleted();
                 return;
             }

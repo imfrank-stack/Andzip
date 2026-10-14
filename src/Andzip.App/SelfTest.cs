@@ -93,6 +93,26 @@ internal static class SelfTest
 
             Check("开始菜单里有「卸载 Andzip」那一项", File.Exists(plan.StartMenuUninstallShortcut));
 
+            // 机器级那一份只算落点、不写真东西：这台机器上的账户可能不是管理员，
+            // 而"提权之后那个进程会不会往个人目录里写东西"这件事是纯路径事实，量得起。
+            var allUsers = InstallLayout.PlanForAllUsers(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), "Programs"),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory));
+            Check("机器级那一份的程序文件在 Program Files 下",
+                allUsers.ExecutablePath.StartsWith(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), StringComparison.OrdinalIgnoreCase),
+                allUsers.ExecutablePath);
+            Check("机器级那一份不往个人目录里写任何东西",
+                !allUsers.StartMenuShortcut.Contains(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), StringComparison.OrdinalIgnoreCase)
+                && !allUsers.StartMenuShortcut.Contains(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), StringComparison.OrdinalIgnoreCase),
+                allUsers.StartMenuShortcut);
+            Check("机器级走 HKLM 的 64 位视图（32 位视图会被重定向到 WOW6432Node）",
+                RegistryScope.RootFor(InstallScope.AllUsers)
+                    == (RegistryHive.LocalMachine, RegistryView.Registry64));
+
             var cleaned = service.Uninstall(plan);
             Check("卸载后安装目录不见", cleaned && !Directory.Exists(plan.InstallDirectory));
             Check("卸载后快捷方式不见",

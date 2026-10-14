@@ -1,13 +1,17 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Andzip.Core.Archive;
+using Andzip.Core.Installation;
 using Andzip.Core.Settings;
 using Microsoft.Win32;
 
 namespace Andzip.App.Services;
 
 /// <summary>
-/// 把选中的格式登记到 Windows，并让它成为双击打开的默认程序（HKCU，不需要管理员权限）。
+/// 把选中的格式登记到 Windows，并让它成为双击打开的默认程序。
+/// <para>默认登记到 <c>HKCU\Software\Classes</c>（不需要管理员权限）；构造时给
+/// <c>InstallScope.AllUsers</c> 就登记到 <c>HKLM\Software\Classes</c>（要管理员，见
+/// <c>Elevation</c>）。两处的相对键路径是同一个，所以只有根不一样。</para>
 /// <para>
 /// 两处都要写，缺一不可：
 /// </para>
@@ -28,13 +32,20 @@ namespace Andzip.App.Services;
 /// 由 <see cref="Register"/> 报给界面提示用户去系统设置里选。
 /// </para>
 /// <para>
-/// 全部读写都走 <c>HKCU\Software\Classes</c>：<c>HKEY_CLASSES_ROOT</c> 只是 HKCU 与 HKLM 的合并
-/// 视图，普通用户能写的就是 HKCU 这一半。
+/// <c>HKEY_CLASSES_ROOT</c> 只是 HKCU 与 HKLM 的合并视图，所以这里从不写 HKCR ——
+/// 写哪一半由作用域决定，读"某个扩展名现在默认是谁"时才用合并视图。
+/// <strong>唯一的例外是 <c>FileExts\&lt;ext&gt;\UserChoice</c>：那是每用户自己的选择，
+/// 机器级安装时也要读当前用户的这一份</strong>（读它只为判断"我们写了却被它挡住"，不需要写权限）。
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class FileAssociationService
+internal sealed class FileAssociationService(InstallScope scope = InstallScope.CurrentUser)
 {
+    private readonly InstallScope _scope = scope;
+
+    /// <summary>这一次登记写进哪个根。用完即弃：<c>OpenBaseKey</c> 只是拿句柄，不读内容。</summary>
+    private RegistryKey Root() => RegistryScope.Open(_scope);
+
     /// <summary>ProgID 前缀。设置存储与注册表都靠它识别“哪些是 Andzip 登记的”。</summary>
     public const string ProgIdPrefix = "Andzip.";
 
@@ -53,7 +64,8 @@ internal sealed class FileAssociationService
         ArgumentNullException.ThrowIfNull(labels);
 
         var progId = ProgId(association);
-        using (var key = Registry.CurrentUser.CreateSubKey(ClassesRoot + progId))
+        using var root = Root();
+        using (var key = root.CreateSubKey(ClassesRoot + progId))
         {
             key.SetValue(string.Empty, "Andzip " + association.Label);
             WriteCommands(key, executablePath, labels);
@@ -64,7 +76,7 @@ internal sealed class FileAssociationService
 
         foreach (var extension in association.Extensions)
         {
-            using (var openWith = Registry.CurrentUser.CreateSubKey(
+            using (var openWith = root.CreateSubKey(
                 ClassesRoot + "." + extension + @"\OpenWithProgids"))
             {
                 openWith.SetValue(progId, string.Empty, RegistryValueKind.String);
@@ -88,11 +100,12 @@ internal sealed class FileAssociationService
     public void Unregister(FileAssociation association, IReadOnlyList<AssociationOriginal> restoreDefaults)
     {
         var progId = ProgId(association);
-        Registry.CurrentUser.DeleteSubKeyTree(ClassesRoot + progId, throwOnMissingSubKey: false);
+        using var root = Root();
+        root.DeleteSubKeyTree(ClassesRoot + progId, throwOnMissingSubKey: false);
 
         foreach (var extension in association.Extensions)
         {
-            using (var openWith = Registry.CurrentUser.OpenSubKey(
+            using (var openWith = root.OpenSubKey(
                 ClassesRoot + "." + extension + @"\OpenWithProgids", writable: true))
             {
                 if (openWith is not null && Array.IndexOf(openWith.GetValueNames(), progId) >= 0)
@@ -127,7 +140,8 @@ internal sealed class FileAssociationService
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
         ArgumentNullException.ThrowIfNull(labels);
 
-        using var classes = Registry.CurrentUser.OpenSubKey(@"Software\Classes", writable: true);
+        using var root = Root();
+        using var classes = root.OpenSubKey(@"Software\Classes", writable: true);
         if (classes is null)
         {
             return 0;
@@ -251,7 +265,8 @@ internal sealed class FileAssociationService
         var progId = ProgId(association);
         foreach (var extension in association.Extensions)
         {
-            using var openWith = Registry.CurrentUser.OpenSubKey(ClassesRoot + "." + extension + @"\OpenWithProgids");
+            using var root = Root();
+            using var openWith = root.OpenSubKey(ClassesRoot + "." + extension + @"\OpenWithProgids");
             if (openWith is not null && Array.IndexOf(openWith.GetValueNames(), progId) >= 0)
             {
                 return true;
@@ -291,9 +306,10 @@ internal sealed class FileAssociationService
     public static string ProgId(FileAssociation association) => ProgIdPrefix + association.Id;
 
     /// <summary>把扩展名默认值指到我们；返回改动前它是什么（没设过时为空串）。</summary>
-    private static string TakeDefault(string extension, string progId)
+    private string TakeDefault(string extension, string progId)
     {
-        using var key = Registry.CurrentUser.CreateSubKey(ClassesRoot + "." + extension);
+        using var root = Root();
+        using var key = root.CreateSubKey(ClassesRoot + "." + extension);
         var previous = key.GetValue(string.Empty) as string ?? string.Empty;
 
         // 已经是我们的了：不要把 Andzip.xxx 当成“原值”记下来，否则撤销时会把自己写回去。
@@ -306,9 +322,10 @@ internal sealed class FileAssociationService
         return previous;
     }
 
-    private static void RestoreDefault(string extension, string progId)
+    private void RestoreDefault(string extension, string progId)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(ClassesRoot + "." + extension, writable: true);
+        using var root = Root();
+        using var key = root.OpenSubKey(ClassesRoot + "." + extension, writable: true);
         if (key is null)
         {
             return;
@@ -331,7 +348,12 @@ internal sealed class FileAssociationService
         }
     }
 
-    /// <summary>用户显式选过默认程序时 Windows 写的 ProgID；没有则 null。</summary>
+    /// <summary>
+    /// 用户显式选过默认程序时 Windows 写的 ProgID；没有则 null。
+    /// <para><strong>这一条永远读当前用户</strong>，与安装作用域无关：它问的是"这台机器上<em>这个人</em>
+    /// 自己点过哪个默认程序"，而那个键（<c>HKCU\...\FileExts\&lt;ext&gt;\UserChoice</c>）
+    /// 也只存在于每个用户自己名下。机器级安装挡住没挡住，读的还是运行这一份的用户的选择。</para>
+    /// </summary>
     private static string? ProtectedDefault(string extension)
     {
         using var choice = Registry.CurrentUser.OpenSubKey(FileExtsRoot + "." + extension + @"\UserChoice");
