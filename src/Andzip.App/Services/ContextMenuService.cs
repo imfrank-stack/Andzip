@@ -27,12 +27,20 @@ namespace Andzip.App.Services;
 /// <para>命令带 <c>%1</c> 而不是 <c>%V</c>：静态动词拿不到多选的可信列表，因此一次只压一个文件或一个文件夹。</para>
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class ContextMenuService(InstallScope scope = InstallScope.CurrentUser)
+internal sealed class ContextMenuService(InstallScope scope = InstallScope.CurrentUser,
+    Func<InstallScope, RegistryKey>? root = null,
+    Action? notifyShell = null)
 {
     private readonly InstallScope _scope = scope;
 
     /// <summary>这一次写进哪个根。用完即弃：<c>OpenBaseKey</c> 只是拿句柄，不读内容。</summary>
-    private RegistryKey Root() => RegistryScope.Open(_scope);
+    private RegistryKey Root() => _root(_scope);
+
+    /// <summary>作用域 → 注册表根；测试换成探针子树，见 <see cref="FileAssociationService"/> 里同一处。</summary>
+    private readonly Func<InstallScope, RegistryKey> _root = root ?? RegistryScope.Open;
+
+    /// <summary>让 shell 重读菜单的那一下；测试注入计数器，因为"有没有广播"正是要钉住的东西。</summary>
+    private readonly Action _notifyShell = notifyShell ?? NotifyShell;
 
     /// <summary>我们自己动词的键名前缀，用于识别与清理。</summary>
     public const string VerbPrefix = "Andzip.";
@@ -77,18 +85,21 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
     }
 
     /// <summary>
-    /// 在<strong>已经装了</strong>压缩动词的范围里补齐缺的条目，返回动过的范围数。
+    /// 在<strong>已经装了</strong>压缩动词的范围里补齐缺的条目，返回<strong>真的改过</strong>的范围数，
+    /// 并在改过的时候让 shell 重读一次菜单。
     /// <para>
     /// 为什么需要它：动词是按条写死的，新版本加一条（比如「压缩到…」对话框）时，老用户注册表里
     /// 只有前两条，而设置页看到"Andzip. 开头的键存在"就以为全装好了 —— 新那条永远不会出现。
     /// 一个范围都没装时什么都不做：没勾过的用户不该被塞进菜单。
     /// </para>
+    /// <para>返回"真改过"而不是"看过几个"，理由与 <see cref="FileAssociationService.RepairCommands"/>
+    /// 完全一样：这条自愈路径每次通过关联启动都会跑，而广播一次就是<strong>屏幕上所有图标闪一下</strong>。</para>
     /// </summary>
     public int RepairVerbs(string executablePath, IReadOnlyList<CompressionVerb> verbs)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
 
-        var touched = 0;
+        var repaired = 0;
         using var root = Root();
         foreach (var (target, _) in Scopes(forFiles: true, forFolders: true))
         {
@@ -98,22 +109,28 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
             }
 
             using var shell = root.OpenSubKey(ClassesRoot + target + @"\shell", writable: true);
-            if (shell is not null)
+            if (shell is not null && WriteVerbs(shell, verbs, executablePath, filterByExtension: target == FilesScope))
             {
-                WriteVerbs(shell, verbs, executablePath, filterByExtension: target == FilesScope);
-                touched++;
+                repaired++;
             }
         }
 
-        return touched;
+        if (repaired > 0)
+        {
+            _notifyShell();
+        }
+
+        return repaired;
     }
 
-    private static void WriteVerbs(
+    /// <returns>有没有真的改过。</returns>
+    private static bool WriteVerbs(
         RegistryKey shell,
         IReadOnlyList<CompressionVerb> verbs,
         string executablePath,
         bool filterByExtension)
     {
+        var changed = false;
         var keep = new HashSet<string>(verbs.Select(verb => VerbPrefix + verb.Key), StringComparer.OrdinalIgnoreCase);
 
         // 先清掉我们自己的、这次不再提供的键。Install() 会先整体 Remove()，所以这一步只为
@@ -123,29 +140,31 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
         {
             if (name.StartsWith(VerbPrefix, StringComparison.OrdinalIgnoreCase) && !keep.Contains(name))
             {
-                shell.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
+                changed |= RegistryWrite.DeleteTreeIfPresent(shell, name);
             }
         }
 
         foreach (var verb in verbs)
         {
             using var key = shell.CreateSubKey(VerbPrefix + verb.Key);
-            key.SetValue(string.Empty, verb.Label);
-            key.SetValue("Icon", executablePath + ",0");
+            changed |= RegistryWrite.SetIfDifferent(key, string.Empty, verb.Label);
+            changed |= RegistryWrite.SetIfDifferent(key, "Icon", executablePath + ",0");
             if (filterByExtension && verb.AppliesTo is { Length: > 0 } filter)
             {
-                key.SetValue("AppliesTo", filter, RegistryValueKind.String);
+                changed |= RegistryWrite.SetIfDifferent(key, "AppliesTo", filter);
             }
             else
             {
                 // 关掉过滤要真的删掉：留着上一次写的值，这一版就还是隐身状态。
-                key.DeleteValue("AppliesTo", throwOnMissingValue: false);
+                changed |= RegistryWrite.DeleteIfPresent(key, "AppliesTo");
             }
 
             // %1 必须带引号：路径里有空格时不带引号会被拆成两个参数。
-            key.CreateSubKey("command")!
-                .SetValue(string.Empty, "\"" + executablePath + "\" \"%1\" " + verb.Switch);
+            using var command = key.CreateSubKey("command")!;
+            changed |= RegistryWrite.SetIfDifferent(command, string.Empty, "\"" + executablePath + "\" \"%1\" " + verb.Switch);
         }
+
+        return changed;
     }
 
     /// <summary>撤销：删掉两个范围里属于我们的动词子树。</summary>
@@ -193,8 +212,14 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
         return false;
     }
 
-    /// <summary>让资源管理器重建菜单，否则要等 explorer 重启才看得见。</summary>
-    public void NotifyChanged() => SHChangeNotify(ShellAssocChanged, ShellFlushNow, IntPtr.Zero, IntPtr.Zero);
+    /// <summary>
+    /// 让资源管理器重建菜单，否则要等 explorer 重启才看得见。
+    /// <para><strong>这是一次全局广播</strong>（图标缓存跟着重建、屏幕上图标整片闪一下），
+    /// 所以只在真的改了菜单的时候用 —— 见 <see cref="RepairVerbs"/>。</para>
+    /// </summary>
+    public void NotifyChanged() => _notifyShell();
+
+    private static void NotifyShell() => SHChangeNotify(ShellAssocChanged, ShellFlushNow, IntPtr.Zero, IntPtr.Zero);
 
     private const int ShellAssocChanged = 0x08000000;
     private const uint ShellFlushNow = 0x0002;

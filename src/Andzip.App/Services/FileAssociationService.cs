@@ -39,12 +39,26 @@ namespace Andzip.App.Services;
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class FileAssociationService(InstallScope scope = InstallScope.CurrentUser)
+internal sealed class FileAssociationService(InstallScope scope = InstallScope.CurrentUser,
+    Func<InstallScope, RegistryKey>? root = null,
+    Action? notifyShell = null)
 {
     private readonly InstallScope _scope = scope;
 
     /// <summary>这一次登记写进哪个根。用完即弃：<c>OpenBaseKey</c> 只是拿句柄，不读内容。</summary>
-    private RegistryKey Root() => RegistryScope.Open(_scope);
+    private RegistryKey Root() => _root(_scope);
+
+    /// <summary>
+    /// 作用域 → 注册表根。默认按 <see cref="RegistryScope"/> 走；测试与自检换成自己的探针子树，
+    /// 于是"校正关联"这条会重写一堆 <c>Andzip.*</c> 的路径可以整条真跑一遍而不碰开发机的关联。
+    /// </summary>
+    private readonly Func<InstallScope, RegistryKey> _root = root ?? RegistryScope.Open;
+
+    /// <summary>
+    /// 让 shell 重读关联的那一下。默认就是真的广播；测试注入一个计数器，
+    /// 因为"有没有广播"正是这一档要钉住的东西，而广播本身会刷新开发机的桌面图标。
+    /// </summary>
+    private readonly Action _notifyShell = notifyShell ?? NotifyShell;
 
     /// <summary>ProgID 前缀。设置存储与注册表都靠它识别“哪些是 Andzip 登记的”。</summary>
     public const string ProgIdPrefix = "Andzip.";
@@ -127,12 +141,22 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     }
 
     /// <summary>
-    /// 修复所有 <c>Andzip.*</c> ProgID 里的命令行，指向当前这个 exe；返回改动数量。
+    /// 修复所有 <c>Andzip.*</c> ProgID 里的命令行，指向当前这个 exe；
+    /// 返回<strong>真的改过</strong>几个，并在改过的时候让 shell 重读一次。
     /// <para>
     /// 为什么需要它：绿色版的文件名带版本号（<c>Andzip-v0.9.2-win-x64.exe</c>），升级之后注册表里
     /// 那条命令还指着上一个文件 —— 老 exe 不认 <c>/extract</c>，用户看到的就是「设了没用」。
     /// 启动时顺手把自己命名空间下的键校正过来，用户就不必每次升级都重做一遍关联。
     /// 只动 <c>Andzip.*</c>，别的软件的 ProgID 一概不碰。
+    /// </para>
+    /// <para>
+    /// <strong>返回的是"真改过"，不是"看过几个"，而且广播只跟着前者走</strong>（3.2.1）：
+    /// 这条自愈路径每次通过关联启动都会跑，而原先的计数数的是"我重写了几个" ——
+    /// 于是每次双击压缩包/右键解压都会发一次全局 <c>SHCNE_ASSOCCHANGED</c>，
+    /// 用户看到的现象是<strong>屏幕上所有图标整片闪一下</strong>（3.2.0 报的）。
+    /// 真机上量的：一次这样的启动会把 <c>Andzip.zip</c> 与 <c>.zip</c> 两个键<strong>都写一遍</strong>
+    /// （值一个字都没变），紧接着 shell 重写了图标缓存 <c>iconcache_idx.db</c>。
+    /// 现在值相同就不写、没写就不广播。
     /// </para>
     /// </summary>
     public int RepairCommands(string executablePath, ExtractionVerbLabels labels)
@@ -147,7 +171,7 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
             return 0;
         }
 
-        var fixedCount = 0;
+        var repaired = 0;
         foreach (var name in classes.GetSubKeyNames())
         {
             if (!name.StartsWith(ProgIdPrefix, StringComparison.OrdinalIgnoreCase))
@@ -162,11 +186,18 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
             }
 
             // 默认动词一律回到 open：双击的行为由「解压 → 双击」设置决定，不靠动词区分。
-            WriteCommands(progId!, executablePath, labels);
-            fixedCount++;
+            if (WriteCommands(progId!, executablePath, labels))
+            {
+                repaired++;
+            }
         }
 
-        return fixedCount;
+        if (repaired > 0)
+        {
+            _notifyShell();
+        }
+
+        return repaired;
     }
 
     /// <summary>
@@ -194,18 +225,21 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// 不受双击设置影响（0.9.12 之前两者是同一条，勾了"直接解压"的用户点「打开」得到的是解压）。
     /// </para>
     /// </summary>
-    private static void WriteCommands(RegistryKey progId, string executablePath, ExtractionVerbLabels labels)
+    /// <returns>有没有真的改过（值全都一样时一笔都不写）。</returns>
+    private static bool WriteCommands(RegistryKey progId, string executablePath, ExtractionVerbLabels labels)
     {
-        using var shell = progId.CreateSubKey("shell")!;
-        shell.SetValue(string.Empty, "open");
+        var changed = false;
 
-        WriteVerb(shell, "open", labels.Open, executablePath, Quote(executablePath) + " \"%1\"", hidden: true);
-        WriteVerb(shell, "andzip-open", labels.Open, executablePath,
+        using var shell = progId.CreateSubKey("shell")!;
+        changed |= RegistryWrite.SetIfDifferent(shell, string.Empty, "open");
+
+        changed |= WriteVerb(shell, "open", labels.Open, executablePath, Quote(executablePath) + " \"%1\"", hidden: true);
+        changed |= WriteVerb(shell, "andzip-open", labels.Open, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Open));
-        WriteVerb(shell, "extract", labels.Extract, executablePath,
+        changed |= WriteVerb(shell, "extract", labels.Extract, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Extract),
             enabled: labels.ShowExtractVerbs);
-        WriteVerb(shell, "extract-delete", labels.ExtractDelete, executablePath,
+        changed |= WriteVerb(shell, "extract-delete", labels.ExtractDelete, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.ExtractDelete),
             enabled: labels.ShowExtractVerbs);
 
@@ -213,13 +247,17 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
         // auto-extract / extract-here 是 0.9.12 及以前那两条解压，已被单条 extract 取代。
         foreach (var retired in new[] { "auto-extract", "extract-here" })
         {
-            shell.DeleteSubKeyTree(retired, throwOnMissingSubKey: false);
+            changed |= RegistryWrite.DeleteTreeIfPresent(shell, retired);
         }
 
-        progId.CreateSubKey("DefaultIcon")!.SetValue(string.Empty, executablePath + ",0");
+        using var icon = progId.CreateSubKey("DefaultIcon")!;
+        changed |= RegistryWrite.SetIfDifferent(icon, string.Empty, executablePath + ",0");
+
+        return changed;
     }
 
-    private static void WriteVerb(
+    /// <returns>有没有真的改过。</returns>
+    private static bool WriteVerb(
         RegistryKey shell,
         string name,
         string label,
@@ -231,26 +269,30 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
         // 关掉的一项要真的删掉，不是留着键改文字 —— 菜单上少一项才是用户点的意思。
         if (!enabled)
         {
-            shell.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
-            return;
+            return RegistryWrite.DeleteTreeIfPresent(shell, name);
         }
+
+        var changed = false;
 
         using var verb = shell.CreateSubKey(name)!;
         // 键的默认值就是菜单文字；Icon 让条目旁边带上程序图标而不是空白。
-        verb.SetValue(string.Empty, label);
-        verb.SetValue("Icon", executablePath + ",0");
+        changed |= RegistryWrite.SetIfDifferent(verb, string.Empty, label);
+        changed |= RegistryWrite.SetIfDifferent(verb, "Icon", executablePath + ",0");
         if (hidden)
         {
             // 只被程序（双击、打开方式）调用，不进右键菜单。本机实测过：加上这个值之后
             // Shell.Application 枚举 box.zip 的动词表里就没有这一项了，去掉又回来。
-            verb.SetValue("ProgrammaticAccessOnly", string.Empty);
+            changed |= RegistryWrite.SetIfDifferent(verb, "ProgrammaticAccessOnly", string.Empty);
         }
         else
         {
-            verb.DeleteValue("ProgrammaticAccessOnly", throwOnMissingValue: false);
+            changed |= RegistryWrite.DeleteIfPresent(verb, "ProgrammaticAccessOnly");
         }
 
-        verb.CreateSubKey("command")!.SetValue(string.Empty, command);
+        using var commandKey = verb.CreateSubKey("command")!;
+        changed |= RegistryWrite.SetIfDifferent(commandKey, string.Empty, command);
+
+        return changed;
     }
 
     private static string Quote(string path) => "\"" + path + "\"";
@@ -276,8 +318,14 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
         return false;
     }
 
-    /// <summary>让资源管理器立刻刷新关联，否则要等 shell 重启才看得见。</summary>
-    public void NotifyChanged() => SHChangeNotify(ShellAssocChanged, ShellFlushNow, IntPtr.Zero, IntPtr.Zero);
+    /// <summary>
+    /// 让资源管理器立刻刷新关联，否则要等 shell 重启才看得见。
+    /// <para><strong>这是一次全局广播</strong>：它会重建关联与图标缓存，屏幕上的图标整片闪一下。
+    /// 所以只在用户真的改了关联、或自愈真的改到了东西时用（见 <see cref="RepairCommands"/>）。</para>
+    /// </summary>
+    public void NotifyChanged() => _notifyShell();
+
+    private static void NotifyShell() => SHChangeNotify(ShellAssocChanged, ShellFlushNow, IntPtr.Zero, IntPtr.Zero);
 
     /// <summary>
     /// 已经登记、但默认程序仍是别的软件的扩展名 —— 也就是「关联做了、双击却不是 Andzip」。

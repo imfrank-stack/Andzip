@@ -173,6 +173,9 @@ public sealed class App : Application
     /// <para>解压动词按「设置 → 上下文菜单」的选择补写：升级后新认出去的格式也该有右键菜单，
     /// 但用户明确关掉过的那一项不能被自愈偷偷加回来。压缩动词只补齐<strong>已经装了</strong>的范围，
     /// 没勾过的用户不会某天突然发现菜单里多了三项。</para>
+    /// <para><strong>广播由这两个调用自己决定</strong>（值没变就不写、没写就不发 <c>SHChangeNotify</c>）：
+    /// 这条路径每次双击/右键启动都会跑，而广播一次就是屏幕上所有图标闪一下 ——
+    /// 早先把"重写了几个"当成"改了几个"，于是每一次解压或压缩都闪一次（3.2.0 报的）。</para>
     /// </summary>
     private static void RepairStaleShellEntries(LangCatalog lang, AppSettings settings)
     {
@@ -188,10 +191,7 @@ public sealed class App : Application
             var showExtractVerbs = settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true);
             var service = new FileAssociationService();
             var labels = ShellVerbLabels.Extraction(lang, showExtractVerbs);
-            if (service.RepairCommands(executable, labels) > 0)
-            {
-                service.NotifyChanged();
-            }
+            service.RepairCommands(executable, labels);
         }
         catch (Exception)
         {
@@ -201,10 +201,7 @@ public sealed class App : Application
         try
         {
             var contextMenu = new ContextMenuService();
-            if (contextMenu.RepairVerbs(executable, ShellVerbLabels.Compression(lang)) > 0)
-            {
-                contextMenu.NotifyChanged();
-            }
+            contextMenu.RepairVerbs(executable, ShellVerbLabels.Compression(lang));
         }
         catch (Exception)
         {
