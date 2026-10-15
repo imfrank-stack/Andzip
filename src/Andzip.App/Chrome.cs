@@ -126,6 +126,22 @@ internal static class Chrome
     public static Control Lift(this Control control) => control.Lift(new Thickness(0), Design.Radius.Lg);
 
     /// <summary>
+    /// 悬停是一块<strong>平的</strong>淡色圆角方填充：只变色，不浮起，没有影子（3.3.0，用户给的参考图）。
+    /// <para>与 <see cref="Lift"/> 只差一件事：影子。参考图里悬停那一格是一块浅灰圆角方、四周没有影 ——
+    /// 工具栏整条已经是一张浮在面板上的卡片了，卡片里的格子再各自浮一次，一屏上就是两层"浮"，
+    /// 读起来是脏而不是层次。所以这一档只换底色。</para>
+    /// <para>圆角取 <see cref="Design.Radius.Md"/> 而不是药丸那档：参考图里那一格是
+    /// "方形带圆角"，比药丸方、比面皮圆。底色两档沿用 <see cref="Design.Surface.Muted"/> /
+    /// <see cref="Design.Surface.Pressed"/>，与全软件其余悬停同一套灰。</para>
+    /// </summary>
+    public static T Tile<T>(this T button) where T : Button
+    {
+        button.Background = Brushes.Transparent;
+        button.CornerRadius = Design.Radius.Md;
+        return TrackStates(button, Design.Surface.Muted, Design.Surface.Pressed);
+    }
+
+    /// <summary>
     /// 这一项展开子菜单时，把弹窗修成圆角阴影面板。
     /// <para>为什么要<strong>推迟一帧</strong>：<c>SubmenuOpened</c> 触发的那一刻，弹窗里的
     /// 内容还没建出来（<c>Popup.Child</c> 是打开时才生成的），当场改属性等于改在空气上。

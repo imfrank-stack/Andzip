@@ -33,37 +33,52 @@ public class HoverAndPopupTests
     /// <summary>SimpleTheme 给 ComboBox 自带的那圈描边（比规范里的 Border.Strong 重两级）。</summary>
     private static readonly Color ThemeBorder = Color.FromRgb(0x88, 0x88, 0x88);
 
+    /// <summary>
+    /// 工具栏按钮的悬停：<strong>一块平的淡色圆角方填充</strong>（3.3.0，用户给的参考图）。
+    /// <para>1.8.0 那一版是"带影子的圆角药丸"，当时整条工具栏还贴在面板上，格子浮一下是它唯一
+    /// 的层级表达；3.3.0 起整条已经是一张浮在面板上的卡片，里面的格子再各自浮一次就是两层"浮"。
+    /// 所以这里钉四件事：填的是 <c>Surface.Muted</c> 那档灰；填到上沿与左沿（整格都换档，不是只描一圈）；
+    /// 左上角 1px 仍是卡片白（角是圆的，不是方块）；按钮上方 3px 仍是卡片白（<strong>没有影子</strong>）。</para>
+    /// </summary>
     [AvaloniaFact]
-    public void HoveredToolBarButtonBecomesARoundedBoxWithAShadow()
+    public void HoveredToolBarButtonIsAFlatRoundedSquareWithoutAShadow()
     {
         var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
         UiWait.Pump(50);
 
         var button = VisualQuery.Of<Button>(window).First(b =>
             b.Content is StackPanel panel && panel.Orientation == Avalonia.Layout.Orientation.Vertical);
-        var corner = button.TranslatePoint(new Point(6, 6), window)!.Value;
-        var above = new Point(corner.X, button.TranslatePoint(new Point(0, -3), window)!.Value.Y);
 
-        var restFace = Pixels.At(window, corner);
-        var restAbove = Pixels.At(window, above);
+        Avalonia.Point At(double x, double y) => button.TranslatePoint(new Point(x, y), window)!.Value;
+        var inside = At(6, 6);
+        var topEdge = At(button.Bounds.Width / 2, 1);
+        var leftEdge = At(1, button.Bounds.Height / 2);
+        var cornerOut = At(1, 1);
+        var above = At(button.Bounds.Width / 2, -3);
 
-        window.MouseMove(corner);
+        var white = Color.FromRgb(0xFF, 0xFF, 0xFF);
+        Assert.True(Pixels.Same(Pixels.At(window, inside), white),
+            $"静止时按钮上就是卡片白，测量前提不成立（实测 {Pixels.Name(Pixels.At(window, inside))}）");
+
+        window.MouseMove(inside);
         Dispatcher.UIThread.RunJobs();
 
-        var hoverFace = Pixels.At(window, corner);
-        var hoverAbove = Pixels.At(window, above);
+        var muted = Pixels.Of(Design.Surface.Muted);
+        Assert.True(Pixels.Same(Pixels.At(window, inside), muted),
+            $"悬停那一格的底色不是 Surface.Muted（{Pixels.Name(muted)}），实测 {Pixels.Name(Pixels.At(window, inside))}");
+        Assert.True(Pixels.Same(Pixels.At(window, topEdge), muted),
+            $"悬停的填充没到上沿（{Pixels.Name(Pixels.At(window, topEdge))}）—— 那一格读起来是描边不是填充");
+        Assert.True(Pixels.Same(Pixels.At(window, leftEdge), muted),
+            $"悬停的填充没到左沿（{Pixels.Name(Pixels.At(window, leftEdge))}）—— 那一格读起来是描边不是填充");
 
-        Assert.True(Pixels.Same(restFace, Color.FromRgb(0xFF, 0xFF, 0xFF)),
-            $"静止时按钮上就是卡片白，测量前提不成立（实测 {Pixels.Name(restFace)}）");
-        Assert.True(Pixels.Same(hoverFace, Pixels.Of(Design.Surface.Muted)),
-            $"悬停那颗药丸的底色不是 Surface.Muted（{Pixels.Name(Design.Surface.Muted)}），实测 {Pixels.Name(hoverFace)}");
+        // 圆角：(1,1) 落在半径 8 的圆弧外，应当还是卡片白；是方块的话这一格会被刷灰。
+        Assert.True(Pixels.Same(Pixels.At(window, cornerOut), white),
+            $"悬停那一格的左上角 1px 也被刷上了（{Pixels.Name(Pixels.At(window, cornerOut))}）—— 那是方块不是圆角方");
 
-        // 阴影落在按钮外沿：那一片本来一定是卡片白，暗了才说明影子真的画出来了
-        Assert.True(Pixels.Same(restAbove, Color.FromRgb(0xFF, 0xFF, 0xFF)),
-            $"按钮上方 3px 不是卡片白（{Pixels.Name(restAbove)}），测不到阴影");
-        Assert.True(Darker(hoverAbove, restAbove),
-            $"悬停时按钮外沿没有变暗（{Pixels.Name(restAbove)} → {Pixels.Name(hoverAbove)}）："
-            + "用户要的是「带阴影的圆角框」，只改底色不算浮起来");
+        // 平的：按钮外沿不许有影子。卡片自己已经浮起来了，格子再浮一次就是两层"浮"。
+        Assert.True(Pixels.Same(Pixels.At(window, above), white),
+            $"悬停时按钮上方 3px 变暗了（{Pixels.Name(Pixels.At(window, above))}）—— "
+            + "用户要的是「淡色方形圆角淡色填充」，带影子的那一版是 1.8.0 的旧语言");
     }
 
     /// <summary>

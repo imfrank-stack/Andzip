@@ -149,6 +149,17 @@ foreach ($step in $Steps) {
             [void][P]::SetCursorPos($r.L + [int]$xy[0], $r.T + [int]$xy[1])
             Write-Host ("  move +{0},+{1}" -f $xy[0], $xy[1])
         }
+        # hover: park the cursor AND paint the hover state. SetCursorPos alone injects no input:
+        # the window under the new cursor never receives a WM_MOUSEMOVE, so IsPointerOver stays
+        # false and a "hover" shot is silently a rest shot. A zero-delta mouse_event MOVE is the
+        # real input event at the parked position.
+        'hover' {
+            $xy = $rest.Split(',')
+            $r = Rect
+            [void][P]::SetCursorPos($r.L + [int]$xy[0], $r.T + [int]$xy[1])
+            [P]::mouse_event(0x0001, 0, 0, 0, [UIntPtr]::Zero)
+            Write-Host ("  hover +{0},+{1}" -f $xy[0], $xy[1])
+        }
         'click' {
             $xy = $rest.Split(',')
             $r = Rect

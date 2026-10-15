@@ -165,7 +165,7 @@ public class DesignTokenTests
     public void EveryButtonPinsItsTemplateFace()
     {
         var root = Path.Combine(RepositoryRoot(), "src", "Andzip.App");
-        string[] pinned = [".Ghost(", ".Accent(", ".Danger(", ".Lift(", ".ToggleSwitch(", ".PinFace(", ".Picker("];
+        string[] pinned = [".Ghost(", ".Accent(", ".Danger(", ".Lift(", ".Tile(", ".ToggleSwitch(", ".PinFace(", ".Picker("];
         var offenders = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))

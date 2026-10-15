@@ -1,3 +1,6 @@
+using System.Linq;
+using Andzip.App;
+using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -94,6 +97,51 @@ public class ShadowCapabilityTests
         Assert.True(Luminance(Page) - Luminance(above) >= 0.01,
             $"面板顶边外 2px 是 {Pixels.Name(above)}，与页底色 {Pixels.Name(Page)} 一样亮 —— "
             + $"顶部没有阴影，窗沿和背景会连成一片（底边外 2px 作对照：{Pixels.Name(below)}）");
+    }
+
+    /// <summary>
+    /// 工具栏那张卡片<strong>四周</strong>都要有影子（3.3.0，用户给的参考图：「整体四周淡色圆角阴影」）。
+    /// <para>量的是<strong>真窗口里那张卡</strong>，不是另搭一枚 Border：卡片是 <c>MainToolBar.Create</c>
+    /// 交出来的，令牌换错档、边距把影子裁掉、圆角写没，都会在这里现形。判据与上面两条同族 ——
+    /// 同一张面板白上，卡外 2px 比令牌白暗；四个边的中点各量一次，少一侧都不算"四周"。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheToolBarCardCastsAShadowOnAllFourSides()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
+        UiWait.Pump(50);
+
+        // 认卡不认名字：装着那排九颗"图标 + 文字"按钮的圆角 Border 就是它。
+        var card = VisualQuery.Of<Border>(window).First(b =>
+            b.Child is StackPanel row && row.Orientation == Orientation.Horizontal
+            && row.Children.OfType<Button>().Count(x => x.Content is StackPanel) >= 9);
+
+        Assert.True(card.CornerRadius.TopLeft >= 8,
+            $"工具栏卡片的圆角只有 {card.CornerRadius}，参考图里是一张圆角卡");
+        Assert.False(card.BoxShadow.Equals(default(BoxShadows)),
+            "工具栏卡片没有 BoxShadow —— 四周那圈淡影无从谈起");
+
+        var white = Pixels.Of(Design.Surface.Base);
+        // Bounds 是相对父元素的，取样必须换到窗口坐标，否则量的是另一块地方。
+        var tl = card.TranslatePoint(new Point(0, 0), window)!.Value;
+        var br = card.TranslatePoint(new Point(card.Bounds.Width, card.Bounds.Height), window)!.Value;
+        var cx = (tl.X + br.X) / 2;
+        var cy = (tl.Y + br.Y) / 2;
+        (string Side, Point At)[] sides =
+        [
+            ("左", new Point(tl.X - 2, cy)),
+            ("右", new Point(br.X + 2, cy)),
+            ("上", new Point(cx, tl.Y - 2)),
+            ("下", new Point(cx, br.Y + 2)),
+        ];
+
+        foreach (var (side, at) in sides)
+        {
+            var pixel = Pixels.At(window, at);
+            Assert.True(Luminance(pixel) < Luminance(white) - 0.01,
+                $"卡片{side}边外 2px 是 {Pixels.Name(pixel)}，与面板白 {Pixels.Name(white)} 一样亮 —— "
+                + "那一侧没有影子；参考图要的是四周都有，只往下偏移的那一版 1.8.0 就犯过");
+        }
     }
 
     private static double Luminance(Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255.0;

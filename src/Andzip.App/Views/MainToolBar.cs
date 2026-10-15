@@ -13,8 +13,10 @@ namespace Andzip.App.Views;
 /// 以前只有"底色差"可用（SimpleTheme 的模板控件不吃阴影），要区分工具栏与内容区只能靠一条
 /// 实心蓝；现在卡片有真阴影（<c>ShadowCapabilityTests</c> 量的就是这件事），不需要用大面积高饱和
 /// 色来喊"我在这里"。品牌蓝退到图标上，反而比糊一条带子更聚焦。</para>
-/// <para>这里只交回按钮排本身，卡片那层外壳由 <c>MainWindow</c> 与菜单栏一起包 ——
-/// 菜单和工具栏是同一块"外壳"，分成两张卡会把顶部切成三条横带。</para>
+/// <para><strong>3.3.0 起这张卡片是工具栏自己的</strong>（用户给的参考图）：整条浮在面板上，
+/// <strong>四周</strong>一圈淡影 + 圆角，与面板之间靠影子和留白分界，不再靠一根发丝线；
+/// 悬停也从"带影子的圆角药丸"换成<strong>一块平的淡色圆角方填充</strong>（<see cref="Chrome.Tile"/>）——
+/// 卡片自己已经浮起来了，里面的格子再各自浮一次就是两层"浮"，读起来是脏不是层次。</para>
 /// <para>「打开」「解压」右侧原来各挂着一个下拉箭头（主按钮 + 小箭头两个按钮拼一组），
 /// 0.9.12 删掉了：箭头里「最近的文件」根本没有这个功能，永远灰着，而「解压」里那一条
 /// 与主按钮是同一条命令 —— 两个箭头点开都看不出差别，用户的评价是"似乎没有作用"。</para>
@@ -35,7 +37,6 @@ internal static class MainToolBar
         {
             Orientation = Orientation.Horizontal,
             Spacing = Design.Space.X1,
-            Margin = new Thickness(Design.Space.X2, 0, Design.Space.X2, Design.Space.X2),
         };
 
         items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), "open-archive", actions.OpenArchive));
@@ -53,7 +54,17 @@ internal static class MainToolBar
         items.Children.Add(CreateButton(
             lang.Label("TEXT_TOOLBAR_LANGUAGE"), "language", actions.SwitchLanguage));
 
-        return items;
+        // 整条是一张浮在面板上的卡片：底色与面板同白，分界全靠四周那一圈淡影与圆角。
+        // 阴影用 Lift 那档（"浮在面板上的一块面"）而不是整窗那档 Floating ——
+        // 这一条只有几十像素高，大弥散影会在旁边糊出一圈灰雾（Design.Shadow 那条注释量过）。
+        return new Border
+        {
+            Background = Design.Surface.Base,
+            CornerRadius = Design.Radius.Lg,
+            BoxShadow = Design.Shadow.Lift,
+            Padding = new Thickness(Design.Space.X2, Design.Space.X1, Design.Space.X2, Design.Space.X1),
+            Child = items,
+        };
     }
 
     private static Control CreateButton(string text, string glyph, Action? run)
@@ -105,9 +116,10 @@ internal static class MainToolBar
             button.Click += (_, _) => action();
         }
 
-        // 圆角 + 悬停浮起。禁用时 Chrome 的事件根本不会触发（收不到指针事件），
+        // 悬停是一块平的淡色圆角方（3.3.0 参考图）：卡片自己已经浮起来了，格子不再各自带影。
+        // 禁用时 Chrome 的事件根本不会触发（收不到指针事件），
         // 所以静止态保持透明，不会在卡片上留一块"亮着的死按钮"。
-        return button.Lift();
+        return button.Tile();
     }
 }
 

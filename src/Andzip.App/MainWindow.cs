@@ -69,7 +69,7 @@ public sealed class MainWindow : Window
     /// <summary>整块窗口那张圆角阴影面板。它的底色就是"表面"，最大化时收掉圆角与边距。</summary>
     private readonly Border _surface;
 
-    /// <summary>工具栏外面那层（那根发丝线归它画）。</summary>
+    /// <summary>工具栏外面那层：只给一圈留白（卡片影子的地方），不画线。</summary>
     private readonly Border _headerHost;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
@@ -173,15 +173,17 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(_titleBar, Dock.Top);
         root.Children.Add(_titleBar);
 
-        // 工具栏与内容之间只留一根发丝线。
+        // 工具栏是一张<strong>浮在面板上的卡片</strong>（3.3.0，用户给的参考图），
+        // 所以这一层不再是"卡片 + 一根发丝线"，只剩一圈留白 —— 卡片与面板的分界由影子读出来，
+        // 再加一根线就是把同一件事说两遍（而且线是画上去的，投不出光）。
+        // 留白同时是<strong>影子的地方</strong>：`Shadow.Lift` 弥散 10px，边距小于它就等于把影子切一刀。
         // 注意 Dock.Top 必须设在<strong>这层 Border</strong>上 —— 设在工具栏自己身上没用，
         // DockPanel 只看自己直接子元素的值（1.4.0 就踩过：那样菜单栏会变成左边一整列）。
         _headerHost = new Border
         {
             Child = _toolBar,
-            BorderBrush = Design.Line.Hair,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Margin = new Thickness(Design.Space.X2, 0, Design.Space.X2, 0),
+            BorderThickness = new Thickness(0),
+            Margin = new Thickness(Design.Space.X3, Design.Space.X2, Design.Space.X3, Design.Space.X2),
         };
         DockPanel.SetDock(_headerHost, Dock.Top);
         root.Children.Add(_headerHost);
@@ -236,7 +238,6 @@ public sealed class MainWindow : Window
         // 窗口本身永远是透明的（圆角外要能看见桌面），有颜色的是那层面板。
         Background = Brushes.Transparent;
         _surface.Background = Design.Surface.Base;
-        _headerHost.BorderBrush = Design.Line.Hair;
         _titleBar.Repaint();
         _menuBar.Background = Brushes.Transparent;
         _menuBar.Foreground = Design.Ink.Primary;
