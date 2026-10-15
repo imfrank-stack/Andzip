@@ -21,9 +21,11 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 /// 主菜单结构（对应需求文档附录 A，7 个顶级菜单）。
 /// <para>已接入的命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
 /// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、文件查找（Ctrl+F）、设置（F5）、
-/// 视图切换（F6）、关于（F1）、打开 Andzip 安装目录、转到官网。</para>
+/// 视图切换（F6）、关于（F1）、打开 Andzip 安装目录、转到官网，
+/// 以及「编辑」整排七项（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径，3.4.0）。</para>
 /// <para><strong>模型里 <c>Enabled</c> 的语义是"这条实装过了"</strong>，不是"这条现在能点" ——
-/// 后者由窗口按当前视图现算（见 <see cref="ArchiveOnlyCommands"/>）。
+/// 后者由窗口按当前视图与选择现算（见 <see cref="ArchiveOnlyCommands"/> 与
+/// <see cref="SelectionCommands"/>）。
 /// 剩下那些 <c>Enabled: false</c> 的是按参考软件结构留的占位，点了什么也不会发生，
 /// 所以它们必须灰着，而不是接一条假命令。</para>
 /// </summary>
@@ -75,6 +77,27 @@ public static class MainMenuModel
     /// <summary>在当前打开的压缩包清单里找文件（Ctrl+F）。</summary>
     public const string CommandFindFiles = "find.files";
 
+    /// <summary>「编辑」那一排：重命名一个成员（F2）。要恰好选中一个文件。</summary>
+    public const string CommandRenameEntry = "edit.rename";
+
+    /// <summary>「编辑」：把磁盘上的文件加进这个包（Ins）。</summary>
+    public const string CommandAddEntries = "edit.add";
+
+    /// <summary>「编辑」：把选中的成员从包里删掉（Del）。</summary>
+    public const string CommandDeleteEntries = "edit.delete";
+
+    /// <summary>「编辑」：改这个包自己的注释（Ctrl+Shift+M；只有 ZIP 有这一格）。</summary>
+    public const string CommandEditComment = "edit.comment";
+
+    /// <summary>「编辑」：把选中的成员复制到剪贴板（Ctrl+C；落到临时目录再上剪贴板）。</summary>
+    public const string CommandCopyEntries = "edit.copy";
+
+    /// <summary>「编辑」：把剪贴板里的文件加进这个包（Ctrl+V）。</summary>
+    public const string CommandPasteEntries = "edit.paste";
+
+    /// <summary>「编辑」：把选中成员的完整路径复制成文本。</summary>
+    public const string CommandCopyPaths = "edit.copypath";
+
     /// <summary>
     /// 「最近的文件」子菜单。它的条目是运行时按存储列表生成的，所以这里只登记"这一项有子菜单"，
     /// 具体内容由 <c>MainMenuBar</c> 在展开时填 —— 菜单建一次就冻住的话，
@@ -105,6 +128,23 @@ public static class MainMenuModel
         CommandFindFiles,
     ];
 
+    /// <summary>
+    /// 「编辑」那七项。逐项判的条件比上面那组细：改得动这个格式才点亮增删改名与粘贴、
+    /// 注释只对 ZIP、复制类只要选中了东西。
+    /// <para>这张表只列"归窗口按选择现算的那几项"，好让窗口知道该管谁 ——
+    /// 条件本身写在窗口里（<c>UpdateEditMenuStates</c>），因为只有它看得见当前选择。</para>
+    /// </summary>
+    public static IReadOnlyList<string> SelectionCommands { get; } =
+    [
+        CommandRenameEntry,
+        CommandAddEntries,
+        CommandDeleteEntries,
+        CommandEditComment,
+        CommandCopyEntries,
+        CommandPasteEntries,
+        CommandCopyPaths,
+    ];
+
     public static IReadOnlyList<MenuModel> Create() =>
     [
         new("file", "MENUSTR_FILE",
@@ -132,15 +172,15 @@ public static class MainMenuModel
 
         new("edit", "MENUSTR_EDIT",
         [
-            new("edit.rename", "MENUSTR_RENAME_FILE", "F2"),
-            new("edit.add", "MENUSTR_ADD_FILE", "Ins"),
-            new("edit.delete", "MENUSTR_DELETE_FILE", "Del"),
+            new("edit.rename", "MENUSTR_RENAME_FILE", "F2", Enabled: true, CommandId: CommandRenameEntry),
+            new("edit.add", "MENUSTR_ADD_FILE", "Ins", Enabled: true, CommandId: CommandAddEntries),
+            new("edit.delete", "MENUSTR_DELETE_FILE", "Del", Enabled: true, CommandId: CommandDeleteEntries),
             MenuItemModel.Separator(),
-            new("edit.comment", "MENUSTR_EDIT_COMMENT", "Ctrl+Shift+M"),
+            new("edit.comment", "MENUSTR_EDIT_COMMENT", "Ctrl+Shift+M", Enabled: true, CommandId: CommandEditComment),
             MenuItemModel.Separator(),
-            new("edit.copy", "MENUSTR_COPY_FILES2CLIPBOARD", "Ctrl+C"),
-            new("edit.paste", "MENUSTR_PASTE_FILESFROMCLIPBOARD", "Ctrl+V"),
-            new("edit.copypath", "MENUSTR_COPY_FULL_PATHNAMES"),
+            new("edit.copy", "MENUSTR_COPY_FILES2CLIPBOARD", "Ctrl+C", Enabled: true, CommandId: CommandCopyEntries),
+            new("edit.paste", "MENUSTR_PASTE_FILESFROMCLIPBOARD", "Ctrl+V", Enabled: true, CommandId: CommandPasteEntries),
+            new("edit.copypath", "MENUSTR_COPY_FULL_PATHNAMES", Enabled: true, CommandId: CommandCopyPaths),
         ]),
 
         new("find", "MENUSTR_FIND",

@@ -9,6 +9,7 @@ using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -73,6 +74,11 @@ public sealed class MainWindow : Window
     private readonly Border _headerHost;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
+
+    /// <summary>当下这个压缩包视图（没开着包时为 null）。
+    /// <para>给界面用例用：'选了某一行之后某一项该不该亮'只能真的去选那一行才问得出来，
+    /// 而选择是视图内部的状态。生产代码里没有人读它 —— 窗口自己走 <c>_browser</c>。</para></summary>
+    internal ArchiveView? Browser => _browser;
     /// <summary>
     /// 已启用、但<strong>不归主窗口命令表管</strong>的那几条。「最近的文件」的条目是展开时现生成的
     /// （见 <c>MainMenuBar</c>），它没有"点一下这条菜单"这个动作。
@@ -135,6 +141,13 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
+            [MainMenuModel.CommandRenameEntry] = RenameEntryAsync,
+            [MainMenuModel.CommandAddEntries] = AddEntriesAsync,
+            [MainMenuModel.CommandDeleteEntries] = DeleteEntriesAsync,
+            [MainMenuModel.CommandEditComment] = EditCommentAsync,
+            [MainMenuModel.CommandCopyEntries] = CopyEntriesAsync,
+            [MainMenuModel.CommandPasteEntries] = PasteEntriesAsync,
+            [MainMenuModel.CommandCopyPaths] = CopyPathsAsync,
             [MainMenuModel.CommandRecoverPassword] = OpenPasswordRecoveryDialog,
             [MainMenuModel.CommandPasswordManager] = OpenPasswordManagerDialog,
             [MainMenuModel.CommandAbout] = OpenAboutDialog,
@@ -382,6 +395,7 @@ public sealed class MainWindow : Window
         _contentHost.Content = _homeContent;
         Title = EngineTitle;
         SetArchiveOnlyCommandsEnabled(false);
+        UpdateEditMenuStates();
     }
 
     private void ShowArchiveView(ArchiveListing listing)
@@ -393,6 +407,12 @@ public sealed class MainWindow : Window
         _contentHost.Content = _browser.Root;
         Title = ArchiveTitle(listing.ArchivePath);
         SetArchiveOnlyCommandsEnabled(true);
+
+        // 「编辑」那几项里，有三项要"选中了东西"才亮，而选择是视图内部的状态。
+        // 订阅它而不是每次改完自己再算一遍：选择会变的地方有四处（点行、点树、导航、定位），
+        // 逐个去补必然漏掉一两处。
+        _browser.SelectionChanged += UpdateEditMenuStates;
+        UpdateEditMenuStates();
     }
 
     // ---------- 查找 → 文件查找 ----------
@@ -560,8 +580,651 @@ public sealed class MainWindow : Window
         }
     }
 
+    // ---------- 编辑（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径） ----------
+
+    private IReadOnlyList<ArchiveEntryInfo> SelectedEntries()
+        => [.. (_browser?.SelectedRows ?? []).Where(entry => entry.Name != "..")];
+
+    private static string? CurrentPassword(string archivePath)
+        => Session.Passwords.TryGet(archivePath, out var cached) ? cached : null;
+
     /// <summary>
-    /// 另存为：把当前这个包<strong>原样复制</strong>一份到新名字。
+    /// 按"当前开着什么包、选中了什么"重算「编辑」那七项的灰与亮。
+    /// <para>条件写在这里而不是菜单模型里：<strong>只有窗口看得见当前选择</strong>。
+    /// 而"这个格式改不改得动"与"这个格式有没有注释"的判据不在这里重写一遍 ——
+    /// 那是 <see cref="ArchiveUpdater.CanUpdate"/> 与 <see cref="ZipComment.CanEdit"/> 的事，
+    /// 抄一份写死在界面里，早晚会与真动手那一层说的不是同一件事。</para>
+    /// </summary>
+    private void UpdateEditMenuStates()
+    {
+        var entries = SelectedEntries();
+        var hasSelection = entries.Count > 0;
+        var singleFile = entries.Count == 1 && !entries[0].IsDirectory;
+        var editable = ArchiveUpdater.CanUpdate(_listing?.FormatName);
+
+        SetCommandEnabled(MainMenuModel.CommandRenameEntry, editable && singleFile);
+        SetCommandEnabled(MainMenuModel.CommandAddEntries, editable);
+        SetCommandEnabled(MainMenuModel.CommandDeleteEntries, editable && hasSelection);
+        SetCommandEnabled(MainMenuModel.CommandEditComment, ZipComment.CanEdit(_listing?.FormatName));
+        SetCommandEnabled(MainMenuModel.CommandCopyEntries, hasSelection);
+        SetCommandEnabled(MainMenuModel.CommandPasteEntries, editable);
+        SetCommandEnabled(MainMenuModel.CommandCopyPaths, hasSelection);
+    }
+
+    private void SetCommandEnabled(string commandId, bool enabled)
+    {
+        foreach (var item in WalkItems(_menuBar))
+        {
+            if (item.Tag is string command && command == commandId)
+            {
+                item.IsEnabled = enabled;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 选中项 → 要被"动"的成员下标。目录会展开成它底下的每一个成员 ——
+    /// 引擎那边只有"留哪些"这一个动作，半个树留在包里比拒绝更糟。
+    /// </summary>
+    private static List<int> ExpandToIndices(
+        ArchiveListing listing,
+        IEnumerable<ArchiveEntryInfo> selected)
+    {
+        var indices = new HashSet<int>();
+        foreach (var entry in selected)
+        {
+            if (!entry.IsDirectory)
+            {
+                indices.Add(entry.Index);
+                continue;
+            }
+
+            foreach (var member in listing.Entries.Where(
+                member => member.Path.StartsWith(entry.Path, StringComparison.Ordinal)))
+            {
+                indices.Add(member.Index);
+            }
+        }
+
+        return [.. indices];
+    }
+
+    /// <summary>重命名（F2）：先弹一个文本框预填原名字，再把新名字交给 Core 去搬。
+    /// <para>改的只是<strong>叶子名</strong>，目录前缀原样带过去 —— 让用户在这里输 <c>a/b.txt</c>
+    /// 等于把"改个名字"变成"搬个位置"，那是另一件事。</para></summary>
+    private async void RenameEntryAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var entries = SelectedEntries();
+        if (entries.Count != 1 || entries[0].IsDirectory)
+        {
+            return;
+        }
+
+        var entry = entries[0];
+        var prompt = new TextPromptWindow(
+            _lang,
+            "MENUSTR_RENAME_FILE",
+            "TEXT_LABEL_RENAME_ENTRY",
+            initial: entry.Name,
+            validate: text => ValidateLeafName(listing, entry, text));
+
+        if (await prompt.ShowDialog<bool>(this) != true)
+        {
+            return;
+        }
+
+        var newName = prompt.Text.Trim();
+        if (string.Equals(newName, entry.Name, StringComparison.Ordinal))
+        {
+            return;   // 名字没动就别白搬一次（改名要把这个成员整个解出来再压回去）
+        }
+
+        var parent = ArchiveHierarchy.ParentPathOf(entry.Path);
+        var newPath = parent.Length == 0 ? newName : parent + "/" + newName;
+
+        var folder = CurrentFolderPath();
+        if (await RunEditAsync("MENUSTR_RENAME_FILE", "TEXT_STATUS_UPDATING_AND_REPACKING",
+                (progress, token) => ArchiveUpdater.Rename(
+                    listing.ArchivePath, entry.Index, newPath, CurrentPassword(listing.ArchivePath),
+                    progress, token)))
+        {
+            ReloadAfterEdit(listing.ArchivePath, folder);
+        }
+    }
+
+    /// <summary>新名字是不是能用的叶子名。返回一句要显示的话，或 null 表示没问题。</summary>
+    private string? ValidateLeafName(ArchiveListing listing, ArchiveEntryInfo entry, string text)
+    {
+        var name = text.Trim();
+        if (name.Length == 0)
+        {
+            return _lang.Label("TEXT_ERR_RENAME_EMPTY");
+        }
+
+        if (name.IndexOfAny(InvalidNameChars) >= 0 || name is "." or "..")
+        {
+            return _lang.Label("TEXT_ERR_RENAME_INVALID");
+        }
+
+        var parent = ArchiveHierarchy.ParentPathOf(entry.Path);
+        var candidate = parent.Length == 0 ? name : parent + "/" + name;
+        var clash = listing.Entries.Any(member =>
+            member.Index != entry.Index
+            && string.Equals(member.Path.TrimEnd('/'), candidate, StringComparison.OrdinalIgnoreCase));
+
+        return clash ? _lang.Label("TEXT_ERR_RENAME_DUPLICATE") : null;
+    }
+
+    /// <summary>添加文件（Ins）：往<strong>当前正看的那一层</strong>里加。落在根上会让
+    /// "我在 docs 里，加进来的东西却跑到了包根"变成第二个谜题。</summary>
+    private async void AddEntriesAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = _lang.Label("MENUSTR_ADD_FILE"),
+            AllowMultiple = true,
+        });
+
+        var paths = picked
+            .Select(file => file.TryGetLocalPath())
+            .Where(path => !string.IsNullOrEmpty(path))
+            .Select(path => path!)
+            .ToArray();
+
+        if (paths.Length == 0)
+        {
+            return;
+        }
+
+        await AddPathsToArchiveAsync(listing, paths);
+    }
+
+    /// <summary>
+    /// 把磁盘上的这批路径加进包里（「添加文件」与「从剪贴板粘贴」共用一条）。
+    /// <para>同名的那几项<strong>先问一句再替换</strong>：引擎的"留哪些"语义里，覆盖就是
+    /// "把同名的从保留名单里划掉"，划错了没有任何反悔的余地 —— 而"我粘个文件把包里原来的目录整个顶掉"
+    /// 是用户完全预料不到的后果。</para>
+    /// </summary>
+    private async Task AddPathsToArchiveAsync(ArchiveListing listing, IReadOnlyList<string> paths)
+    {
+        var folder = CurrentFolderPath();
+        var incoming = new List<ArchiveAddedMember>();
+        var targets = new List<string>();
+
+        foreach (var path in paths)
+        {
+            var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var name = Path.GetFileName(trimmed);
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            var entryPath = folder.Length == 0 ? name : folder + "/" + name;
+            incoming.Add(new ArchiveAddedMember(entryPath, SourcePath: trimmed));
+            targets.Add(entryPath);
+        }
+
+        if (incoming.Count == 0)
+        {
+            return;
+        }
+
+        var shadowed = OccupiedIndices(listing, targets);
+        var replace = shadowed.Count > 0;
+        if (replace && !await MessageWindow.ConfirmAsync(
+                this,
+                _lang,
+                _lang.Get("MENUSTR_ADD_FILE"),
+                _lang.Format("TEXT_CONFIRM_REPLACE_ENTRIES", ("count", shadowed.Count.ToString())),
+                "TEXT_BTN_OK"))
+        {
+            return;
+        }
+
+        if (await RunEditAsync("MENUSTR_ADD_FILE", "TEXT_STATUS_UPDATING",
+                (progress, token) => ArchiveUpdater.Add(
+                    listing.ArchivePath, incoming, replace, CurrentPassword(listing.ArchivePath),
+                    progress, token)))
+        {
+            ReloadAfterEdit(listing.ArchivePath, folder);
+        }
+    }
+
+    /// <summary>包里"占住"这些路径的成员下标：路径相同的那一个，以及同名目录底下的全部后代。</summary>
+    private static List<int> OccupiedIndices(ArchiveListing listing, IReadOnlyList<string> entryPaths)
+    {
+        var bare = new HashSet<string>(
+            entryPaths.Select(path => path.TrimEnd('/')),
+            StringComparer.Ordinal);
+        var prefixes = bare.Select(path => path + "/").ToArray();
+
+        return
+        [
+            .. listing.Entries
+                .Where(member => bare.Contains(member.Path.TrimEnd('/'))
+                    || prefixes.Any(prefix => member.Path.StartsWith(prefix, StringComparison.Ordinal)))
+                .Select(member => member.Index),
+        ];
+    }
+
+    /// <summary>删除文件（Del）：确认一次，然后连选中的目录整棵一起删。</summary>
+    private async void DeleteEntriesAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var entries = SelectedEntries();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        var doomed = ExpandToIndices(listing, entries);
+        var confirmed = await MessageWindow.ConfirmAsync(
+            this,
+            _lang,
+            _lang.Get("MENUSTR_DELETE_FILE"),
+            _lang.Format("TEXT_CONFIRM_DELETE_ENTRIES", ("count", doomed.Count.ToString())),
+            "TEXT_BTN_DELETE");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var folder = CurrentFolderPath();
+        if (await RunEditAsync("MENUSTR_DELETE_FILE", "TEXT_STATUS_UPDATING",
+                (progress, token) => ArchiveUpdater.Remove(
+                    listing.ArchivePath, doomed, CurrentPassword(listing.ArchivePath), progress, token)))
+        {
+            ReloadAfterEdit(listing.ArchivePath, folder);
+        }
+    }
+
+    /// <summary>
+    /// 压缩文件注释：只有 ZIP 的结束记录里带得下这一句。
+    /// <para><strong>原文没改就不写回去</strong>：读的时候我们只能猜编码（先 UTF-8 再 Latin-1），
+    /// 而写的时候一律按 UTF-8 —— 打开看一眼再点确定，会把别的工具用系统代码页写的注释改写成我们的编码。
+    /// 这一条判据写在 <see cref="ZipComment"/> 上，这里只是照着做。</para>
+    /// </summary>
+    private async void EditCommentAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        if (!ZipComment.CanEdit(listing.FormatName))
+        {
+            await ShowMessageAsync("MENUSTR_EDIT_COMMENT", _lang.Get("TEXT_ERR_COMMENT_NOT_SUPPORTED"));
+            return;
+        }
+
+        string? current;
+        try
+        {
+            current = await Task.Run(() => ZipComment.Read(listing.ArchivePath));
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("MENUSTR_EDIT_COMMENT", _lang.Get("TEXT_ERR_COMMENT_FAILED") + ex.Message);
+            return;
+        }
+
+        var prompt = new TextPromptWindow(
+            _lang,
+            "MENUSTR_EDIT_COMMENT",
+            "TEXT_LABEL_ARCHIVE_COMMENT",
+            initial: current,
+            hintKey: "TEXT_COMMENT_HINT",
+            multiline: true,
+            allowEmpty: true,
+            maxBytes: ZipComment.MaxBytes);
+
+        if (await prompt.ShowDialog<bool>(this) != true)
+        {
+            return;
+        }
+
+        var text = prompt.Text;
+        if (string.Equals(text, current, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_WRITING_COMMENT",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+        _ = progress.ShowDialog(this);
+
+        try
+        {
+            await Task.Run(() => ZipComment.Write(listing.ArchivePath, text), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            progress.Close();
+            return;
+        }
+        catch (ArchiveConstraintException ex)
+        {
+            progress.Close();
+            await ShowMessageAsync("MENUSTR_EDIT_COMMENT", ReasonText(ex.Reason, "TEXT_ERR_COMMENT_FAILED"));
+            return;
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+            await ShowMessageAsync("MENUSTR_EDIT_COMMENT", _lang.Get("TEXT_ERR_COMMENT_FAILED") + ex.Message);
+            return;
+        }
+
+        progress.Close();
+
+        // 注释不进成员清单，「编辑」那几项的点亮状态没有任何变化，所以不重开视图 ——
+        // 重开一次会把用户刚看的那一层收掉，代价比"顺手续一次"大。
+    }
+
+    /// <summary>
+    /// 将文件复制到剪贴板（Ctrl+C）：先把选中的东西解到临时目录，再把这几个路径放进剪贴板。
+    /// <para>剪贴板里放的是<strong>我选的那几样</strong>（整个文件夹就放文件夹那一个路径），
+    /// 而不是展开后的每一个文件 —— 后者粘出来是一地散件，包内结构全丢了。</para>
+    /// </summary>
+    private async void CopyEntriesAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var entries = SelectedEntries();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        var staging = ClipboardStagingFolder();
+        var indices = ExpandToIndices(listing, entries);
+
+        if (!await RunEditAsync("MENUSTR_COPY_FILES2CLIPBOARD", "TEXT_STATUS_COPYING_OUT",
+                (progress, token) => ArchiveExtractor.ExtractMembers(
+                    listing.ArchivePath, indices, staging, CurrentPassword(listing.ArchivePath),
+                    progress, token)))
+        {
+            return;
+        }
+
+        var topLevel = entries
+            .Select(entry => Path.Combine(staging, entry.Path.Replace('/', Path.DirectorySeparatorChar)))
+            .ToArray();
+
+        await SetClipboardFilesAsync(topLevel);
+    }
+
+    /// <summary>
+    /// 从剪贴板粘贴文件（Ctrl+V）：剪贴板上有文件的路径就加进当前这一层。
+    /// <para>剪贴板里是"文件"而不是"文本"这条路要走 OLE，拿不到（别的程序占着剪贴板、
+    /// 或无桌面会话）时要说清楚，不能装作剪贴板是空的。</para>
+    /// </summary>
+    private async void PasteEntriesAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> paths;
+        if (Clipboard is not { } clipboard)
+        {
+            await ShowMessageAsync("MENUSTR_PASTE_FILESFROMCLIPBOARD", _lang.Get("TEXT_ERR_CLIPBOARD_UNAVAILABLE"));
+            return;
+        }
+
+        try
+        {
+            paths = await ReadClipboardFilesAsync(clipboard);
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("MENUSTR_PASTE_FILESFROMCLIPBOARD",
+                _lang.Get("TEXT_ERR_CLIPBOARD_UNAVAILABLE") + ex.Message);
+            return;
+        }
+
+        if (paths.Count == 0)
+        {
+            await ShowMessageAsync("MENUSTR_PASTE_FILESFROMCLIPBOARD", _lang.Get("TEXT_ERR_CLIPBOARD_EMPTY"));
+            return;
+        }
+
+        await AddPathsToArchiveAsync(listing, paths);
+    }
+
+    /// <summary>复制文件完整路径：把选中项在包里的位置写成<strong>压缩包全路径 + 包内路径</strong>。
+    /// 参考软件给的就是这一种形式（解压之后它会长在那条路径上），而不是一句 <c>a/b.txt</c>。</summary>
+    private async void CopyPathsAsync()
+    {
+        if (_listing is not { } listing)
+        {
+            return;
+        }
+
+        var entries = SelectedEntries();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        var lines = entries.Select(entry => Path.Combine(
+            listing.ArchivePath,
+            entry.Path.Replace('/', Path.DirectorySeparatorChar)));
+
+        if (Clipboard is not { } clipboard)
+        {
+            await ShowMessageAsync("MENUSTR_COPY_FULL_PATHNAMES", _lang.Get("TEXT_ERR_CLIPBOARD_UNAVAILABLE"));
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(string.Join(Environment.NewLine, lines));
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("MENUSTR_COPY_FULL_PATHNAMES",
+                _lang.Get("TEXT_ERR_CLIPBOARD_UNAVAILABLE") + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 在进度窗口里跑一次就地改写。返回 true 表示真的改成了 —— 调用方据此决定要不要重开视图。
+    /// <para>进度窗口的措辞由 <paramref name="statusKey"/> 给：改名要把那一个成员解出来再压回去，
+    /// 说"正在改写压缩包"是实话但不够；其余几项一个字都合适。</para>
+    /// </summary>
+    private async Task<bool> RunEditAsync(
+        string titleKey,
+        string statusKey,
+        Action<IProgress<ArchiveProgress>, CancellationToken> work)
+    {
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, statusKey,
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+
+        var sink = progress.CreateSink();
+        _ = progress.ShowDialog(this);
+
+        try
+        {
+            await Task.Run(() => work(sink, cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            progress.Close();
+            return false;
+        }
+        catch (ArchiveConstraintException ex)
+        {
+            progress.Close();
+            await ShowMessageAsync(titleKey, ReasonText(ex.Reason, "TEXT_ERR_EDIT_FAILED"));
+            return false;
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+            await ShowMessageAsync(titleKey, _lang.Get("TEXT_ERR_EDIT_FAILED") + ex.Message);
+            return false;
+        }
+
+        progress.Close();
+        return true;
+    }
+
+    /// <summary>「这件事对这个输入做不到」→ 一句实话。映射表只有这一份 ——
+    /// <c>NewArchiveWindow</c> 那边管创建那几种，这里管就地编辑与注释这几种。</summary>
+    private string ReasonText(ArchiveConstraintReason reason, string fallbackKey) => reason switch
+    {
+        ArchiveConstraintReason.ArchiveNotEditable => _lang.Label("TEXT_ERR_ARCHIVE_NOT_EDITABLE"),
+        ArchiveConstraintReason.DirectoryRenameNotSupported => _lang.Label("TEXT_ERR_DIRECTORY_RENAME"),
+        ArchiveConstraintReason.ArchiveCommentNotSupported => _lang.Label("TEXT_ERR_COMMENT_NOT_SUPPORTED"),
+        ArchiveConstraintReason.ArchiveCommentTooLong => _lang.Label("TEXT_ERR_COMMENT_TOO_LONG"),
+        _ => _lang.Label(fallbackKey),
+    };
+
+    /// <summary>
+    /// 改完重建视图：清单是从文件里读出来的那一份，改完不重读，屏幕上摆的就是旧账。
+    /// <para>重建之后回到用户原来待的那一层 —— 删掉深层的一个文件就被扔回根目录，
+    /// 是在惩罚他做了件对的事。</para>
+    /// </summary>
+    private void ReloadAfterEdit(string archivePath, string folderPath)
+    {
+        ArchiveListing listing;
+        try
+        {
+            listing = ArchiveReader.Read(archivePath, CurrentPassword(archivePath));
+        }
+        catch (Exception ex)
+        {
+            // 改是改成了，但读不回来（包被别的程序换掉、口令失效）。这时不能继续显示旧清单 ——
+            // 那是一份已经不存在的账。退回首页并把原因说出来。
+            ShowHome();
+            _ = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_ERROR"),
+                _lang.Get("TEXT_ERR_OPEN_ARCHIVE_FAILED") + ex.Message).ShowDialog(this);
+            return;
+        }
+
+        ShowArchiveView(listing);
+        _browser?.ShowFolder(folderPath);
+    }
+
+    private string CurrentFolderPath() => _browser?.CurrentFolderPath ?? string.Empty;
+
+    /// <summary>
+    /// 剪贴板落地用的临时目录。一次复制一个目录，名字里带上进程号与时间，互不覆盖。
+    /// <para>顺手清掉<strong>七天前</strong>的那几个：这些文件在用户粘完之前都不能删，
+    /// 但一直攒着会变成 %TEMP% 里的一堆孤儿。七天是"没人还会去粘"的保守线。</para>
+    /// </summary>
+    private static string ClipboardStagingFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "Andzip", "Clipboard");
+        Directory.CreateDirectory(root);
+
+        var cutoff = DateTime.UtcNow.AddDays(-7);
+        foreach (var stale in Directory.EnumerateDirectories(root))
+        {
+            try
+            {
+                if (Directory.GetCreationTimeUtc(stale) < cutoff)
+                {
+                    Directory.Delete(stale, recursive: true);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // 删不掉就算了：它是 %TEMP% 里的一堆字节，不该让一次复制变成失败。
+            }
+        }
+
+        var fresh = Path.Combine(root, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(fresh);
+        return fresh;
+    }
+
+    private async Task SetClipboardFilesAsync(IReadOnlyList<string> paths)
+    {
+        if (Clipboard is not { } clipboard)
+        {
+            await ShowMessageAsync("MENUSTR_COPY_FILES2CLIPBOARD", _lang.Get("TEXT_ERR_CLIPBOARD_UNAVAILABLE"));
+            return;
+        }
+
+        var data = new DataTransfer();
+        foreach (var path in paths)
+        {
+            IStorageItem? item = Directory.Exists(path)
+                ? await StorageProvider.TryGetFolderFromPathAsync(path)
+                : await StorageProvider.TryGetFileFromPathAsync(path);
+
+            if (item is not null)
+            {
+                data.Add(DataTransferItem.CreateFile(item));
+            }
+        }
+
+        try
+        {
+            await clipboard.SetDataAsync(data);
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("MENUSTR_COPY_FILES2CLIPBOARD",
+                _lang.Get("TEXT_ERR_CLIPBOARD_UNAVAILABLE") + ex.Message);
+        }
+    }
+
+    /// <summary>剪贴板上的文件路径。没有文件（纯文本、空的、别的格式）返回空表。</summary>
+    private static async Task<IReadOnlyList<string>> ReadClipboardFilesAsync(IClipboard clipboard)
+    {
+        var transfer = await clipboard.TryGetDataAsync();
+        if (transfer is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var files = await transfer.TryGetFilesAsync();
+            return files is null
+                ? []
+                : [.. files
+                    .Select(item => item.TryGetLocalPath() ?? item.Path?.LocalPath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => path!)];
+        }
+        finally
+        {
+            // 拿到的句柄要尽快还回去（它会锁着别的程序实现的那份数据），所以路径取完就放。
+            transfer.Dispose();
+        }
+    }
+
+    private static readonly char[] InvalidNameChars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
+
+    /// <summary>另存为：把当前这个包<strong>原样复制</strong>一份到新名字。
     /// <para>不重压 —— 重压要重新选格式、级别、口令，那是「新建压缩文件」的活；
     /// 而且原包里引擎写不出来的东西（非常规方法、注释）重压一次就丢了。</para>
     /// </summary>

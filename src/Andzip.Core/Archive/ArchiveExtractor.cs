@@ -93,6 +93,144 @@ public static class ArchiveExtractor
         }
     }
 
+    /// <summary>
+    /// 只把指定的几个成员解出来（「编辑 → 将文件复制到剪贴板」把选中的东西落到临时目录时用它）。
+    /// <para>与 <see cref="Extract(ExtractionSettings, CancellationToken)"/> 的差别只有两点：
+    /// 只解列出的那几个成员，并且<strong>原样保留包内路径</strong> —— 不剥顶层目录、不清洗文件名、
+    /// 不查重名。剪贴板里那几个文件的路径要能对上用户刚看见的那棵树，任何"顺手整理"都是在拆台。</para>
+    /// <para><paramref name="memberIndices"/> 里若有目录，它底下每一个成员的展开由调用方完成
+    /// （界面那边有完整的路径树）；这里只补上<strong>沿途的目录项</strong>，
+    /// 否则包里的空目录不会出现。</para>
+    /// </summary>
+    public static ExtractionResult ExtractMembers(
+        string archivePath,
+        IReadOnlyList<int> memberIndices,
+        string destinationPath,
+        string? password = null,
+        IProgress<ArchiveProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(memberIndices);
+        ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+
+        var fullPath = Path.GetFullPath(archivePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("Archive to extract was not found.", fullPath);
+        }
+
+        var destination = Path.GetFullPath(destinationPath);
+
+        return NativeEngine.Run("extract archive members", () =>
+        {
+            using var single = SingleFileArchive.Open(fullPath, cancellationToken);
+            using var reader = ArchiveReader.OpenNative(single.FilePath, password);
+
+            var entries = reader.Entries;
+            var picked = new HashSet<int>();
+            foreach (var index in memberIndices)
+            {
+                if (index < 0 || index >= entries.Count)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(memberIndices), index, "这个包里没有这个下标的成员。");
+                }
+
+                picked.Add(index);
+            }
+
+            var indices = ResolveMemberIndices(entries, picked, cancellationToken);
+
+            Directory.CreateDirectory(destination);
+
+            var options = NativeEngine.BuildExtractOptions(
+                password,
+                Andzip.Native.AzOverwrite.Overwrite,
+                preserveMTime: true,
+                progress);
+            reader.Extract(indices, destination, options);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return SummarizeMembers(entries, indices, destination);
+        }, badFormatMeansUnsupported: true);
+    }
+
+    /// <summary>
+    /// 选中的下标 → 真正要交给引擎的那一串。目录项与它们的祖先目录都要在里面：
+    /// "我选了整个文件夹"本身就包含"这个文件夹要在"，少了它界面上的那棵树会缺一层。
+    /// </summary>
+    private static List<ulong> ResolveMemberIndices(
+        IReadOnlyList<Andzip.Native.ArchiveEntry> entries,
+        IReadOnlySet<int> picked,
+        CancellationToken cancellationToken)
+    {
+        var neededDirs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var index in picked)
+        {
+            var path = NormalizeEntryPath(entries[index].Name);
+            if (entries[index].IsDirectory)
+            {
+                neededDirs.Add(path);
+            }
+
+            for (var cut = path.LastIndexOf('/'); cut > 0; cut = path.LastIndexOf('/', cut - 1))
+            {
+                neededDirs.Add(path[..cut]);
+            }
+        }
+
+        var indices = new List<ulong>(picked.Count);
+        for (var index = 0; index < entries.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var entry = entries[index];
+            var wanted = picked.Contains(index)
+                || (entry.IsDirectory && neededDirs.Contains(NormalizeEntryPath(entry.Name)));
+            if (wanted)
+            {
+                indices.Add((ulong)index);
+            }
+        }
+
+        return indices;
+    }
+
+    private static ExtractionResult SummarizeMembers(
+        IReadOnlyList<Andzip.Native.ArchiveEntry> entries,
+        IReadOnlyList<ulong> indices,
+        string destination)
+    {
+        var files = new List<string>();
+        int directories = 0;
+        long totalBytes = 0;
+
+        foreach (var index in indices)
+        {
+            var entry = entries[(int)index];
+            var relative = NormalizeEntryPath(entry.Name);
+            if (relative.Length == 0)
+            {
+                continue;
+            }
+
+            if (entry.IsDirectory)
+            {
+                directories++;
+                continue;
+            }
+
+            files.Add(Path.GetFullPath(Path.Combine(destination, relative)));
+            totalBytes += entry.Size is { } size ? (long)Math.Min(size, long.MaxValue) : 0L;
+        }
+
+        return new ExtractionResult(destination, files.Count, directories, totalBytes, 0, files);
+    }
+
+    private static string NormalizeEntryPath(string name)
+        => name.Replace('\\', '/').Trim('/');
+
     // ------------------------------------------------------------------ 计划
 
     /// <summary>一个待落地条目：目标路径 + 是否目录。</summary>

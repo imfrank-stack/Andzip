@@ -220,4 +220,317 @@ public class ArchiveUpdaterTests : IDisposable
 
         Assert.Empty(ReadWithDotNet(zip));
     }
+
+    // ---------------------------------------------------- 三个门面（界面只调这三个）
+
+    /// <summary>
+    /// 界面传"要删谁"，不传"要留谁" —— 留的那份由这里算。理由写在
+    /// <see cref="ArchiveUpdateSettings.KeepIndices"/> 那段：少列一个就是悄悄删掉一个，
+    /// 那种错误不该有机会从界面代码里发生。
+    /// </summary>
+    [Fact]
+    public void TheRemoveFacadeTurnsDeleteMeIntoKeepTheRest()
+    {
+        var zip = Seed("facade-del.zip", "ZIP", ("a.txt", "AAA"), ("b.txt", "BBB"), ("c.txt", "CCC"));
+
+        ArchiveUpdater.Remove(zip, [(int)IndexOf(zip, "b.txt")]);
+
+        var entries = ReadWithDotNet(zip);
+        Assert.Equal("AAA", entries["a.txt"]);
+        Assert.Equal("CCC", entries["c.txt"]);
+        Assert.False(entries.ContainsKey("b.txt"));
+    }
+
+    [Fact]
+    public void TheAddFacadeKeepsEverythingElseAndTheArchiveComment()
+    {
+        var zip = Seed("facade-add.zip", "ZIP", ("a.txt", "AAA"));
+        ZipComment.Write(zip, "加成员之前就在的那一句");
+
+        ArchiveUpdater.Add(zip, [new ArchiveAddedMember("b.txt", SourcePath: PathOf("src", "a.txt"))]);
+
+        var entries = ReadWithDotNet(zip);
+        Assert.Equal("AAA", entries["a.txt"]);
+        Assert.Equal("AAA", entries["b.txt"]);
+        Assert.Equal("加成员之前就在的那一句", ZipComment.Read(zip));
+    }
+
+    /// <summary>
+    /// 改名：内容照搬、原件的时间与属性带过去。
+    /// <para>不带时间的话，屏幕上就是"改个名字，修改日期变成今天" —— 这是我们自己的临时文件的时间，
+    /// 不是那个成员的。这条断言量的是清单里读回来的那一栏。</para>
+    /// </summary>
+    [Fact]
+    public void TheRenameFacadeKeepsTheContentAndTheOriginalTimestamp()
+    {
+        var zip = Seed("facade-rename.zip", "ZIP", ("old.txt", "hello"), ("keep.txt", "untouched"));
+        var index = (int)IndexOf(zip, "old.txt");
+        var original = Member(zip, "old.txt");
+        Assert.NotNull(original.Modified);
+
+        ArchiveUpdater.Rename(zip, index, "new.txt");
+
+        var entries = ReadWithDotNet(zip);
+        Assert.Equal("hello", entries["new.txt"]);
+        Assert.Equal("untouched", entries["keep.txt"]);
+        Assert.False(entries.ContainsKey("old.txt"));
+
+        var renamed = Member(zip, "new.txt");
+        Assert.Equal(original.Modified, renamed.Modified);
+    }
+
+    /// <summary>
+    /// 目录改名做不了，而且<strong>当场说清楚、一个字节都不动</strong>：
+    /// 半个树留在包里比拒绝更糟（目录改名要连底下每一个成员的路径一起改）。
+    /// </summary>
+    [Fact]
+    public void RenamingADirectoryIsRefusedWithoutTouchingTheArchive()
+    {
+        // 手工造一个带目录项的包：ArchiveCreator 收的是单个文件，没有"目录"这种东西
+        var zip = PathOf("facade-dir.zip");
+        using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("dir/");
+            using (var stream = archive.CreateEntry("dir/inner.txt").Open())
+            {
+                stream.Write("X"u8);
+            }
+
+            using (var stream = archive.CreateEntry("keep.txt").Open())
+            {
+                stream.Write("K"u8);
+            }
+        }
+
+        var directory = ArchiveReader.Read(zip).Entries.First(e => e.IsDirectory);
+        var before = File.ReadAllBytes(zip);
+
+        var ex = Assert.Throws<ArchiveConstraintException>(
+            () => ArchiveUpdater.Rename(zip, directory.Index, "renamed"));
+
+        Assert.Equal(ArchiveConstraintReason.DirectoryRenameNotSupported, ex.Reason);
+        Assert.Equal(before, File.ReadAllBytes(zip));
+    }
+
+    [Fact]
+    public void AnUnknownIndexIsRefusedRatherThanSilentlyDoingNothing()
+    {
+        var zip = Seed("facade-index.zip", "ZIP", ("a.txt", "AAA"));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => ArchiveUpdater.Rename(zip, 99, "x.txt"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ArchiveUpdater.Remove(zip, [99]));
+        Assert.Equal("AAA", ReadWithDotNet(zip)["a.txt"]);
+    }
+
+    /// <summary>
+    /// 格式改不动时，三个门面都在动手之前拒绝 —— 而不是让引擎在半个包上失败。
+    /// 种子用 GZ：它<strong>能创建</strong>（所以不是"格式不支持创建"那条），只是改不动。
+    /// </summary>
+    [Fact]
+    public void EveryFacadeRefusesAFormatThatCannotBeRewritten()
+    {
+        var gz = PathOf("only.gz");
+        ArchiveCreator.Create(
+            [Source("note.txt", "hello")],
+            new ArchiveCreationSettings(
+                gz,
+                CompressionLevelOption.Default,
+                Format: ArchiveFormatOption.FromId("GZ"),
+                IncludeRootFolder: false));
+
+        var before = File.ReadAllBytes(gz);
+        Assert.False(ArchiveUpdater.CanUpdate(ArchiveReader.Read(gz).FormatName));
+
+        var add = Assert.Throws<ArchiveConstraintException>(
+            () => ArchiveUpdater.Add(gz, [new ArchiveAddedMember("x.txt", Data: "x"u8.ToArray())]));
+        var remove = Assert.Throws<ArchiveConstraintException>(() => ArchiveUpdater.Remove(gz, [0]));
+        var rename = Assert.Throws<ArchiveConstraintException>(() => ArchiveUpdater.Rename(gz, 0, "y.txt"));
+
+        Assert.Equal(ArchiveConstraintReason.ArchiveNotEditable, add.Reason);
+        Assert.Equal(ArchiveConstraintReason.ArchiveNotEditable, remove.Reason);
+        Assert.Equal(ArchiveConstraintReason.ArchiveNotEditable, rename.Reason);
+        Assert.Equal(before, File.ReadAllBytes(gz));
+    }
+
+    [Fact]
+    public void CanUpdateAnswersForTheFormatsWeClaimToEdit()
+    {
+        Assert.True(ArchiveUpdater.CanUpdate("zip"));
+        Assert.True(ArchiveUpdater.CanUpdate("ZIP"));      // 引擎给的是小写，但别让大小写决定成败
+        Assert.True(ArchiveUpdater.CanUpdate("7z"));
+        Assert.True(ArchiveUpdater.CanUpdate("tar"));
+
+        Assert.False(ArchiveUpdater.CanUpdate("gzip"));
+        Assert.False(ArchiveUpdater.CanUpdate("rar"));
+        Assert.False(ArchiveUpdater.CanUpdate(null));
+    }
+
+    /// <summary>建一个源<strong>目录</strong>并写进里面那几个文件，返回目录路径。</summary>
+    private string SourceDir(string relative, params (string Name, string Text)[] files)
+    {
+        var full = PathOf("src", relative);
+        Directory.CreateDirectory(full);
+        foreach (var (name, text) in files)
+        {
+            File.WriteAllText(Path.Combine(full, name), text);
+        }
+
+        return full;
+    }
+
+    /// <summary>
+    /// 按输入项建包。<see cref="Seed"/> 收的是平铺的文件名（<c>ArchiveInputItem.Name</c> 只有叶子名），
+    /// 造不出 <c>docs/old.txt</c> 这种带前缀的结构，所以目录那几条用例走这里。
+    /// </summary>
+    private string SeedItems(string archiveName, string formatId, params string[] sourcePaths)
+    {
+        var output = PathOf(archiveName);
+        ArchiveCreator.Create(
+            [.. sourcePaths.Select(ArchiveInputItem.FromPath)],
+            new ArchiveCreationSettings(
+                output,
+                CompressionLevelOption.Default,
+                Format: ArchiveFormatOption.FromId(formatId),
+                IncludeRootFolder: false));
+        return output;
+    }
+
+    /// <summary>
+    /// 加进来的一项若是目录，底下的整棵树要一起进来。少这一条，从剪贴板粘一个文件夹
+    /// 会得到包里一个空目录 —— 那种"操作没报错、内容不在"正是最难发现的一类。
+    /// </summary>
+    [Fact]
+    public void AddingADirectoryBringsItsWholeTree()
+    {
+        var zip = Seed("add-tree.zip", "ZIP", ("keep.txt", "K"));
+
+        ArchiveUpdater.Add(zip, [new ArchiveAddedMember("tree", SourcePath: SourceDir("tree", ("inner-a.txt", "A"), ("inner-b.txt", "B")))]);
+
+        var entries = ReadWithDotNet(zip);
+        Assert.Equal("K", entries["keep.txt"]);
+        Assert.Equal("A", entries["tree/inner-a.txt"]);
+        Assert.Equal("B", entries["tree/inner-b.txt"]);
+    }
+
+    /// <summary>
+    /// 默认<strong>不覆盖</strong>：同名的那个老成员原样留着，新加的叫同一个名字也是两条
+    /// （引擎允许，也确实是"我什么都没删"）。这条断言把"默认关闭"钉住 ——
+    /// 哪天有人顺手把它改成 true，界面上那句"要替换吗"就变成了空话。
+    /// </summary>
+    [Fact]
+    public void AddingWithoutReplacingKeepsBothUnderTheSameName()
+    {
+        var zip = Seed("add-noclobber.zip", "ZIP", ("same.txt", "OLD"));
+
+        ArchiveUpdater.Add(zip, [new ArchiveAddedMember("same.txt", Data: "NEW"u8.ToArray())]);
+
+        using var archive = ZipFile.OpenRead(zip);
+        Assert.Equal(2, archive.Entries.Count(e => e.FullName == "same.txt"));
+    }
+
+    [Fact]
+    public void AddingWithReplacementLeavesExactlyOneUnderThatName()
+    {
+        var zip = Seed("add-clobber.zip", "ZIP", ("same.txt", "OLD"), ("keep.txt", "K"));
+
+        ArchiveUpdater.Add(
+            zip,
+            [new ArchiveAddedMember("same.txt", Data: "NEW"u8.ToArray())],
+            replaceExisting: true);
+
+        var entries = ReadWithDotNet(zip);
+        Assert.Equal("NEW", entries["same.txt"]);
+        Assert.Equal("K", entries["keep.txt"]);
+        using var archive = ZipFile.OpenRead(zip);
+        Assert.Equal(1, archive.Entries.Count(e => e.FullName == "same.txt"));
+    }
+
+    /// <summary>
+    /// 替换的判据是"路径被占住"，不是"名字相同"：加进来一个目录叫 <c>docs</c>，
+    /// 包里原有的 <c>docs/old.txt</c> 也要划掉 —— 否则新旧混在一层里，
+    /// 用户以为换了一整个文件夹，实际是把两个文件夹叠在了一起。
+    /// <para>动手之前先确认那几条真的在包内（否则这条断言量的是空气）。</para>
+    /// </summary>
+    [Fact]
+    public void ReplacingADirectoryAlsoDropsWhatWasUnderIt()
+    {
+        var zip = SeedItems(
+            "add-clobber-dir.zip",
+            "ZIP",
+            SourceDir("docs", ("old.txt", "OLD"), ("old2.txt", "OLD2")),
+            Source("keep.txt", "K").FullPath);
+
+        var before = ReadWithDotNet(zip);
+        Assert.True(before.ContainsKey("docs/old.txt"));
+        Assert.True(before.ContainsKey("docs/old2.txt"));
+
+        ArchiveUpdater.Add(
+            zip,
+            [new ArchiveAddedMember("docs", SourcePath: SourceDir("replacement", ("new.txt", "N")))],
+            replaceExisting: true);
+
+        var entries = ReadWithDotNet(zip);
+        Assert.False(entries.ContainsKey("docs/old.txt"));
+        Assert.False(entries.ContainsKey("docs/old2.txt"));
+        Assert.Equal("N", entries["docs/new.txt"]);
+        Assert.Equal("K", entries["keep.txt"]);
+    }
+
+    /// <summary>
+    /// 「将文件复制到剪贴板」落地那一步：<strong>只</strong>解列出的那几个，包内路径原样保留。
+    /// 顺手把整包解出来（或者把路径压平）都会让剪贴板里的东西和用户刚看见的树对不上。
+    /// </summary>
+    [Fact]
+    public void ExtractMembersTakesOnlyWhatWasAskedForAndKeepsItsPath()
+    {
+        var zip = SeedItems(
+            "members.zip",
+            "ZIP",
+            SourceDir("docs", ("a.txt", "A"), ("b.txt", "B")),
+            Source("top.txt", "T").FullPath);
+
+        var index = ArchiveReader.Read(zip).Entries.Single(e => e.Path == "docs/a.txt").Index;
+        var target = PathOf("members-out");
+
+        var result = ArchiveExtractor.ExtractMembers(zip, [index], target);
+
+        Assert.Equal("A", File.ReadAllText(Path.Combine(target, "docs", "a.txt")));
+        Assert.False(File.Exists(Path.Combine(target, "docs", "b.txt")));
+        Assert.False(File.Exists(Path.Combine(target, "top.txt")));
+        Assert.Equal([Path.Combine(target, "docs", "a.txt")], result.ExtractedFiles);
+        Assert.Equal(1, result.FileCount);
+    }
+
+    /// <summary>只给目录那一项时，它自己也落地 —— 空目录也要出现，
+    /// 否则"我复制了一个空文件夹"粘出来什么都没有。</summary>
+    [Fact]
+    public void ExtractMembersMaterialisesTheDirectoryItself()
+    {
+        var zip = PathOf("members-dir.zip");
+        using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("empty/");
+            using (var stream = archive.CreateEntry("empty/inner.txt").Open())
+            {
+                stream.Write("I"u8);
+            }
+        }
+
+        var directory = ArchiveReader.Read(zip).Entries.Single(e => e.IsDirectory);
+        var target = PathOf("members-dir-out");
+
+        ArchiveExtractor.ExtractMembers(zip, [directory.Index], target);
+
+        Assert.True(Directory.Exists(Path.Combine(target, "empty")));
+        Assert.False(File.Exists(Path.Combine(target, "empty", "inner.txt")));
+    }
+
+    [Fact]
+    public void ExtractMembersRefusesAnIndexThatIsNotThere()
+    {
+        var zip = Seed("members-bad.zip", "ZIP", ("a.txt", "A"));
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ArchiveExtractor.ExtractMembers(zip, [99], PathOf("members-bad-out")));
+    }
 }

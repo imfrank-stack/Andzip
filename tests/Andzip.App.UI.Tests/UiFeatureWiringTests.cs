@@ -381,6 +381,8 @@ public class UiFeatureWiringTests
             new VolumeSizeWindow(lang, 100),
             new PasswordWindow(lang),
             new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),
+            new TextPromptWindow(lang, "MENUSTR_RENAME_FILE", "TEXT_LABEL_RENAME_ENTRY", initial: "old.txt"),
+            new TextPromptWindow(lang, "MENUSTR_EDIT_COMMENT", "TEXT_LABEL_ARCHIVE_COMMENT", multiline: true),
             new ProgressWindow(lang, new CancellationTokenSource()),
             new MainWindow(lang, new AppSettings()),
         });

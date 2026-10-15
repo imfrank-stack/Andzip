@@ -549,3 +549,27 @@ MENUSTR_ABOUT                           = &About Andzip
 MENUSTR_OPEN_FOLDER                     = Open Andzip install folder (&O)
 MENUSTR_FORUM                           = Go to user forum (&F)
 MENUSTR_HOMEPAGE                        = Go to website (&W)
+
+; ---- "Edit" menu (3.4.0): add/remove/rename, archive comment, clipboard ----
+TEXT_LABEL_RENAME_ENTRY                 = New name:
+TEXT_ERR_RENAME_EMPTY                   = The name cannot be empty.
+TEXT_ERR_RENAME_INVALID                 = The name cannot contain \ / : * ? " < > |
+TEXT_ERR_RENAME_DUPLICATE               = This archive already has an item with that name.
+TEXT_LABEL_ARCHIVE_COMMENT              = Archive comment
+TEXT_COMMENT_HINT                       = Only a ZIP end-of-central-directory record can carry this line; leave it empty to remove it.
+TEXT_COMMENT_COUNTER                    = ${bytes} / 65535 bytes
+TEXT_ERR_COMMENT_TOO_LONG               = The comment is too long: 65535 bytes at most (a CJK character usually takes 3).
+TEXT_STATUS_UPDATING                    = Rewriting the archive...
+TEXT_STATUS_UPDATING_AND_REPACKING      = Extracting and re-adding that member...
+TEXT_STATUS_WRITING_COMMENT             = Writing the comment...
+TEXT_STATUS_COPYING_OUT                 = Extracting the selected files...
+TEXT_ERR_EDIT_FAILED                    = Rewriting the archive failed: 
+TEXT_ERR_COMMENT_FAILED                 = Writing the comment failed: 
+TEXT_ERR_COPY_OUT_FAILED                = Extracting the files failed: 
+TEXT_ERR_ARCHIVE_NOT_EDITABLE           = This archive can only be read; it cannot be rewritten (only ZIP, 7z and tar can).
+TEXT_ERR_DIRECTORY_RENAME               = Renaming a folder would have to rewrite the path of every member under it, which is not supported yet - rename the files inside instead.
+TEXT_ERR_COMMENT_NOT_SUPPORTED          = This format has no archive comment (only ZIP does).
+TEXT_CONFIRM_DELETE_ENTRIES             = Remove these ${count} items from the archive? This cannot be undone.
+TEXT_CONFIRM_REPLACE_ENTRIES            = The archive already has items with the same names (${count} will be replaced). Continue?
+TEXT_ERR_CLIPBOARD_EMPTY                = There are no files on the clipboard.
+TEXT_ERR_CLIPBOARD_UNAVAILABLE          = The system clipboard is not available.

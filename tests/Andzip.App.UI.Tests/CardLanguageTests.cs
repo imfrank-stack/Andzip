@@ -77,6 +77,9 @@ public class CardLanguageTests
             new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),
             new ProgressWindow(lang, new CancellationTokenSource()),
 
+            // 「重命名」那一格也是同一族：它长得像对话框，就得守对话框的规矩
+            new TextPromptWindow(lang, "MENUSTR_RENAME_FILE", "TEXT_LABEL_RENAME_ENTRY", initial: "a.txt"),
+
             // 查找那一扇是这张清单里唯一**非模态**的 —— 卡片那一套不该因为"它不挡主窗口"就少一层
             new FindWindow(lang, FindListing()),
 
@@ -86,7 +89,7 @@ public class CardLanguageTests
             // 密码恢复那一扇也是：它长得像对话框，就得守对话框的规矩
             RecoveryDialog(lang),
 
-            // 密码管理器也是同一族（第十三扇）
+            // 密码管理器也是同一族
             ManagerDialog(lang),
 
             // 安装器也是同一个界面语言里的一员：它不该长得像另一个程序
@@ -143,6 +146,7 @@ public class CardLanguageTests
             ("关于窗口", new AboutWindow(lang)),
             ("密码恢复窗口", RecoveryDialog(lang)),
             ("密码管理器窗口", ManagerDialog(lang)),
+            ("重命名框", new TextPromptWindow(lang, "MENUSTR_RENAME_FILE", "TEXT_LABEL_RENAME_ENTRY", initial: "a.txt")),
             ("设置窗口", new SettingsWindow(lang, new AppSettings(), settingsPath)),
         };
 

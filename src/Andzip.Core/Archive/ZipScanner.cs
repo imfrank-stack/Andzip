@@ -63,7 +63,10 @@ public sealed record ZipMap(
     /// 所以"是不是真空"要用 <see cref="CentralDirectoryLength"/> 一起看）。</summary>
     long CentralDirectoryOffset = -1,
     /// <summary>中央目录声称占多少字节。模式一重写中央目录时，从这里开始到 EOCD 整段都要换掉。</summary>
-    long CentralDirectoryLength = 0)
+    long CentralDirectoryLength = 0,
+    /// <summary>EOCD 尾部那句归档注释占多少字节（0 = 没有注释）。<strong>找不到 EOCD 时也是 0</strong>，
+    /// 所以"这个包有没有注释"要连同 <see cref="EocdOffset"/> 一起看。</summary>
+    int CommentLength = 0)
 {
     /// <summary>中央目录声称 N 条、实际读出 M 条，差值就是被截掉/被覆盖的那部分。</summary>
     public int MissingCentralEntries { get; init; }
@@ -157,6 +160,7 @@ public static class ZipScanner
         long cdOffset = -1;
         long cdSize = 0;
         var hasZip64 = false;
+        var commentLength = 0;
         var central = new List<ZipCentralEntry>();
 
         if (eocdOffset < 0)
@@ -166,7 +170,7 @@ public static class ZipScanner
         else
         {
             var eocd = file.Read(eocdOffset, EocdSize);
-            var commentLength = BinaryPrimitives.ReadUInt16LittleEndian(eocd.AsSpan(20));
+            commentLength = BinaryPrimitives.ReadUInt16LittleEndian(eocd.AsSpan(20));
             var trailing = file.Length - (eocdOffset + EocdSize + commentLength);
             if (trailing != 0)
             {
@@ -215,15 +219,16 @@ public static class ZipScanner
         return Build(file.Length, prefix, eocdOffset, hasZip64, central, locals, notes,
             Math.Max(0, (int)claimedCount - central.Count),
             cdOffset >= 0 ? prefix + cdOffset : -1,
-            cdSize);
+            cdSize,
+            commentLength);
     }
 
     private static ZipMap Build(
         long length, long prefix, long eocdOffset, bool hasZip64,
         List<ZipCentralEntry> central, List<ZipLocalHeader> locals, List<string> notes, int missing,
-        long centralDirectoryOffset = -1, long centralDirectoryLength = 0)
+        long centralDirectoryOffset = -1, long centralDirectoryLength = 0, int commentLength = 0)
         => new(length, prefix, eocdOffset, hasZip64, central, locals, notes,
-            centralDirectoryOffset, centralDirectoryLength)
+            centralDirectoryOffset, centralDirectoryLength, commentLength)
         {
             MissingCentralEntries = missing,
         };

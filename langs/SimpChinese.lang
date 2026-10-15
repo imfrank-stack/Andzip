@@ -546,3 +546,27 @@ MENUSTR_ABOUT                           = 关于 Andzip(&A)
 MENUSTR_OPEN_FOLDER                     = 打开 Andzip 安装目录(&O)
 MENUSTR_FORUM                           = 转到用户论坛(&F)
 MENUSTR_HOMEPAGE                        = 转到官网(&W)
+
+; ---- 「编辑」菜单（3.4.0）：增删改名 / 压缩文件注释 / 剪贴板 ----
+TEXT_LABEL_RENAME_ENTRY                 = 新名称：
+TEXT_ERR_RENAME_EMPTY                   = 名字不能为空。
+TEXT_ERR_RENAME_INVALID                 = 名字里不能有 \ / : * ? " < > | 这些字符。
+TEXT_ERR_RENAME_DUPLICATE               = 这个包里已经有同名的项了。
+TEXT_LABEL_ARCHIVE_COMMENT              = 压缩文件注释
+TEXT_COMMENT_HINT                       = 只有 ZIP 的结束记录里带得下这一句；留空就是把它删掉。
+TEXT_COMMENT_COUNTER                    = ${bytes} / 65535 字节
+TEXT_ERR_COMMENT_TOO_LONG               = 注释太长了：最多 65535 字节（中文一个字通常占 3 个字节）。
+TEXT_STATUS_UPDATING                    = 正在改写压缩包...
+TEXT_STATUS_UPDATING_AND_REPACKING      = 正在解出并重新压入这一个成员...
+TEXT_STATUS_WRITING_COMMENT             = 正在写入注释...
+TEXT_STATUS_COPYING_OUT                 = 正在解出选中的文件...
+TEXT_ERR_EDIT_FAILED                    = 改写压缩包失败：
+TEXT_ERR_COMMENT_FAILED                 = 写入注释失败：
+TEXT_ERR_COPY_OUT_FAILED                = 解出文件失败：
+TEXT_ERR_ARCHIVE_NOT_EDITABLE           = 这个格式的压缩包只能读、改不动（能就地改写的只有 ZIP、7z 与 tar）。
+TEXT_ERR_DIRECTORY_RENAME               = 文件夹改名要连它底下每一个成员的路径一起改，现在做不了 —— 请逐个改里面的文件。
+TEXT_ERR_COMMENT_NOT_SUPPORTED          = 这个格式没有压缩文件注释这一格（只有 ZIP 有）。
+TEXT_CONFIRM_DELETE_ENTRIES             = 要从压缩包里删掉这 ${count} 项吗？删掉就找不回来了。
+TEXT_CONFIRM_REPLACE_ENTRIES            = 这个包里已经有同名的项（${count} 项会被替换）。继续吗？
+TEXT_ERR_CLIPBOARD_EMPTY                = 剪贴板里没有文件。
+TEXT_ERR_CLIPBOARD_UNAVAILABLE          = 拿不到系统剪贴板。

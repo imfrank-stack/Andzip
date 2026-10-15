@@ -35,6 +35,9 @@ public sealed record ArchiveEntryInfo(
 
 /// <summary>压缩包内容清单（压缩包视图的数据源；计数与体积对应状态栏 FR-4.3）。</summary>
 /// <param name="ArchiveSize">压缩包自身占用的字节数（状态栏的“压缩文件大小”），未知时为 0。</param>
+/// <param name="FormatName"><strong>文件本身</strong>的格式（引擎给的规范名：<c>zip</c> / <c>7z</c> / <c>tar</c> /
+/// <c>gzip</c> …）。嵌套展开时这里仍是外层那个 —— 「编辑」那几项能不能用、注释那一项灰不灰，
+/// 判据都是"文件本身是什么"而不是"清单里的成员来自哪一层"。</param>
 public sealed record ArchiveListing(
     string ArchivePath,
     IReadOnlyList<ArchiveEntryInfo> Entries,
@@ -43,7 +46,8 @@ public sealed record ArchiveListing(
     long TotalSize,
     long TotalCompressedSize,
     string? Comment,
-    long ArchiveSize = 0);
+    long ArchiveSize = 0,
+    string? FormatName = null);
 
 /// <summary>
 /// 压缩包清单读取（FR-4 压缩包视图的数据源）：仅解析目录结构，不解压数据。
@@ -79,8 +83,8 @@ public static class ArchiveReader
             {
                 // 7-Zip 风格的分卷引擎自己处理；WinZip 的 .z01 需要先拼成单文件。
                 using var single = SingleFileArchive.Open(fullPath, cancellationToken);
-                using var reader = OpenNative(single.FilePath, password);
-                return BuildListing(reader, fullPath);
+                using var reader = OpenNative(single.FilePath, password, out var outerFormat);
+                return BuildListing(reader, fullPath, outerFormat);
             }, badFormatMeansUnsupported: true);
         }
         catch (Exception ex) when (EncryptedHeaderProbe.LooksLikeMissingPassword(ex, fullPath))
@@ -97,15 +101,25 @@ public static class ArchiveReader
     /// 所以 .tgz / .tar.gz 在三个操作上行为一致（否则解压会只落出一个 .tar 文件）。
     /// </summary>
     internal static NativeArchiveReader OpenNative(string fullPath, string? password)
+        => OpenNative(fullPath, password, out _);
+
+    /// <summary>
+    /// 同 <see cref="OpenNative(string, string?)"/>，另外交回<strong>文件本身</strong>的格式名。
+    /// <para>嵌套展开（.tar.gz 这类）之后句柄指向内层，内外层格式不是一回事，
+    /// 所以这个名字必须在展开之前取；「编辑」与「压缩文件注释」判的都是外层。</para>
+    /// </summary>
+    internal static NativeArchiveReader OpenNative(string fullPath, string? password, out string? outerFormat)
     {
         var outer = NativeArchiveReader.Open(fullPath, NativeEngine.BuildOpenOptions(password, progress: null));
 
         var inner = TryUnwrapTar(outer, fullPath, password);
         if (inner is null)
         {
+            outerFormat = outer.FormatName;
             return outer;
         }
 
+        outerFormat = outer.FormatName;
         outer.Dispose();
         return inner;
     }
@@ -157,7 +171,7 @@ public static class ArchiveReader
         => formatName is not null
            && SingleStreamCompressors.Contains(formatName, StringComparer.OrdinalIgnoreCase);
 
-    private static ArchiveListing BuildListing(NativeArchiveReader reader, string archivePath)
+    private static ArchiveListing BuildListing(NativeArchiveReader reader, string archivePath, string? outerFormat)
     {
         var entries = new List<ArchiveEntryInfo>(reader.Entries.Count);
         int fileCount = 0, directoryCount = 0;
@@ -213,7 +227,8 @@ public static class ArchiveReader
             totalSize,
             totalCompressed,
             reader.Comment,
-            ToSigned(reader.PhysicalSize));
+            ToSigned(reader.PhysicalSize),
+            outerFormat);
     }
 
     private static string LastSegment(string path)

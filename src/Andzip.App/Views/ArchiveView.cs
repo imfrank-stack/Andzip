@@ -300,8 +300,27 @@ internal sealed class ArchiveView : IDisposable
     /// </summary>
     internal string CurrentFolderPath => _current.Path;
 
+    /// <summary>这个视图摆的是哪一份清单。给界面用例用：要按名字选中某一行，就得先拿到那一行。</summary>
+    internal ArchiveListing Listing => _listing;
+
     internal IReadOnlyList<ArchiveEntryInfo> SelectedRows
         => _detailList?.SelectedItems?.OfType<ArchiveEntryInfo>().ToArray() ?? [];
+
+    /// <summary>选择变了（多了、少了、换了一层）。窗口订阅它来重算「编辑」那几项的启用状态。</summary>
+    internal event Action? SelectionChanged;
+
+    /// <summary>
+    /// 跳到某一层。改完编辑重建视图时用来自动回到用户原来待的那一层 ——
+    /// 删掉深层的一个文件后把人扔回根目录，是在惩罚他做了件对的事。
+    /// <para>找不到那一层就留在根：它可能正是刚被删掉的那一层。</para>
+    /// </summary>
+    internal void ShowFolder(string folderPath)
+    {
+        if (folderPath.Length > 0 && FindFolder(_root, folderPath) is { } folder)
+        {
+            Navigate(folder);
+        }
+    }
 
     private ArchiveFolderNode? FindFolder(ArchiveFolderNode node, string path)
     {
@@ -786,6 +805,10 @@ internal sealed class ArchiveView : IDisposable
 
     private void UpdateSelectionSummary(ListBox list)
     {
+        // 「编辑」那几项是按选择起落的（2 项改名、1 项以上才谈得上删/复制），
+        // 所以选择一变就得让窗口重算一次菜单 —— 这是视图往外说的唯一一句话。
+        SelectionChanged?.Invoke();
+
         var selected = list.SelectedItems?.OfType<ArchiveEntryInfo>().Where(e => !e.IsDirectory).ToList() ?? [];
         if (selected.Count == 0)
         {

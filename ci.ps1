@@ -3,7 +3,7 @@
   Windows, so "it passes in CI" and "it passes on my machine" are the same claim.
 
   Sequence (each step aborts on failure):
-    1. compression engine: configure + build + 537 native assertions + export-table check
+    1. compression engine: configure + build + 642 native assertions + export-table check
     2. managed solution build
     3. tests + packaging via build.ps1, which itself gates on
        dotnet test AND the console self-check (174)

@@ -110,7 +110,9 @@ public sealed class EmptyArchiveInputException : Exception
     }
 }
 
-/// <summary>输入与所选格式不满足约束的原因（UI 映射为本地化文案）。</summary>
+/// <summary>「这件事对这个输入做不到」的原因（UI 映射为本地化文案）。
+/// 既管创建（GZ 只能压一个文件、ZIP 的写入端只吃 ASCII 口令），也管就地编辑与归档注释
+/// （这个格式改不动、这个格式没有注释、注释过长、目录改名做不了）。</summary>
 public enum ArchiveConstraintReason
 {
     /// <summary>该格式尚不支持创建。</summary>
@@ -121,6 +123,20 @@ public enum ArchiveConstraintReason
 
     /// <summary>该格式的密码只接受 ASCII 字符（ZIP 的写入端限制）。</summary>
     NonAsciiPasswordNotSupported,
+
+    /// <summary>这个格式没有"归档注释"这一说（只有 ZIP 的结束记录里带得下一句）。</summary>
+    ArchiveCommentNotSupported,
+
+    /// <summary>注释本身超过了 ZIP 结束记录能表达的长度（65535 字节）。</summary>
+    ArchiveCommentTooLong,
+
+    /// <summary>这个格式<strong>只能读、改不动</strong>（引擎的 out-handler 不支持就地更新它）。
+    /// 与"不支持创建"是两件事：GZ 能创建却改不动，ISO 两样都不行。</summary>
+    ArchiveNotEditable,
+
+    /// <summary>目录改名要连它底下每一个成员的路径一起改，而"照抄存储字节"那条路一次只搬一个成员。
+    /// 半个树留在包里比拒绝更糟，所以这里明说做不到。</summary>
+    DirectoryRenameNotSupported,
 }
 
 /// <summary>输入与所选格式不兼容时抛出。</summary>
