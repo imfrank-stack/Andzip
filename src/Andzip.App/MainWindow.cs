@@ -29,18 +29,10 @@ public sealed class MainWindow : Window
     /// <summary>
     /// 标题里的自己：名字 + <strong>版本号</strong>。
     /// <para>为什么把版本号写进标题：连着几条"按下变黑"的反馈里，有截图量的是旧构建（1.8.7）的状态，
-    /// 而界面上没有一处写着版本 —— 谁也没法从一张图判断它是谁。多这一段，每张截图自己报户口。</para>
-    /// <para>值来自 <c>build.ps1</c> 注入的 <c>-p:Version</c>；绕过它直接 <c>dotnet build</c>
-    /// 会看到 csproj 里那个兜底版本，那正说明手上这份不是发布产物。
-    /// <strong>读的是 <c>AssemblyName.Version</c> 而不是 <c>InformationalVersion</c></strong>：
-    /// 后者会被 SourceLink 追加提交号（实测标题一度长成 "v1.9.1+44.3e846cf039…"），
-    /// 那是流水线要看的东西，写在窗口上只是噪音。</para>
+    /// 而界面上没有一处写着版本 —— 谁也没法从一张图判断它是谁。多这一段，每张截图自己报户口。
+    /// 屏幕上的那一截在面板右下角（3.1.0 起），拼法只有一个来源，见 <see cref="AppIdentity"/>。</para>
     /// </summary>
-    private static string BaseTitle { get; } = $"Andzip (Professional) {AppVersion}";
-
-    private static string AppVersion => typeof(MainWindow).Assembly.GetName().Version is { } v
-        ? $"v{v.Major}.{v.Minor}.{v.Build}"
-        : "v0.0.0";
+    private static string BaseTitle { get; } = $"Andzip (Professional) {AppIdentity.Version}";
 
     /// <summary>
     /// 标题里带上压缩内核信息：一眼能确认 native 引擎真的加载了，而不是静默降级。
@@ -79,9 +71,6 @@ public sealed class MainWindow : Window
 
     /// <summary>工具栏外面那层（那根发丝线归它画）。</summary>
     private readonly Border _headerHost;
-
-    /// <summary>标题栏右端那一小截版本号。截图要能自报身份，靠的就是它。</summary>
-    private readonly TextBlock _versionLabel;
     private ArchiveView? _browser;
     private ArchiveListing? _listing;
     /// <summary>
@@ -175,19 +164,12 @@ public sealed class MainWindow : Window
         // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
         _toolBar = BuildToolBar();
 
-        // 一行装完：图标 + 菜单 ……… 版本号 + 最小化 / 最大化 / 关闭。
+        // 一行装完：图标 + 菜单 ………… 最小化 / 最大化 / 关闭。
         // 以前这是两行（标题文字单独一行，菜单第二行），用户的话是"上面的文字去掉，第二行整体上移"。
-        // 版本号不删，只是从标题里挪到这一行的右端 —— 截图要能自报身份（1.9.1 定的规矩），
-        // 而窗口自己的 Title 照旧带着引擎信息给任务栏、Alt+Tab 与读屏器读。
-        _versionLabel = new TextBlock
-        {
-            Text = AppVersion,
-            FontSize = Design.Type.Caption,
-            Foreground = Design.Ink.Secondary,
-            Margin = new Thickness(0, 0, Design.Space.X1, 0),
-        };
-
-        _titleBar = new TitleBar(this, _lang, resizable: true, leading: _menuBar, trailing: _versionLabel);
+        // 版本号不删，但 3.1.0 起它不在这条行了，而在面板底部的视图栏右端（见 ViewBar）——
+        // 那一行本来只有"图标 + 菜单"和"三个窗口按钮"两端，版本号挤在窗口按钮旁边
+        // 既容易被读成第四颗按钮，也把右端的间距撑得忽大忽小。
+        _titleBar = new TitleBar(this, _lang, resizable: true, leading: _menuBar);
         DockPanel.SetDock(_titleBar, Dock.Top);
         root.Children.Add(_titleBar);
 
@@ -262,9 +244,6 @@ public sealed class MainWindow : Window
         // 工具栏整条重做：它的图标与文字颜色是构造时取的一次，光刷卡片底色救不回来。
         _toolBar = BuildToolBar();
         _headerHost.Child = _toolBar;
-
-        // 版本号那一小截也是构造时取的颜色，跟着重取一次令牌。
-        _versionLabel.Foreground = Design.Ink.Secondary;
 
         _homeContent = HomeView.Create(_lang);
 

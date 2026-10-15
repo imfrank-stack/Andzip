@@ -6,12 +6,16 @@ using Avalonia.Media;
 namespace Andzip.App.Views;
 
 /// <summary>
-/// 视图底部栏（首页与压缩包视图共用）：右侧依次是视图切换按钮与状态文字。
+/// 视图底部栏（首页与压缩包视图共用）：右侧依次是视图切换按钮、状态文字，最后是版本号。
 /// <para>1.7.0 起它与上面的内容在同一张表面上，只靠顶上一根发丝线分开 ——
 /// 上一版它是第四张卡片，一屏四块白板就是用户说的"割裂感"。</para>
 /// <para>按钮的悬停：与工具栏同一颗浮起的圆角药丸（<c>Chrome.Lift</c>）；
 /// "当前生效"那一态仍是淡蓝底 + 蓝边，因为它要表达的不是"指针在这里"而是"程序现在这样工作"。</para>
 /// <para>按钮命中区按规范第八节抬到 30×26 以上。</para>
+/// <para><strong>版本号由这个方法自己加，不由调用方传</strong>（3.1.0）：用户要求它住在窗口右下角，
+/// 而右下角正是这一排按钮住的地方。第一版把它做成浮在面板上的覆盖层，真机截图上它
+/// 直接压在「图标视图」那枚按钮身上（headless 全绿 —— 覆盖层不参与布局，谁也不与谁重叠）。
+/// 收进这一排之后重叠在结构上就不可能了，而且两个视图一起带上它，不会漏一个。</para>
 /// </summary>
 internal static class ViewBar
 {
@@ -33,6 +37,8 @@ internal static class ViewBar
             right.Children.Add(item is Button button ? button.Lift(new Thickness(2), Design.Radius.Md) : item);
         }
 
+        right.Children.Add(VersionBadge());
+
         var row = new Border
         {
             Height = 34,
@@ -48,6 +54,20 @@ internal static class ViewBar
         dock.Children.Add(row);
         return dock;
     }
+
+    /// <summary>
+    /// 底部栏最右那一小截版本号。截图要能自报身份（1.9.1 定的规矩），3.1.0 起它住在这里。
+    /// <para>颜色是构造时从 <see cref="Design"/> 取的一次 —— 换主题时两个视图整块重建，
+    /// 所以它跟着重建，不需要谁去补一笔。</para>
+    /// </summary>
+    private static TextBlock VersionBadge() => new()
+    {
+        Text = AppIdentity.Version,
+        FontSize = Design.Type.Caption,
+        Foreground = Design.Ink.Secondary,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(Design.Space.X1, 0, 0, 0),
+    };
 
     /// <summary>图标按钮；<paramref name="onClick"/> 为 null 时是禁用态（首页还没有压缩包可看）。</summary>
     public static Button Toggle(string geometry, string tip, Action? onClick)

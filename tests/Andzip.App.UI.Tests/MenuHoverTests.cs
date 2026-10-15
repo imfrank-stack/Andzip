@@ -123,6 +123,66 @@ public class MenuHoverTests
         }
     }
 
+    /// <summary>
+    /// 悬停不许挪动那一排字（3.1.0 用户报的「框体闪烁」）。
+    /// <para>真机量的：指针扫到「文件」那一刻，它自己的字往左上挪了 2 物理像素，
+    /// 右边那几项整体往左平移 4 像素。<strong>字没有变大</strong>（同一批墨点的宽高完全相同，
+    /// 量法见开发记录第七节那条"先量再改"），动的是位置 —— 而一整排跟着跳一下，
+    /// 读起来就是用户说的"闪烁"。</para>
+    /// <para>根因在 <c>Chrome.MenuGrayHover</c>：2.5.1 为了挡模板那圈蓝描边，顺手把
+    /// <c>BorderThickness</c> 归零，可模板两态的描边本来都是 1px —— 于是悬停换掉的是几何，不是颜色。
+    /// 所以这里两件事都要量：机制（面皮粗细两态相同）与结果（邻居的 X 不许动）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void HoveringAMenuItemDoesNotMoveTheRow()
+    {
+        var menu = MainMenuBar.Create(TestLang.Chinese(), new Dictionary<string, System.Action>());
+        var dock = new DockPanel { LastChildFill = false };
+        DockPanel.SetDock(menu, Dock.Top);
+        dock.Children.Add(menu);
+
+        var window = new Window
+        {
+            Content = dock,
+            Width = 900,
+            Height = 700,
+            Background = new SolidColorBrush(Page),
+        }.Shown();
+
+        try
+        {
+            var first = (MenuItem)menu.Items[0]!;
+            var second = (MenuItem)menu.Items[1]!;
+            UiWait.Pump(60);
+
+            var face = FaceOf(window, first);
+            var idleThickness = face.BorderThickness;
+            var secondWasAt = second.TranslatePoint(new Point(), window)!.Value;
+            var firstWasAt = first.TranslatePoint(new Point(), window)!.Value;
+
+            Hover(window, first);
+
+            Assert.True(face.BorderThickness == idleThickness,
+                $"悬停把面皮的描边从 {idleThickness} 换成 {face.BorderThickness} —— 换几何就是换位置，"
+                + "整排菜单会跟着跳一下（用户读作闪烁）");
+
+            var secondIsAt = second.TranslatePoint(new Point(), window)!.Value;
+            Assert.True(Math.Abs(secondIsAt.X - secondWasAt.X) < 0.5,
+                $"悬停第一项之后，第二项从 x={secondWasAt.X:0.##} 挪到了 x={secondIsAt.X:0.##} —— 整排在平移");
+
+            var firstIsAt = first.TranslatePoint(new Point(), window)!.Value;
+            Assert.True(Math.Abs(firstIsAt.Y - firstWasAt.Y) < 0.5,
+                $"悬停把「{first.Header}」自己从 y={firstWasAt.Y:0.##} 挪到 y={firstIsAt.Y:0.##}");
+        }
+        finally
+        {
+            window.MouseMove(new Point(window.Bounds.Width - 4, window.Bounds.Height - 4));
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(30);
+        }
+    }
+
     /// <summary>把「文件」菜单打开。返回窗口与那一条菜单栏，调用方负责 <see cref="Close"/>。</summary>
     private static (Window, Menu) OpenFileMenu()
     {

@@ -38,15 +38,12 @@ internal sealed class TitleBar : Border
     /// 给了它就<strong>不再显示标题文字</strong>：那一行的位置让给菜单了。
     /// 窗口自己的 <c>Title</c> 照旧（任务栏、Alt+Tab、读屏器都读它，"标题栏显示完整路径"
     /// 那项设置也仍然生效），只是不在这条上再印一遍。</param>
-    /// <param name="trailing">挤在按钮左边的那一小块（主窗口放版本号 —— 截图要能自报身份，
-    /// 这是 1.9.1 定的规矩；把它从标题里挪到这里，而不是删掉）。</param>
     public TitleBar(
         Window window,
         LangCatalog lang,
         bool resizable,
         Action? onClose = null,
-        Control? leading = null,
-        Control? trailing = null)
+        Control? leading = null)
     {
         _window = window;
         _lang = lang;
@@ -105,13 +102,6 @@ internal sealed class TitleBar : Border
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
         };
-
-        if (trailing is not null)
-        {
-            trailing.VerticalAlignment = VerticalAlignment.Center;
-            trailing.Margin = new Thickness(0, 0, Design.Space.X2, 0);
-            right.Children.Add(trailing);
-        }
 
         if (resizable)
         {

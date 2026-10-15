@@ -110,9 +110,7 @@ public sealed class AboutWindow : Window
     /// </summary>
     internal static IReadOnlyList<(string LabelKey, string Value)> Facts(LangCatalog lang)
     {
-        var version = typeof(AboutWindow).Assembly.GetName().Version is { } v
-            ? $"v{v.Major}.{v.Minor}.{v.Build}"
-            : "v0.0.0";
+        var version = AppIdentity.Version;
 
         var directory = AppDirectory();
 

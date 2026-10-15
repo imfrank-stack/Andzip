@@ -137,12 +137,7 @@ public class ToolBarGlyphTests
         var lang = TestLang.Chinese();
         var window = new MainWindow(lang, new AppSettings()).Shown();
 
-        var labels = new[]
-        {
-            "TEXT_TOOLBAR_OPEN", "TEXT_TOOLBAR_EXTRACT", "TEXT_TOOLBAR_NEW", "TEXT_TOOLBAR_ADD",
-            "TEXT_TOOLBAR_DELETE", "TEXT_TOOLBAR_TEST", "TEXT_TOOLBAR_SCAN", "TEXT_TOOLBAR_VIEW",
-            "TEXT_TOOLBAR_LANGUAGE",
-        };
+        var labels = ToolBarKeys;
 
         var texts = VisualQuery.VisibleTexts(window);
         foreach (var key in labels)
@@ -159,6 +154,46 @@ public class ToolBarGlyphTests
         Assert.All(buttons, b => Assert.NotNull(
             VisualQuery.Of<Viewbox>(b).FirstOrDefault(v => v.Child is Panel { Children.Count: > 0 })));
     }
+
+    /// <summary>
+    /// 九颗按钮一样宽（3.1.0：「发现每个大小不一样，所以将文字修改为：打开，解压，新建…」）。
+    /// <para>宽窄不齐的直接原因是标签长短不齐 ——「打开压缩包」五个字把那一颗撑得比「查看」宽出
+    /// 40 物理像素（真机量的），而图标那一格本来是一样大的。所以两件事都要钉住：
+    /// <strong>中文这一排每个标签恰好两个字</strong>（多一个字这一条就红，改文案的人当场看见原因），
+    /// 以及<strong>量出来的宽度确实相同</strong>（万一哪天按钮里多了别的东西，光看文案看不出来）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheNineToolBarButtonsAreEquallyWide()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings()).Shown();
+        UiWait.Pump(60);
+
+        foreach (var key in ToolBarKeys)
+        {
+            var label = lang.Label(key);
+            Assert.True(label.Length == 2,
+                $"「{key}」的标签是「{label}」（{label.Length} 个字）—— 这一排要的都是两个字，"
+                + "长短不齐，按钮就宽窄不齐");
+        }
+
+        var widths = VisualQuery.Of<Button>(window)
+            .Where(b => ToolBarKeys.Any(k => Equals(VisualQuery.TextOf(b), lang.Label(k))))
+            .Select(b => b.Bounds.Width)
+            .ToList();
+
+        Assert.Equal(ToolBarKeys.Length, widths.Count);
+        Assert.True(widths.Max() - widths.Min() < 0.5,
+            $"九颗按钮宽窄不齐：{string.Join(" / ", widths.Select(w => w.ToString("0.##")))}");
+    }
+
+    /// <summary>首页那一排九颗按钮的标签键，顺序与 <c>MainToolBar.Create</c> 一致。</summary>
+    private static readonly string[] ToolBarKeys =
+    [
+        "TEXT_TOOLBAR_OPEN", "TEXT_TOOLBAR_EXTRACT", "TEXT_TOOLBAR_NEW", "TEXT_TOOLBAR_ADD",
+        "TEXT_TOOLBAR_DELETE", "TEXT_TOOLBAR_TEST", "TEXT_TOOLBAR_SCAN", "TEXT_TOOLBAR_VIEW",
+        "TEXT_TOOLBAR_LANGUAGE",
+    ];
 
     /// <summary>
     /// 「切换语言」必须真的能点，并且落在语言页上。

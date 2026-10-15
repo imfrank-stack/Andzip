@@ -138,7 +138,8 @@ public class TitleBarTests
     /// <summary>
     /// 顶栏收成一行（2.4.0）：菜单搬进标题栏那一行，原来第一行那句标题文字删掉，工具栏整体上移一行。
     /// <para>用户的原话是「将我们的首页（图2），上面的文字去掉（第一行），第二行整体上移」。
-    /// 版本号<strong>不能顺手删掉</strong> —— 1.9.1 定的规矩是每张截图自报身份，所以它挪到这一行的右端。</para>
+    /// 版本号<strong>不能顺手删掉</strong> —— 1.9.1 定的规矩是每张截图自报身份；
+    /// 3.1.0 起它住在面板右下角（见 <see cref="TheVersionSitsInTheBottomRightCorner"/>）。</para>
     /// </summary>
     [AvaloniaFact]
     public void TheMainWindowWearsItsMenuOnTheCaptionRow()
@@ -161,13 +162,77 @@ public class TitleBarTests
         var shown = VisualQuery.VisibleTexts(window);
         Assert.DoesNotContain(window.Title, shown, StringComparer.Ordinal);
 
-        // 版本号还在，只是换了地方：既在这一行的右端看得见，也还在窗口自己的 Title 里
+        // 版本号还在，只是换了地方：既在屏幕上看得见，也还在窗口自己的 Title 里
         var version = Version();
         Assert.Contains(version, shown, StringComparer.Ordinal);
         Assert.Contains(version, window.Title, StringComparison.Ordinal);
     }
 
-    /// <summary>标题栏右端那一小截版本号，与 <c>MainWindow</c> 拼 Title 时用的是同一个算法。</summary>
+    /// <summary>
+    /// 版本号住在面板右下角，<strong>不在标题栏那一行</strong>（3.1.0 用户要求：「将版本号放在右下角的位置」）。
+    /// <para>只断言"这一小截字还看得见"守不住这次改动 —— 挪回标题栏它照样绿。所以量的是位置：
+    /// 右沿与下沿都要贴到面板那一角，而且不能还是标题栏的后代。</para>
+    /// <para><strong>另一条是这一版自己踩出来的</strong>：第一版把它做成浮在面板上的覆盖层，
+    /// 真机截图上它正压在底部栏那枚「图标视图」按钮身上，而覆盖层不参与布局，
+    /// headless 里谁也不与谁重叠、全绿。所以这里把"与同一行里的按钮不许重叠"写成断言，
+    /// 并且两个视图各量一遍（右下角那一排在首页与压缩包视图里都有住户）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheVersionSitsInTheBottomRightCorner()
+    {
+        var window = new MainWindow(TestLang.Chinese(), new Andzip.Core.Settings.AppSettings()).Shown();
+        UiWait.Pump(60);
+        AssertBadgeInCorner(window, Badge(window), "首页");
+
+        var directory = System.IO.Directory.CreateTempSubdirectory("andzip-badge-").FullName;
+        try
+        {
+            var zip = System.IO.Path.Combine(directory, "box.zip");
+            using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                archive.CreateEntry("a.txt");
+            }
+
+            UiWait.Until(window.OpenArchive(zip), "打开压缩包");
+            AssertBadgeInCorner(window, Badge(window), "压缩包视图");
+        }
+        finally
+        {
+            System.IO.Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static TextBlock Badge(Window window)
+        => VisualQuery.Of<TextBlock>(window).Single(t => t.Text == Version());
+
+    private static void AssertBadgeInCorner(Window window, TextBlock badge, string where)
+    {
+        var at = badge.TranslatePoint(new Point(), window)!.Value;
+        var rightEdge = at.X + badge.Bounds.Width;
+        var bottomEdge = at.Y + badge.Bounds.Height;
+
+        Assert.True(window.Bounds.Width - rightEdge is > 0 and < 60,
+            $"{where}：版本号右沿在 x={rightEdge:0}，窗口宽 {window.Bounds.Width:0} —— 没贴到右边");
+        Assert.True(window.Bounds.Height - bottomEdge is > 0 and < 60,
+            $"{where}：版本号下沿在 y={bottomEdge:0}，窗口高 {window.Bounds.Height:0} —— 没贴到底部");
+        Assert.True(at.Y > window.Bounds.Height / 2,
+            $"{where}：版本号在 y={at.Y:0}，那是上半屏（窗口高 {window.Bounds.Height:0}）");
+        Assert.Empty(VisualQuery.Of<TextBlock>(VisualQuery.Of<TitleBar>(window).Single())
+            .Where(t => t.Text == Version()));
+
+        foreach (var button in VisualQuery.Of<Button>(window))
+        {
+            var b = button.TranslatePoint(new Point(), window)!.Value;
+            var sameRow = b.Y < bottomEdge && b.Y + button.Bounds.Height > at.Y;
+            var sameCols = b.X < rightEdge && b.X + button.Bounds.Width > at.X;
+            Assert.False(sameRow && sameCols,
+                $"{where}：版本号与一颗按钮重叠（按钮左上 {b.X:0},{b.Y:0}，尺寸 "
+                + $"{button.Bounds.Width:0}x{button.Bounds.Height:0}；版本号左上 {at.X:0},{at.Y:0}）"
+                + " —— 覆盖层不参与布局，这种重叠在 headless 之外才看得见");
+        }
+    }
+
+    /// <summary>面板右下角那一小截版本号，与 <c>MainWindow</c> 拼 Title 时用的是同一个算法。</summary>
     private static string Version()
     {
         var v = typeof(MainWindow).Assembly.GetName().Version!;

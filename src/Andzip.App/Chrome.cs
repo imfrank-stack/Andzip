@@ -150,7 +150,9 @@ internal static class Chrome
     /// <para><strong>描边必须一起挡</strong>（2.5.1）：同一个 setter 还会在那枚 Border 上留下
     /// <c>BorderBrush=#41B1E1 / BorderThickness=1</c>。只压底色的话，屏幕上是一枚
     /// "浅灰底 + 一圈蓝框"的药丸 —— 菜单栏、导航、工具栏按钮说的都是"扫过只置灰"，
-    /// 唯独菜单项带框，用户读出来就是"扫过的样式不统一"。</para>
+    /// 唯独菜单项带框，用户读出来就是"扫过的样式不统一"。
+    /// <strong>挡的是颜色，不是粗细</strong>：把 <c>BorderThickness</c> 一起归零会让这一格在悬停
+    /// 那一刻换掉几何（见下面那段），所以这里只把 <c>BorderBrush</c> 涂成与底色同一支灰。</para>
     /// <para><strong>展开状态也要一起管</strong>（1.8.3）：只在指针进入时写、离开时 <c>ClearValue</c>
     /// 的话，用户点开菜单、鼠标滑进子菜单之后那一项就退回模板自己的高亮 —— 一块<strong>直角</strong>的
     /// 20% 蓝，正是用户说的"扫过时圆角，点击变成直角"。所以这里画的是
@@ -178,16 +180,19 @@ internal static class Chrome
             {
                 face.SetValue(Border.BackgroundProperty, Design.Surface.Muted);
                 face.SetValue(Border.CornerRadiusProperty, Design.Radius.Sm);
-                face.SetValue(Border.BorderThicknessProperty, new Thickness(0));
                 face.SetValue(Border.BorderBrushProperty, Design.Surface.Muted);
             }
             else
             {
                 face.ClearValue(Border.BackgroundProperty);
                 face.ClearValue(Border.CornerRadiusProperty);
-                face.ClearValue(Border.BorderThicknessProperty);
                 face.ClearValue(Border.BorderBrushProperty);
             }
+            // <strong>这里刻意不写 <c>BorderThickness</c></strong>（3.1.0，真机量的）：2.5.1 为了挡那圈蓝
+            // 顺手把描边归零，可模板两态的描边本来都是 1px —— 归零不改颜色只改几何，于是悬停那一刻
+            // 这一格的内容框往左上挪 1 DIP（实测 150% 缩放下 -2 物理像素），整排菜单跟着往左平移 4 像素。
+            // 用户的话是"文字变大，框体闪烁"：字没变大（同一批墨点量出来宽高完全相同），
+            // 动的是整排的位置。把蓝挡掉要靠 BorderBrush 与底色同色，不是靠把粗细清零。
         }
 
         item.PointerEntered += (_, _) => Paint();
