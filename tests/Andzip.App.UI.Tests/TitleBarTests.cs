@@ -152,14 +152,13 @@ public class TitleBarTests
         Assert.NotEmpty(VisualQuery.Of<Menu>(bar));
 
         // 工具栏紧跟在标题栏那一行下面，中间没有第三行 —— 这就是"整体上移"。
-        // 3.3.0 起工具栏是一张浮起的卡片，与标题栏之间隔着一圈留白；3.5.0 起卡片内边距从 4 涨到 12
-        // （用户报"按钮太靠边缘"），所以这一缝实测 8（窗口边距）+ 12（卡片内边距）= 20。
-        // 判据因此是"这点缝不超过 24"，而不是"严丝合缝"—— 压着一整行会是三十多像素以上。
+        // 3.3.0 起工具栏是一张浮起的卡片，与标题栏之间隔着一圈留白（边距 + 卡片内边距，共 12px）；
+        // 判据因此是"这点缝不超过 16"，而不是"严丝合缝"—— 压着一整行会是三十多像素。
         var open = VisualQuery.Of<Button>(window)
             .Single(b => Equals(VisualQuery.TextOf(b), lang.Label("TEXT_TOOLBAR_OPEN")));
         var barBottom = bar.TranslatePoint(new Point(0, bar.Bounds.Height), window)!.Value.Y;
         var toolbarTop = open.TranslatePoint(new Point(0, 0), window)!.Value.Y;
-        Assert.True(toolbarTop <= barBottom + 24,
+        Assert.True(toolbarTop <= barBottom + 16,
             $"标题栏底在 y={barBottom:0}，工具栏顶却在 y={toolbarTop:0} —— 中间还压着一行");
 
         var shown = VisualQuery.VisibleTexts(window);

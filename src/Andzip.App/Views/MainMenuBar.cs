@@ -31,11 +31,8 @@ internal static class MainMenuBar
 
         foreach (var top in MainMenuModel.Create())
         {
-            // 悬停置灰 + 展开的弹窗修成圆角阴影面板。刻意**不**做"指针离开就关框"：
-            // 3.2.0 加过，3.5.0 撤了 —— 真机上量到的是指针挪进下拉里那一格，框也照样收（见开发记录第七节第 76 条），
-            // 而 Windows 自己的菜单从不因为指针离开而关。关框交给 Esc、点别处、再点这一项。
             var topItem = new MenuItem { Header = lang.Label(top.TextKey) }
-                .MenuGrayHover().RoundOnOpen();
+                .MenuGrayHover().RoundOnOpen().CloseWhenPointerLeaves();
 
             foreach (var item in top.Items)
             {

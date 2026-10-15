@@ -228,6 +228,149 @@ internal static class Chrome
     private static Border? Root(MenuItem item)
         => item.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.Name == "root");
 
+    /// <summary>
+    /// 「离开多远才算走开」：指针离这一项、它开着的弹窗、以及整条菜单栏超过这么多 DIP 才合上。
+    /// <para><strong>为什么不是一个"出界"的余量</strong>（3.5.0，用户的话：「做了一个比较蠢的功能，
+    /// 就是鼠标离开，弹窗消失」）：3.2.0 那版判据是"指针出界一像素就合"（只留 6 DIP 给弹窗那圈影子），
+    /// 于是把鼠标往下拉一点、或者只是手抖了一下，菜单就没了 —— 用户正在读的那一屏被收走，
+    /// 只能重新点开。所以判据从"在不在里面"换成"<em>离得够不够远</em>"：
+    /// 指针还在这一带的附近就留着，只有明显挪去干别的事了才收。</para>
+    /// <para>这个数取的是<strong>一格菜单项的量级</strong>（一排菜单项宽约 40-60 DIP），
+    /// 所以沿菜单栏横向滑到隔壁那一项、或者从下拉边上滑出去一点点，都还在范围里。</para>
+    /// </summary>
+    private const double LeaveDistance = 48;
+
+    /// <summary>
+    /// 指针离开「这一项 + 它开着的下拉」<strong>足够远</strong>之后，把下拉合上。
+    /// <para>用户 2026-10-15 的话：「当我的鼠标离开『帮助』那个区域的时候，自动关闭框体」。
+    /// Avalonia 的菜单是"点开就一直挂着"，直到点别处或按 Esc —— 而这一排菜单住在自绘标题栏里，
+    /// 点开之后指针往内容区一移，那块下拉还压在工具栏上，看起来像界面卡住了。</para>
+    /// <para>判据是<strong>指针的位置</strong>，不是"哪一次进出事件"：下拉与菜单栏那一项分属两处
+    /// （弹窗住在本窗口的 <c>OverlayLayer</c> 上），从那一项挪进下拉的路上必然先收到一次
+    /// <c>PointerExited</c> —— 按事件关，菜单根本点不动（<c>MenuHoverTests</c> 那两条量到的就是
+    /// "指针在下拉里"这件事）。所以这里在<strong>移动事件</strong>里量：指针离
+    /// 这一项 / 它所有开着的弹窗 / 整条菜单栏 还不够远，就留着；远过 <see cref="LeaveDistance"/> 才合。</para>
+    /// <para><strong>整条菜单栏也是"里面"</strong>（3.5.0）：指针沿着「文件 / 编辑 / 查看 …」
+    /// 横向挪是这片界面的正常用法（Avalonia 自己会把开着的下拉跟着换到指针底下那一项），
+    /// 按"离开这一项就合"会把一次滑动读成"用户走开了"，菜单当场消失。</para>
+    /// <para><strong>下拉那一块怎么算进来</strong>（3.5.0，真机上量出来的）：<c>TranslatePoint</c>
+    /// 对下拉那枚 <c>Border</c> 返回 <c>null</c>（它挂在 OverlayLayer 的宿主上，与窗口没有共同祖先），
+    /// 3.2.0 那版"先把三块换算到同一个坐标系"的写法于是在真机上<strong>把下拉整块漏掉</strong> ——
+    /// 指针一挪出那一格菜单项，菜单就没了（用户说的"鼠标离开，弹窗消失"）；而 headless 里那条
+    /// 转换是通的，这个洞在用例里一个像素都看不到。现在每块都在它<strong>自己的坐标系</strong>里量
+    /// —— 见 <see cref="Within"/>，那条路走的是输入管线（指针能落到下拉上靠的就是它）。</para>
+    /// <para><strong>指针从来没进来过就不管</strong>：键盘（Alt）开出来的菜单，用户的手不在鼠标上，
+    /// 鼠标随后随便动一下就把菜单收掉是帮倒忙。</para>
+    /// </summary>
+    public static T CloseWhenPointerLeaves<T>(this T item) where T : MenuItem
+    {
+        TopLevel? host = null;
+        var wasInside = false;
+
+        void Moved(object? _, PointerEventArgs e)
+        {
+            if (item.GetVisualRoot() is null)
+            {
+                return;
+            }
+
+            if (Within(e, item) || Within(e, Bar(item)) || OpenPopups(item).Any(popup => Within(e, popup)))
+            {
+                wasInside = true;
+                return;
+            }
+
+            if (wasInside)
+            {
+                // 只置 IsSubMenuOpen=false，这一项会留在菜单模式里 —— 主题的 :selected 蓝脸
+                // （#41B1E1 边 + #CFECF8 底）就一直挂着，真机上量到过：不打开 = FFFFFF，
+                // Esc 关 = FFFFFF，指针离开关 = CFECF8/41B1E1。菜单自己那条收菜单的路
+                // （Esc / 点别处走的 MenuBase.Close）会顺带清掉选中项，所以这里也走它。
+                item.GetVisualAncestors().OfType<MenuBase>().FirstOrDefault()?.Close();
+                item.IsSubMenuOpen = false;
+            }
+        }
+
+        item.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != MenuItem.IsSubMenuOpenProperty)
+            {
+                return;
+            }
+
+            if (!item.IsSubMenuOpen)
+            {
+                host?.RemoveHandler(InputElement.PointerMovedEvent, Moved);
+                host = null;
+                return;
+            }
+
+            if (host is not null)
+            {
+                return;
+            }
+
+            host = TopLevel.GetTopLevel(item);
+            wasInside = item.IsPointerOver;
+
+            // Tunnel：从窗口往下发。指针落进弹窗时目标在 OverlayLayer 那一支里，
+            // 冒泡那一条会被弹窗自己的处理程序挡掉，隧道这一条一定先到。
+            host?.AddHandler(InputElement.PointerMovedEvent, Moved,
+                RoutingStrategies.Tunnel, handledEventsToo: true);
+        };
+
+        return item;
+    }
+
+    /// <summary>
+    /// 这一项所在的<strong>整条菜单栏</strong>：指针沿着它横向挪也是"还在菜单这一带"。
+    /// <para>为什么不是只算这一项那一格：指针从「文件」滑到四项之外的「帮助」是正常用法
+    /// （Avalonia 自己会把开着的下拉换到指针底下那一项），只按那一格算的话，滑到一半菜单就没了。</para>
+    /// </summary>
+    private static Visual? Bar(MenuItem item)
+        => item.GetVisualAncestors().OfType<MenuBase>().FirstOrDefault();
+
+    /// <summary>这一项<strong>开着</strong>的那些下拉的根（<see cref="Popup.Child"/>）。</summary>
+    private static IEnumerable<Visual> OpenPopups(MenuItem item)
+    {
+        foreach (var popup in item.GetVisualDescendants().OfType<Popup>())
+        {
+            if (popup is { IsOpen: true, Child: Visual child })
+            {
+                yield return child;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 指针离这一块还不够远（在它里面就是 0）。
+    /// <para><strong>为什么在"每块自己的坐标系"里量，而不是把它们的矩形换算到同一个坐标系</strong>：
+    /// 真机上量到过 —— <c>child.TranslatePoint(new Point(), 窗口)</c> 对下拉那枚 <c>Border</c>
+    /// 返回 <c>null</c>（它挂在 OverlayLayer 的宿主上，两棵树没有共同祖先），于是"下拉那一块"
+    /// 从判据里整个消失：指针只要挪出那一格菜单项几个像素，菜单就被收掉 ——
+    /// 而 headless 里那条转换是通的，所以这个洞在用例里<strong>一个像素都看不到</strong>
+    /// （见 <c>docs/开发记录.md</c> 第七节第 76 条那段实测）。
+    /// <c>e.GetPosition(那一块)</c> 走的是输入管线那一条 —— 指针能落到下拉上、菜单项能高亮，
+    /// 靠的就是它，所以这条路在真机上一定算得出来。</para>
+    /// </summary>
+    private static bool Within(PointerEventArgs e, Visual? target)
+    {
+        if (target is null)
+        {
+            return false;
+        }
+
+        return DistanceTo(new Rect(target.Bounds.Size), e.GetPosition(target)) <= LeaveDistance;
+    }
+
+    /// <summary>一个点到一块矩形的最短距离（点在矩形里就是 0）。</summary>
+    private static double DistanceTo(Rect rect, Point point)
+    {
+        var dx = Math.Max(Math.Max(rect.X - point.X, point.X - rect.Right), 0);
+        var dy = Math.Max(Math.Max(rect.Y - point.Y, point.Y - rect.Bottom), 0);
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
     /// <summary>弹窗四周留给阴影的空白。</summary>
     private const double LiftRoom = 12;
 

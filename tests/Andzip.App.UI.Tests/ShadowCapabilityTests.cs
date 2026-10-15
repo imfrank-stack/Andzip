@@ -3,6 +3,7 @@ using Andzip.App;
 using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -111,9 +112,10 @@ public class ShadowCapabilityTests
         var window = new MainWindow(TestLang.Chinese(), new AppSettings()).Shown();
         UiWait.Pump(50);
 
-        // 认卡不认名字：装着那排九颗"图标 + 文字"按钮的圆角 Border 就是它。
+        // 认卡不认名字：装着那排九颗"图标 + 文字"按钮的圆角 Border 就是它 ——
+        // 3.5.0 起那一行是九格的 UniformGrid（以前是一列 StackPanel，见 ToolBarGlyphTests）。
         var card = VisualQuery.Of<Border>(window).First(b =>
-            b.Child is StackPanel row && row.Orientation == Orientation.Horizontal
+            b.Child is UniformGrid row && row.Columns == 9
             && row.Children.OfType<Button>().Count(x => x.Content is StackPanel) >= 9);
 
         Assert.True(card.CornerRadius.TopLeft >= 8,

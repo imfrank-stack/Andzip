@@ -9,6 +9,7 @@ using Andzip.App.Views;
 using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
@@ -185,6 +186,50 @@ public class ToolBarGlyphTests
         Assert.Equal(ToolBarKeys.Length, widths.Count);
         Assert.True(widths.Max() - widths.Min() < 0.5,
             $"九颗按钮宽窄不齐：{string.Join(" / ", widths.Select(w => w.ToString("0.##")))}");
+    }
+
+    /// <summary>
+    /// 九颗按钮把整条卡片<strong>分光</strong>（3.5.0，用户的「将首页的这9个按钮平均布局在整个软件宽度上」）。
+    /// <para>以前那一行是一列 <see cref="StackPanel"/>：它只按每颗自己的内容宽度从左排，
+    /// 卡片明明拉满整窗宽度，九颗却挤在左边、右端空出一大片。这一条量的就是那个"空"没了 ——
+    /// 第一颗贴着左沿，而整排一直铺到右沿。<strong>每颗一样宽</strong>由
+    /// <see cref="TheNineToolBarButtonsAreEquallyWide"/> 那条守着，这里只管"分光"。</para>
+    /// <para>右沿允许<strong>不到一格</strong>的溢出：<see cref="UniformGrid"/> 的格子是
+    /// 按整数向上取的（960 宽时每格 107、九格合计 963），多出来的那几像素落在卡片自己的内距里。
+    /// 判据因此写成"盖到右沿、且溢出不超过一格"，而不是"逐像素对齐" ——
+    /// 后者在真的实现上永远红，会把人逼去改一个没错的地方。</para>
+    /// <para>把那一行换回 StackPanel，这一条当场找不到九格的 <see cref="UniformGrid"/>，立刻红。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheNineToolBarButtonsFillTheWholeCardWidth()
+    {
+        var lang = TestLang.Chinese();
+        var window = new MainWindow(lang, new AppSettings()).Shown();
+        UiWait.Pump(60);
+
+        var row = VisualQuery.Of<UniformGrid>(window).Single(grid =>
+            grid.Children.OfType<Button>().Count(
+                b => ToolBarKeys.Any(k => Equals(VisualQuery.TextOf(b), lang.Label(k)))) >= 9);
+
+        Assert.Equal(9, row.Columns);
+        Assert.Equal(1, row.Rows);
+
+        var buttons = row.Children.OfType<Button>().ToList();
+        var width = row.Bounds.Width;
+        Assert.True(width > 0, "工具栏那一行没量到宽度");
+
+        var first = buttons[0].TranslatePoint(new Point(), row)!.Value;
+        var last = buttons[^1];
+        var lastAt = last.TranslatePoint(new Point(), row)!.Value;
+        var covered = lastAt.X + last.Bounds.Width - first.X;
+        var cell = last.Bounds.Width;
+
+        Assert.True(Math.Abs(first.X) < 0.5,
+            $"第一颗左边还空着 {first.X:0.##} —— 这一排没从左沿开始");
+        Assert.True(covered >= width - 0.5,
+            $"这一排只占了 {covered:0.##}，而卡片内沿有 {width:0.##} —— 右端空着一截");
+        Assert.True(covered <= width + cell,
+            $"这一排占了 {covered:0.##}，比卡片内沿 {width:0.##} 多出 {covered - width:0.##} —— 超过一格了");
     }
 
     /// <summary>首页那一排九颗按钮的标签键，顺序与 <c>MainToolBar.Create</c> 一致。</summary>

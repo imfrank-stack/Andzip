@@ -183,10 +183,196 @@ public class MenuHoverTests
         }
     }
 
-    // 这里原本有三条用例钉着"指针离开菜单区域就把下拉收掉"（3.2.0 加的那个功能）。
-    // 3.5.0 把那个功能撤了，用例跟着撤 —— 留着它们就等于要求一个我们不要再有的行为。
-    // 为什么撤：真机上量到的是**指针挪进下拉里那一格，框也照样收**（见开发记录第七节第 76 条），
-    // 而 Windows 自己的菜单从不因为指针离开而关。悬停置灰与弹窗圆角那几条用例仍然在上面。
+    /// <summary>
+    /// 指针离开「菜单栏那一项 + 它开着的下拉」之后，下拉自己合上（3.2.0，用户报的）。
+    /// <para>用户 2026-10-15 的话：「当我的鼠标离开『帮助』那个区域的时候，自动关闭框体」。
+    /// Avalonia 的默认行为是"点开就一直挂着"，直到点别处或 Esc —— 而这块下拉压在主界面上，
+    /// 指针一移开它就变成一块没人管的白板。</para>
+    /// <para>后半条量的是<strong>连菜单模式一起退掉</strong>：只把 <c>IsSubMenuOpen</c> 置假，
+    /// 这一项仍留在 <c>Menu</c> 的菜单模式里、还是 <c>:selected</c>，主题那圈蓝就一直挂着。
+    /// 真机上量的：从没打开过 = 白 <c>FFFFFF</c>，按 Esc 关 = 白，指针离开关 = <c>CFECF8</c> 底
+    /// 配 <c>41B1E1</c> 边。Esc 走的是菜单自己那条收菜单的路，所以这里也走它。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void LeavingTheMenuAreaClosesTheDropDown()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+
+            // 指针先真的落在那一项上（用户点开菜单就是这个形状），再移开
+            Hover(window, top);
+            Assert.True(top.IsSubMenuOpen, "前提：菜单已经打开了。");
+
+            window.MouseMove(new Point(window.Bounds.Width - 30, window.Bounds.Height - 30));
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+
+            Assert.False(top.IsSubMenuOpen, "指针已经离开菜单区域，下拉还开着。");
+
+            var blue = SampleBand(window, top).Count(IsThemeBlue);
+            Assert.True(blue == 0,
+                $"指针离开之后「{top.Header}」上还留着 {blue} 个蓝像素 —— 下拉合上了，"
+                + "但这一项没退出菜单模式，仍带着主题那圈 :selected 蓝");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>
+    /// 从菜单栏那一项往下挪进下拉里，菜单<strong>不许</strong>被关掉。
+    /// <para>这一条是上一条的反面，也是它真正的难点：下拉与菜单栏那一项分属两处
+    /// （弹窗住在本窗口的 <c>OverlayLayer</c> 上），指针跨过去的那一刻那一项必然收到一次
+    /// <c>PointerExited</c> —— 照着事件关，菜单点不动。所以要量的是<strong>位置</strong>：
+    /// 指针这会儿是不是还在这一项与它的弹窗围成的区域里。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void MovingFromTheHeaderIntoTheDropDownKeepsItOpen()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+            Hover(window, top);
+
+            var leaf = LeafOf(window);
+            Hover(window, leaf);
+
+            Assert.True(top.IsSubMenuOpen, $"指针从「{top.Header}」挪进了下拉（{leaf.Header}），菜单却被关掉了。");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>
+    /// 指针从来没进过菜单区域时，鼠标动一下不许把菜单收掉。
+    /// <para>键盘（Alt）开出来的菜单就是这个形状：用户的手不在鼠标上。这一条挡的是
+    /// "关闭"那一半被写成"只要指针不在区域里就关" —— 那样键盘用户一碰鼠标菜单就没了。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AMenuOpenedWithoutThePointerSurvivesAMouseMove()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+            Assert.True(top.IsSubMenuOpen, "前提：菜单已经打开了。");
+
+            // 指针一直停在离菜单很远的地方，只在远处挪一下
+            window.MouseMove(new Point(20, window.Bounds.Height - 30));
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+            window.MouseMove(new Point(40, window.Bounds.Height - 30));
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+
+            Assert.True(top.IsSubMenuOpen, "指针压根没进过菜单区域，菜单却被鼠标的移动关掉了。");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>
+    /// 指针<strong>只挪开一点点</strong>（停在下拉右沿外 20 DIP）时，下拉不许合上
+    /// （3.5.0，用户的话：「做了一个比较蠢的功能，就是鼠标离开，弹窗消失 …… 改为鼠标离开距离较远时弹窗消失」）。
+    /// <para>3.2.0 那版判据是"指针出界一像素就合"（余量只有 6 DIP）：从下拉边上滑出去一点点、
+    /// 或者手只是抖了一下，菜单当场就没了，用户正在读的那一屏被收走，只能重新点开。
+    /// 这一条量的正是那个"一点点" —— 指针离下拉 20 DIP，菜单必须还开着。</para>
+    /// <para>把判据改回"出界就合"（<c>LeaveDistance</c> 归零 / 改回 6 DIP），这一条立刻红，
+    /// 而「移到窗口另一角要合」那条照样绿 —— 两条守的是不同的机制：这条守"多近算还在一起"，
+    /// 那条守"多远才算走开"。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void MovingJustOutsideTheDropDownKeepsItOpen()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+
+            // 指针先真的落在那一项上（用户点开菜单就是这个形状）—— 少了这一步，
+            // 那条"指针从来没进来过就不管"的闸门会让整件事量不到（第一版就是这么假绿的）。
+            Hover(window, top);
+            Assert.True(top.IsSubMenuOpen, "前提：菜单已经打开了。");
+
+            var popup = window.GetVisualDescendants()
+                .OfType<Popup>()
+                .First(p => p is { IsOpen: true, Child: Visual });
+            var face = (Visual)popup.Child!;
+            var at = face.TranslatePoint(new Point(), window)!.Value;
+            var probe = new Point(at.X + face.Bounds.Width + 20, at.Y + face.Bounds.Height / 2);
+
+            Assert.True(probe.X < window.Bounds.Width && probe.X > 0,
+                $"前提：取样点 {probe} 得落在窗口（{window.Bounds.Width:0.##} 宽）里，"
+                + "否则测的是别的什么地方");
+
+            window.MouseMove(probe);
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+
+            Assert.True(top.IsSubMenuOpen,
+                $"指针只挪到下拉右沿外 20 DIP（{probe}，下拉右沿 {at.X + face.Bounds.Width:0.##}），"
+                + "下拉就合上了 —— 用户正读着的那一屏被收走");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>
+    /// 指针挪到<strong>菜单栏这一行本身</strong>（右端那段空白，离下拉大半个窗口）时，菜单不许被收掉
+    /// （3.5.0）—— 这一条守的是"整条菜单栏也算在里面"。
+    /// <para>用户说的「鼠标离开，弹窗消失」最刺眼的一种就是它：指针只是沿着「文件 / 编辑 / 查看 …」
+    /// 横向挪一下，整块菜单就没了。指针在这条行上时还没离开菜单这一带，判据把这一项所在的
+    /// 整条 <see cref="MenuBase"/> 也算成"里面"，于是滑到哪一格都还在范围里。</para>
+    /// <para>取样点特意选在<strong>离下拉足够远</strong>的那一头（先用前提断言把这件事钉住），
+    /// 否则测到的会是"弹窗自己的近旁"，把菜单栏那一块的判据整个删掉它照样绿 ——
+    /// 第一版就是这么白的（指针停在下拉右沿外 20 DIP，两条判据都罩得住那一点）。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void MovingOntoTheMenuBarItselfKeepsTheMenuOpen()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var first = (MenuItem)menu.Items[0]!;
+            Hover(window, first);
+            Assert.True(first.IsSubMenuOpen, "前提：菜单已经打开了。");
+
+            var popup = window.GetVisualDescendants()
+                .OfType<Popup>()
+                .First(p => p is { IsOpen: true, Child: Visual });
+            var face = (Visual)popup.Child!;
+            var faceAt = face.TranslatePoint(new Point(), window)!.Value;
+            var faceRight = faceAt.X + face.Bounds.Width;
+
+            var probe = new Point(menu.Bounds.Width - 8, menu.Bounds.Height / 2);
+            Assert.True(probe.X - faceRight > 100,
+                $"前提：取样点 {probe} 离下拉右沿只有 {probe.X - faceRight:0.##} DIP —— "
+                + "这么近的话，两条判据都罩得住它，这条用例就测不到'菜单栏整条算在里面'那件事"
+                + $"（菜单栏量到的宽度是 {menu.Bounds.Width:0.##}）");
+
+            window.MouseMove(probe);
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+
+            Assert.True(first.IsSubMenuOpen,
+                $"指针只是挪到菜单栏这一行上（{probe}），离下拉右沿还有 {probe.X - faceRight:0.##} DIP，"
+                + "下拉就被收走了 —— 沿菜单栏横着挪一下菜单就没了");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
 
     /// <summary>把「文件」菜单打开。返回窗口与那一条菜单栏，调用方负责 <see cref="Close"/>。</summary>
     private static (Window, Menu) OpenFileMenu()    {
