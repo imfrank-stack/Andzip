@@ -92,6 +92,7 @@ public sealed class MainWindow : Window
 
     private FindWindow? _find;
     private AboutWindow? _about;
+    private PasswordRecoveryWindow? _recovery;
     private readonly AppSettings _settings;
 
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
@@ -142,6 +143,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
+            [MainMenuModel.CommandRecoverPassword] = OpenPasswordRecoveryDialog,
             [MainMenuModel.CommandAbout] = OpenAboutDialog,
             [MainMenuModel.CommandOpenInstallFolder] = OpenInstallFolder,
             [MainMenuModel.CommandHomepage] = OpenHomepage,
@@ -451,6 +453,45 @@ public sealed class MainWindow : Window
     }
 
     // ---------- 帮助 → 关于 / 安装目录 / 官网 ----------
+
+    /// <summary>
+    /// 「工具 → 密码恢复」。目标默认是<strong>当前正开着的这个包</strong>，没开着就留空让人自己选 ——
+    /// 忘了口令的包往往根本打不开，所以这里不能强依赖"已经打开了"。
+    /// </summary>
+    private void OpenPasswordRecoveryDialog()
+    {
+        if (_recovery is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new PasswordRecoveryWindow(
+            _lang,
+            _listing?.ArchivePath,
+            PickArchiveAsync,
+            PickDictionaryAsync,
+            (archive, password) => Session.Passwords.Remember(archive, password));
+        window.Closed += (_, _) => _recovery = null;
+        _recovery = window;
+        window.Show(this);
+    }
+
+    private async Task<string?> PickDictionaryAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = _lang.Label("TEXT_RECOVERY_DICT_TITLE"),
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(_lang.Get("TEXT_RECOVERY_DICT_KIND")) { Patterns = ["*.txt", "*.lst", "*.dic"] },
+                new FilePickerFileType(_lang.Get("TEXT_ALL_FILES")) { Patterns = ["*.*"] },
+            ],
+        });
+
+        return files.FirstOrDefault()?.TryGetLocalPath();
+    }
 
     /// <summary>「帮助 → 关于 Andzip」（F1）。同一时刻只留一扇，再按一次只是把它唤到前面。</summary>
     private void OpenAboutDialog()

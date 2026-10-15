@@ -48,6 +48,9 @@ public static class MainMenuModel
     /// <summary>修复损坏的 ZIP（三种模式由用户选；只写副本，绝不动原包）。</summary>
     public const string CommandRepairArchive = "tools.repair";
 
+    /// <summary>口令恢复（<c>工具 → 密码恢复</c>）：忘了自己设的口令时，把候选口令一个一个真试一遍。</summary>
+    public const string CommandRecoverPassword = "tools.recovery";
+
     /// <summary>把当前打开的压缩包另存一份到别处（<strong>复制</strong>，不重压）。</summary>
     public const string CommandSaveArchiveAs = "file.saveas";
 
@@ -170,7 +173,7 @@ public static class MainMenuModel
         new("tools", "MENUSTR_TOOLS",
         [
             new("tools.repair", "MENUSTR_TOOLS_REPAIR", Enabled: true, CommandId: CommandRepairArchive),
-            new("tools.recovery", "MENUSTR_TOOLS_RECOVERY"),
+            new("tools.recovery", "MENUSTR_TOOLS_RECOVERY", Enabled: true, CommandId: CommandRecoverPassword),
         ]),
 
         new("help", "MENUSTR_HELP",

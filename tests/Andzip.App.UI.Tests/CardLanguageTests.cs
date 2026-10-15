@@ -19,6 +19,10 @@ namespace Andzip.App.UiTests;
 [Collection("界面状态")]
 public class CardLanguageTests
 {
+    /// <summary>密码恢复那一扇只要三个回调就能开；这里量的是它的卡片，不是它的逻辑。</summary>
+    private static PasswordRecoveryWindow RecoveryDialog(Andzip.Core.Lang.LangCatalog lang) => new(
+        lang, null, () => Task.FromResult<string?>(null), () => Task.FromResult<string?>(null), (_, _) => { });
+
     /// <summary>查找窗口要一份清单才开得起来；这里只关心它长什么样，给一条成员就够。</summary>
     private static ArchiveListing FindListing() => new(
         @"C:\somewhere\box.zip",
@@ -69,6 +73,9 @@ public class CardLanguageTests
 
             // 关于那一屏也是同一族：它不因为"只是展示信息"就少一层卡片
             new AboutWindow(lang),
+
+            // 密码恢复那一扇也是：它长得像对话框，就得守对话框的规矩
+            RecoveryDialog(lang),
 
             // 安装器也是同一个界面语言里的一员：它不该长得像另一个程序
             new InstallerWindow(lang),
@@ -122,6 +129,7 @@ public class CardLanguageTests
             ("进度框", new ProgressWindow(lang, new CancellationTokenSource())),
             ("查找窗口", new FindWindow(lang, FindListing())),
             ("关于窗口", new AboutWindow(lang)),
+            ("密码恢复窗口", RecoveryDialog(lang)),
             ("设置窗口", new SettingsWindow(lang, new AppSettings(), settingsPath)),
         };
 
