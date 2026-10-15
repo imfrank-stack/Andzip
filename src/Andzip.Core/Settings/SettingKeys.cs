@@ -181,6 +181,20 @@ public static class SettingKeys
     /// <summary>同一次运行里记住用过的口令，不再对同一个包重复追问。</summary>
     public const string RememberPasswordsThisSession = "remember_passwords_this_session";
 
+    /// <summary>
+    /// 把口令另外存进操作系统的凭据存储，跨重启也还在（「工具 → 密码管理器」管的就是这一层）。
+    /// <para><strong>默认关</strong>：把口令留在机器上是用户要显式同意的交易，不该是装完就生效的默认值。</para>
+    /// <para>这一层只写凭据，<strong>不写本文件</strong> —— 这里存的是一条路径清单（下面那个键）而不是口令。</para>
+    /// </summary>
+    public const string StorePasswordsInVault = "store_passwords_in_vault";
+
+    /// <summary>
+    /// 口令管理器为哪些包存过口令：<c>|</c> 分隔的完整路径。
+    /// <para>只是<strong>索引</strong>（凭据的目标名是路径哈希，人读不了），口令本身不在这儿。
+    /// 读写都在 <c>PasswordVaultIndex</c>，这里只放键名。</para>
+    /// </summary>
+    public const string PasswordVaultPaths = "password_vault_paths";
+
     // ---------------------------------------------------------- 最近的文件
 
     /// <summary>

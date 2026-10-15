@@ -69,6 +69,9 @@ public static class MainMenuModel
     /// <summary>设置窗口（F5）。</summary>
     public const string CommandSettings = "options.settings";
 
+    /// <summary>密码管理器：本程序在系统凭据里存过哪些包的口令，以及删掉它们。</summary>
+    public const string CommandPasswordManager = "options.passman";
+
     /// <summary>在当前打开的压缩包清单里找文件（Ctrl+F）。</summary>
     public const string CommandFindFiles = "find.files";
 
@@ -148,10 +151,12 @@ public static class MainMenuModel
         new("options", "MENUSTR_SETTING",
         [
             new("options.settings", "MENUSTR_SETTING_SUB", "F5", Enabled: true, CommandId: CommandSettings),
+            // 「注册 Andzip」「取消注册 Andzip」这两条在 3.0.0 删了：它们从 0.9.x 起就是
+            // 没有接线的灰占位，真正的注册与撤销在「设置 → 文件关联」和「设置 → 上下文菜单」
+            // 那两页上，各自都有「立即应用」。摆两条点了什么也不发生的菜单，
+            // 只是让人以为这功能缺着（见开发记录第七节第 60 条那条不变式）。
             MenuItemModel.Separator(),
-            new("options.register", "MENUSTR_REGISTER"),
-            new("options.unregister", "MENUSTR_UNREGISTER"),
-            new("options.passman", "MENUSTR_PASSMAN"),
+            new("options.passman", "MENUSTR_PASSMAN", Enabled: true, CommandId: CommandPasswordManager),
         ]),
 
         new("view", "MENUSTR_VIEW",

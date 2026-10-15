@@ -410,7 +410,23 @@ TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT   = Once you type a password to open an en
 TEXT_SETTINGS_PASSWORDS_REMEMBERED      = ${count} archive password(s) remembered this run
 TEXT_BTN_FORGET_PASSWORDS               = Clear remembered passwords
 TEXT_SETTINGS_NO_PASSWORDS              = No passwords remembered this run yet.
-TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = The reference program's cross-restart "password manager" is not built: doing it properly needs OS credential protection (DPAPI on Windows), which means a Windows-only dependency while this project still builds on Linux. Storing passwords in plain text in the settings file would not be a simpler version of it — it would be a trap.
+TEXT_SETTINGS_STORE_IN_VAULT            = Keep passwords in the Windows Credential Manager (across restarts)
+TEXT_SETTINGS_STORE_IN_VAULT_HINT       = When on, a password you type once for an archive is stored in Windows' credential store: encrypted by the system, readable only by your own account, and the same archive opens without asking again after a reboot. Passwords are never written to the settings file or the registry. Turning this off deletes every password already stored. It protects against plaintext on disk and against other accounts — it does not protect against a program running as you, and it does not claim to.
+TEXT_SETTINGS_STORED_PASSWORDS          = ${count} archive password(s) stored across restarts
+TEXT_SETTINGS_NO_STORED_PASSWORDS       = No passwords stored across restarts yet.
+TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = To see which archives are stored, or delete one: Options → Password manager. That screen lists paths and save times only — it never shows a password, and you cannot add one there. The only way to add one is to leave the switch above on and open the archive once.
+
+; ---- Password manager (Options → Password manager) ----
+TEXT_TITLE_PASSWORD_MANAGER             = Password manager
+TEXT_PASSWORD_MANAGER_INTRO             = These are the passwords this program has already put in the Windows Credential Manager, in two columns: which archive, and when it was saved. The passwords themselves never appear on this screen and are not entered here — to add one, turn on the saving switch in Settings → Security and open that archive once.
+TEXT_PASSWORD_MANAGER_UNSUPPORTED       = This machine has no system credential store to keep passwords in, so they stay in this run's memory only and disappear when the program exits.
+TEXT_PASSWORD_MANAGER_EMPTY             = No passwords have been stored for any archive.
+TEXT_PASSWORD_MANAGER_COUNT             = ${count} entries.
+TEXT_PASSWORD_MANAGER_SAVED             = saved ${when}
+TEXT_PASSWORD_MANAGER_DELETE_ONE        = Delete selected
+TEXT_PASSWORD_MANAGER_DELETE_ALL        = Delete all
+TEXT_PASSWORD_MANAGER_ASK_DELETE_ALL    = Delete all ${count} entries? Afterwards, opening those archives will ask for the password again.
+TEXT_TITLE_PASSWORD_NOT_SAVED           = Password not saved
 
 ; ---- 安装器（正常安装 / 卸载）----
 TEXT_TITLE_INSTALLER                     = Install Andzip
@@ -510,8 +526,6 @@ MENUSTR_COPY_FULL_PATHNAMES             = Copy full file path
 MENUSTR_FIND_ITEM                       = Find Files (&I)
 
 MENUSTR_SETTING_SUB                     = &Settings
-MENUSTR_REGISTER                        = Register Andzip
-MENUSTR_UNREGISTER                      = Unregister Andzip
 MENUSTR_PASSMAN                         = Password manager...
 
 MENUSTR_VIEW_STARTSCREEN                = Start screen

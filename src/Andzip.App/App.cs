@@ -45,6 +45,12 @@ public sealed class App : Application
             ArchiveEngine.TempDirectory = settings.GetString(SettingKeys.TempDirectory);
             Session.Passwords.Enabled = settings.GetBool(SettingKeys.RememberPasswordsThisSession, fallback: true);
 
+            // 口令的第二层（跨重启）。两个条件都要满足才生效：这台机器上有操作系统的凭据存储，
+            // 并且用户在「设置 → 安全」里显式打开过。<strong>默认关</strong> —— 把口令留在机器上是
+            // 一次要用户点头的交易，不该是装完就生效的默认值；而这一层永远不碰 settings.ini 里的口令。
+            Session.Passwords.Persistent = PasswordVault.Open(AppSettings.DefaultFilePath);
+            Session.Passwords.PersistPasswords = settings.GetBool(SettingKeys.StorePasswordsInVault);
+
             // 语言包：程序目录 langs/ 优先（便携覆盖），否则用内嵌资源（单文件绿色版）。
             var lang = LangLoader.CreateCatalog(
                 typeof(App).Assembly, AppContext.BaseDirectory, PreferredLanguage(settings));

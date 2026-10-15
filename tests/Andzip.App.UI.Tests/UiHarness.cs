@@ -1,3 +1,4 @@
+using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
@@ -75,6 +76,52 @@ namespace Andzip.App.UiTests
     /// <summary>把控件树摊平按类型 / 文案查找。走<strong>逻辑树</strong>：视觉子节点要等模板应用之后
     /// 才存在，而这里要找的都是代码里显式 new 出来的控件（按钮、勾选框、单选钮），
     /// 它们一进集合就是逻辑子节点。</summary>
+    /// <summary>
+    /// 一个内存里的口令存储，给所有需要"有/没有第二层"的界面用例用。
+    /// <para>放在脚手架里而不是各测试文件里各写一份，是为了让它必须<strong>忠实于真实现</strong>：
+    /// 键按 <see cref="PasswordVaultKey.Normalize"/> 归一化，而<strong>显示路径保留用户写的那个大小写</strong>
+    /// （<c>CredentialVault</c> 的索引就是这么做的）。偷懒拿键当显示路径，界面用例就会对着
+    /// "路径被显示成全大写"这种走形照样绿 —— 这一条真的这样红过一次。</para>
+    /// </summary>
+    internal sealed class FakePasswordStore : Andzip.Core.Archive.IPersistentPasswordStore
+    {
+        private readonly Dictionary<string, string> _passwords = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _display = new(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyDictionary<string, string> Stored => _passwords;
+
+        public bool IsSupported { get; set; } = true;
+
+        public string? Rejects(string password) => null;
+
+        public string? Save(string archivePath, string password)
+        {
+            var key = PasswordVaultKey.Normalize(archivePath);
+            _passwords[key] = password;
+            _display[key] = Path.GetFullPath(archivePath);
+            return null;
+        }
+
+        public bool TryGet(string archivePath, out string password)
+            => _passwords.TryGetValue(PasswordVaultKey.Normalize(archivePath), out password!);
+
+        public void Remove(string archivePath)
+        {
+            var key = PasswordVaultKey.Normalize(archivePath);
+            _passwords.Remove(key);
+            _display.Remove(key);
+        }
+
+        public IReadOnlyList<PasswordVaultEntry> List()
+            => [.. _display.Select(pair => new PasswordVaultEntry(pair.Value, DateTimeOffset.UnixEpoch))];
+
+        public void Clear()
+        {
+            _passwords.Clear();
+            _display.Clear();
+        }
+    }
+
     internal static class VisualQuery
     {
         public static IReadOnlyList<T> Of<T>(Control root) where T : Control

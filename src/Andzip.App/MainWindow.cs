@@ -93,6 +93,9 @@ public sealed class MainWindow : Window
     private FindWindow? _find;
     private AboutWindow? _about;
     private PasswordRecoveryWindow? _recovery;
+
+    /// <summary>密码管理器同一时刻只留一扇：开两扇列着一模一样清单的窗口，用户要开始数哪扇是真的。</summary>
+    private PasswordManagerWindow? _passwordManager;
     private readonly AppSettings _settings;
 
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
@@ -144,6 +147,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
             [MainMenuModel.CommandRecoverPassword] = OpenPasswordRecoveryDialog,
+            [MainMenuModel.CommandPasswordManager] = OpenPasswordManagerDialog,
             [MainMenuModel.CommandAbout] = OpenAboutDialog,
             [MainMenuModel.CommandOpenInstallFolder] = OpenInstallFolder,
             [MainMenuModel.CommandHomepage] = OpenHomepage,
@@ -471,9 +475,27 @@ public sealed class MainWindow : Window
             _listing?.ArchivePath,
             PickArchiveAsync,
             PickDictionaryAsync,
-            (archive, password) => Session.Passwords.Remember(archive, password));
+            (archive, password) => RememberPassword(archive, password));
         window.Closed += (_, _) => _recovery = null;
         _recovery = window;
+        window.Show(this);
+    }
+
+    /// <summary>
+    /// 「选项 → 密码管理器」。存储直接取 <see cref="Session.Passwords"/> 上挂着的那一份 ——
+    /// 全程序只该有一个凭据存储实例，再开一份就是两个缓存互相看不见。
+    /// </summary>
+    private void OpenPasswordManagerDialog()
+    {
+        if (_passwordManager is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new PasswordManagerWindow(_lang, Session.Passwords.Persistent);
+        window.Closed += (_, _) => _passwordManager = null;
+        _passwordManager = window;
         window.Show(this);
     }
 
@@ -786,6 +808,21 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
+    /// 记下一个口令，并把"没能存进系统凭据"那一句实话讲出来。
+    /// <para>不吞掉返回值是这条存在的唯一理由：内存里记上了、持久层没收（口令超过单条凭据的
+    /// 字节上限，或系统直接拒绝写入）时，用户以为重启之后还能直接打开 —— 那句"已经保存"是假的。
+    /// 反过来这里<strong>不</strong>弹"保存成功"：一切正常时什么都不说，只在没存成的时候开口。</para>
+    /// </summary>
+    private void RememberPassword(string archivePath, string? password)
+    {
+        if (Session.Passwords.Remember(archivePath, password) is { } reason)
+        {
+            var warn = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_PASSWORD_NOT_SAVED"), reason);
+            _ = warn.ShowDialog(this);
+        }
+    }
+
+    /// <summary>
     /// 读取清单并切到压缩包视图。加密包会在这里问密码 —— 清单本身就在包里，
     /// 所以「先试一次、要密码再问」比「先问一遍再试」少一次无谓的弹窗。
     /// </summary>
@@ -832,7 +869,7 @@ public sealed class MainWindow : Window
 
         if (password is { Length: > 0 })
         {
-            Session.Passwords.Remember(archivePath, password);
+            RememberPassword(archivePath, password);
         }
 
         ShowArchiveView(listing);
@@ -893,6 +930,7 @@ public sealed class MainWindow : Window
         // 加密压缩包：解压前弹出「输入密码」（§3.2 对话框 #7）。
         // 探测要打开归档读头部，放到后台线程，避免卡住 UI。
         string? password = null;
+        var prompted = false;
         if (Session.Passwords.TryGet(archivePath, out var remembered))
         {
             // 打开这个包时已经输过一次（浏览清单就要口令），解压没必要再问一遍。
@@ -907,7 +945,7 @@ public sealed class MainWindow : Window
             }
 
             password = passwordDialog.Password;
-            Session.Passwords.Remember(archivePath, password);
+            prompted = true;
         }
 
         var cts = new CancellationTokenSource();
@@ -952,6 +990,13 @@ public sealed class MainWindow : Window
             return;
         }
 
+        // 解出来了才算这个口令是对的。一输完就存，代价是下一次开机 Andzip 会拿着一个
+        // 从没验证过的口令直接失败 —— 用户看到的「密码错误」是他根本没输过的东西。
+        if (prompted)
+        {
+            RememberPassword(archivePath, password);
+        }
+
         var extractionDefaults = ExtractionDefaults.Load(_settings);
 
         // 「设置 → 解压 → 解压后打开文件夹」：只在真的解完了之后开，失败与取消都不该弹出一个
@@ -984,6 +1029,7 @@ public sealed class MainWindow : Window
         }
 
         string? password = null;
+        var prompted = false;
         if (Session.Passwords.TryGet(archivePath, out var remembered))
         {
             password = remembered;
@@ -997,7 +1043,7 @@ public sealed class MainWindow : Window
             }
 
             password = passwordDialog.Password;
-            Session.Passwords.Remember(archivePath, password);
+            prompted = true;
         }
 
         var cts = new CancellationTokenSource();
@@ -1008,6 +1054,7 @@ public sealed class MainWindow : Window
         string titleKey;
         string body;
         var broken = false;
+        var verified = false;
         var sink = progress.CreateSink();
 
         // 进度窗口要<strong>先摆出来</strong>再开测：整个包读一遍 CRC 在照片包上是好几秒，
@@ -1021,6 +1068,7 @@ public sealed class MainWindow : Window
                 () => ArchiveTester.TestAll(archivePath, password, sink, cts.Token), cts.Token);
 
             broken = !report.Passed;
+            verified = report.Passed;
             titleKey = broken ? "TEXT_TITLE_TEST_FAILED" : "TEXT_TITLE_TEST_PASSED";
             // 通过的那一句不报成员数：没打开包时是先挑文件再测的，手上没有清单，
             // 报个数就得再读一遍目录。「全部通过」本身就是答案，数字是状态栏早就给过的东西。
@@ -1048,6 +1096,13 @@ public sealed class MainWindow : Window
         }
 
         progress.Close();
+
+        // 「全部通过」是这一屏里唯一能证明口令正确的证据 —— 报「未通过」和报「根本没测成」
+        // 都不算，后者连包都没打开（缺文件、口令错），把那个口令记下来只会让下次开机直接失败。
+        if (prompted && verified)
+        {
+            RememberPassword(archivePath, password);
+        }
 
         // 坏的是 ZIP 时，"要不要修"就在这一屏问完：用户刚看完坏成员名单，让他自己去找
         // 「工具 → 修复压缩包」是把一件事拆成两件事。别的格式修不了（7z 的头是编码过的一整块），

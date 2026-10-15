@@ -23,6 +23,15 @@ public class CardLanguageTests
     private static PasswordRecoveryWindow RecoveryDialog(Andzip.Core.Lang.LangCatalog lang) => new(
         lang, null, () => Task.FromResult<string?>(null), () => Task.FromResult<string?>(null), (_, _) => { });
 
+    /// <summary>密码管理器给一个装着两条的假存储：要的是"列表真的画出来了"那一屏的卡片。</summary>
+    private static PasswordManagerWindow ManagerDialog(Andzip.Core.Lang.LangCatalog lang)
+    {
+        var store = new FakePasswordStore();
+        store.Save(@"C:\sample\a.zip", "not-a-secret-in-this-test");
+        store.Save(@"C:\sample\b.7z", "also-not-a-secret");
+        return new PasswordManagerWindow(lang, store);
+    }
+
     /// <summary>查找窗口要一份清单才开得起来；这里只关心它长什么样，给一条成员就够。</summary>
     private static ArchiveListing FindListing() => new(
         @"C:\somewhere\box.zip",
@@ -77,6 +86,9 @@ public class CardLanguageTests
             // 密码恢复那一扇也是：它长得像对话框，就得守对话框的规矩
             RecoveryDialog(lang),
 
+            // 密码管理器也是同一族（第十三扇）
+            ManagerDialog(lang),
+
             // 安装器也是同一个界面语言里的一员：它不该长得像另一个程序
             new InstallerWindow(lang),
         };
@@ -130,6 +142,7 @@ public class CardLanguageTests
             ("查找窗口", new FindWindow(lang, FindListing())),
             ("关于窗口", new AboutWindow(lang)),
             ("密码恢复窗口", RecoveryDialog(lang)),
+            ("密码管理器窗口", ManagerDialog(lang)),
             ("设置窗口", new SettingsWindow(lang, new AppSettings(), settingsPath)),
         };
 
