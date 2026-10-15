@@ -1,6 +1,7 @@
 using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -33,10 +34,19 @@ internal static class MainToolBar
 
     public static Control Create(LangCatalog lang, MainToolBarActions actions)
     {
-        var items = new StackPanel
+        // 九颗各自占一格、九格等宽铺满整张卡片（3.5.0，用户：「将首页的这9个按钮平均布局在整个软件宽度上」）。
+        // 以前这里是一列 StackPanel：它只按每颗自己的内容宽度从左排，卡片明明拉满了整窗宽度，
+        // 右边却空出一大截（真实窗口里量到的就是"九颗挤在左边、右侧一片白"）。
+        // 换成一行九格的 UniformGrid 之后，可用宽度被切成九份、每格一样宽，图标与文字仍在格内居中，
+        // 悬停那块方填充也就铺满整格。
+        // 为什么不用九条 `*` 列的 Grid：实测那一种给的是**取整后不均匀**的宽度
+        // （960 宽时量到 106 / … / 112），'九颗一样宽'这条 3.1.0 立的规矩当场就破了；
+        // UniformGrid 每格同一尺寸（向上取整），代价是整排最多比卡片内沿多出不到九像素 ——
+        // 那点落在卡片自己的内距里，看不见（见 ToolBarGlyphTests 那条铺满用例）。
+        var items = new UniformGrid
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = Design.Space.X1,
+            Rows = 1,
+            Columns = 9,
         };
 
         items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), "open-archive", actions.OpenArchive));
@@ -99,13 +109,13 @@ internal static class MainToolBar
             },
         };
 
+        // 宽度交给外面那九等分的格子：这里不再写 MinWidth，写死一个下限只会在窄窗口上跟格子顶牛。
         var button = new Button
         {
             Content = content,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Padding = new Thickness(Design.Space.X3 + 2, Design.Space.X2, Design.Space.X3 + 2, Design.Space.X2),
-            MinWidth = 68,
             FontFamily = Design.Font,
             IsEnabled = enabled,
         };
