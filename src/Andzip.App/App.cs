@@ -153,8 +153,10 @@ public sealed class App : Application
 
         if (SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)))
         {
-            // 双击走解压，与右键那条同一个规则：整棵单子树的包不该得到 docs\docs\。
-            task = ShellTask.Extract;
+            // 双击走解压，落点是**就地铺开**（内容直接出现在压缩包旁边）。
+            // 与右键那条 <c>/task=extract</c> 的差别就在落点上：那条按包里的形状决定要不要套一层
+            // 同名袋子（0.10.0 三条并一条时用户要的），而这一项的名字承诺的是"当前文件夹"。
+            task = ShellTask.ExtractInPlace;
             return true;
         }
 

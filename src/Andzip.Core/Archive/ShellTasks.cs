@@ -19,6 +19,16 @@ public enum ShellTask
     /// <summary>解压：落点按包里的形状决定（见 <see cref="ExtractionLayout"/>）。</summary>
     Extract,
 
+    /// <summary>
+    /// 解压：<strong>内容原样铺在压缩包所在的那个文件夹里</strong>，不套与包同名的文件夹。
+    /// <para>只有「双击压缩包 + 设置 → 解压 → 双击时直接解压到当前文件夹」走这一条。
+    /// 注册表里<strong>没有</strong>对应动词（右键那条仍然叫 <see cref="Extract"/>），
+    /// 所以它只出现在命令行之外的内部分发上。</para>
+    /// <para>为什么不干脆把 <see cref="Extract"/> 改掉：右键那条的落点规则（整棵单子树的包直接得到
+    /// 那个目录、零散一堆才套袋子）是 0.10.0 三条并成一条时用户要的，改它等于改右键的行为。</para>
+    /// </summary>
+    ExtractInPlace,
+
     /// <summary>解压，成功后把包删掉（分卷包连卷一起删）。</summary>
     ExtractDelete,
 
@@ -43,6 +53,7 @@ public static class ShellTasks
     public static string Name(ShellTask task) => task switch
     {
         ShellTask.Extract => "extract",
+        ShellTask.ExtractInPlace => "extract-in-place",
         ShellTask.ExtractDelete => "extract-delete",
         ShellTask.CompressZip => "compress-zip",
         ShellTask.CompressDialog => "compress-dialog",
@@ -70,6 +81,7 @@ public static class ShellTasks
                 task = argument[SwitchPrefix.Length..].Trim().ToLowerInvariant() switch
                 {
                     "extract" or "auto-extract" or "extract-here" => ShellTask.Extract,
+                    "extract-in-place" => ShellTask.ExtractInPlace,
                     "extract-delete" => ShellTask.ExtractDelete,
                     "compress-zip" or "compress-7z" => ShellTask.CompressZip,
                     "compress-dialog" => ShellTask.CompressDialog,
@@ -91,7 +103,7 @@ public static class ShellTasks
     /// 这条任务要不要先问口令。<see cref="ShellTask.Open"/> 不要 —— 打开时口令在真正读内容那一刻才需要。
     /// </summary>
     public static bool IsExtraction(ShellTask task)
-        => task is ShellTask.Extract or ShellTask.ExtractDelete;
+        => task is ShellTask.Extract or ShellTask.ExtractInPlace or ShellTask.ExtractDelete;
 
     /// <summary>
     /// 用户把一批路径<strong>交给窗口</strong>时（从资源管理器拖进来）应当做哪件事。

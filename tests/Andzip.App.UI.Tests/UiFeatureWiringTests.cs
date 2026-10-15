@@ -289,23 +289,27 @@ public class UiFeatureWiringTests
     }
 
     /// <summary>
-    /// 「双击那一档就是智能解压」这句话的全部内容：双击解析出来的任务，必须与右键动词
-    /// 带 <c>/task=extract</c> 解析出来的是<strong>同一个</strong>。
+    /// 「双击那一档就是直接解压到当前文件夹」这句话的全部内容：双击解析出来的是一条<strong>解压</strong>
+    /// 任务，而且落点与右键那条 <c>/task=extract</c> 不同 —— 就地铺开，不套同名袋子。
     /// <para>这一条故意不走窗口：两条路在 <c>App.TryResolveTask</c> 汇合，那里既不在界面上
     /// （没有主窗口的那条路径）也不在内核里（内核看不见设置），除了这里没别的地方能问。
-    /// 名字改了而路由没改，是这种"文案与实现各说各话"最常见的样子 —— 而用户双击出来的
-    /// 结果对不对，只有这一条断言管得着。</para>
+    /// 3.5.0 之前这条断言写的是"与动词<strong>同一个</strong>任务"，那正是用户报"设了没用"的根源：
+    /// 名字承诺"当前文件夹"，行为却是 0.10.0 那条按包里形状决定要不要套袋子的规则。</para>
     /// </summary>
     [AvaloniaFact]
-    public void TheDoubleClickChoiceResolvesToTheSameTaskAsTheVerb()
+    public void TheDoubleClickChoiceExtractsInPlaceUnlikeTheVerb()
     {
         var settings = new AppSettings();
         settings.SetString(SettingKeys.DoubleClickAction, "extract");
 
         Assert.True(App.TryResolveTask(["D:\\a\\docs.zip"], settings, out var byDoubleClick));
         Assert.True(ShellTasks.TryParse(["D:\\a\\docs.zip", "/task=extract"], out var byVerb));
-        Assert.Equal(byVerb, byDoubleClick);
-        Assert.Equal(ShellTask.Extract, byDoubleClick);
+
+        // 两条都是解压（要问口令、只弹进度条、跑完自己关），差别只在落点上。
+        Assert.True(ShellTasks.IsExtraction(byDoubleClick), "双击那一档必须真的走解压");
+        Assert.True(ShellTasks.IsExtraction(byVerb));
+        Assert.Equal(ShellTask.ExtractInPlace, byDoubleClick);
+        Assert.Equal(ShellTask.Extract, byVerb);
 
         // 没设过这一项时还是开主窗口：改名字不该顺手改掉默认行为
         Assert.False(App.TryResolveTask(["D:\\a\\docs.zip"], new AppSettings(), out var untouched));

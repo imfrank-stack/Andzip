@@ -36,7 +36,7 @@ internal static class MainToolBar
         var items = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = Design.Space.X1,
+            Spacing = Design.Space.X2,
         };
 
         items.Children.Add(CreateButton(lang.Label("TEXT_TOOLBAR_OPEN"), "open-archive", actions.OpenArchive));
@@ -57,12 +57,16 @@ internal static class MainToolBar
         // 整条是一张浮在面板上的卡片：底色与面板同白，分界全靠四周那一圈淡影与圆角。
         // 阴影用 Lift 那档（"浮在面板上的一块面"）而不是整窗那档 Floating ——
         // 这一条只有几十像素高，大弥散影会在旁边糊出一圈灰雾（Design.Shadow 那条注释量过）。
+        // <para><strong>内距 16/12 不是审美，是用户报的"按钮太靠边缘"</strong>（3.4.0 之后）：
+        // 原来是 8/4，第一颗与最后一颗的悬停方块几乎贴着卡片的左右沿，读起来像"排到外面去了"。
+        // 悬停那一方块是<strong>整颗按钮</strong>（图标 + 文字都在里面），所以卡片留白必须比它自己的
+        // 内距更外层一点，九颗才像坐在一张卡里而不是顶着一张嘴。</para>
         return new Border
         {
             Background = Design.Surface.Base,
             CornerRadius = Design.Radius.Lg,
             BoxShadow = Design.Shadow.Lift,
-            Padding = new Thickness(Design.Space.X2, Design.Space.X1, Design.Space.X2, Design.Space.X1),
+            Padding = new Thickness(Design.Space.X4, Design.Space.X3, Design.Space.X4, Design.Space.X3),
             Child = items,
         };
     }
@@ -104,8 +108,8 @@ internal static class MainToolBar
             Content = content,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(Design.Space.X3 + 2, Design.Space.X2, Design.Space.X3 + 2, Design.Space.X2),
-            MinWidth = 68,
+            Padding = new Thickness(Design.Space.X4, Design.Space.X3, Design.Space.X4, Design.Space.X3),
+            MinWidth = 76,
             FontFamily = Design.Font,
             IsEnabled = enabled,
         };
