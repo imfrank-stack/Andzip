@@ -132,6 +132,12 @@ internal static class NativeMethods
     public static extern int az_writer_open_memory(IntPtr options, out IntPtr writer);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int az_writer_open_existing(IntPtr pathUtf8, IntPtr options, out IntPtr writer);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int az_writer_keep_member(IntPtr writer, uint indexInArchive);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int az_writer_add_file(IntPtr writer, IntPtr sourcePathUtf8, IntPtr entryNameUtf8, IntPtr meta, int recurse);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]

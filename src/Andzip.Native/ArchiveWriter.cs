@@ -81,6 +81,50 @@ public sealed class ArchiveWriter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Rewrites an archive that already exists via <c>az_writer_open_existing</c>.
+    /// <para>
+    /// <paramref name="options"/>.<c>Password</c> here is the password for <em>reading</em>
+    /// the existing file, not just for writing the result -- a header-encrypted 7z cannot
+    /// even be enumerated without it, and the native side refuses the open rather than
+    /// offering a member list it cannot see.
+    /// </para>
+    /// <para>
+    /// Members survive by being listed: call <see cref="KeepMember"/> for each one to
+    /// keep, in listing order, and omit the ones to delete. Finish writes a temporary
+    /// beside the original and renames it over the top, so <strong>the caller must not
+    /// hold this file open</strong> -- Windows refuses the swap while any handle without
+    /// FILE_SHARE_DELETE exists, which includes one this process opened itself.
+    /// </para>
+    /// </summary>
+    public static ArchiveWriter OpenExisting(string path, CreateOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        NativeMethods.EnsureLoaded();
+        var args = options is null ? null : NativeArgs.Create(options);
+        using var strings = new Utf8.Scope();
+        try
+        {
+            NativeMethods.Check(NativeMethods.az_writer_open_existing(strings.Add(path), args?.Ptr ?? IntPtr.Zero, out var writer), "az_writer_open_existing");
+            return new ArchiveWriter(writer, toMemory: false, args);
+        }
+        catch
+        {
+            args?.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Carries one existing member over untouched via <c>az_writer_keep_member</c>.
+    /// The stored bytes are copied, not recompressed, and the name, times and attributes
+    /// come from the archive -- which is why <paramref name="indexInArchive"/> addresses the
+    /// listing the writer opened, not the one being written.</summary>
+    public void KeepMember(uint indexInArchive)
+    {
+        ThrowIfUnavailable();
+        NativeMethods.Check(NativeMethods.az_writer_keep_member(_writer, indexInArchive), "az_writer_keep_member");
+    }
+
     /// <summary>Adds a file, or a whole directory tree when <paramref name="recurse"/> is set,
     /// via <c>az_writer_add_file</c>. <paramref name="entryName"/> null derives the base name.</summary>
     public void AddFile(string sourcePath, string? entryName = null, ItemMeta? meta = null, bool recurse = true)

@@ -1,9 +1,14 @@
-// az_writer.cpp -- archive creation.
+// az_writer.cpp -- archive creation, and rewriting an archive that exists.
 //
 // Drives IOutArchive::UpdateItems with our own IArchiveUpdateCallback. 7-Zip
 // does the same from CPP/7zip/UI/Common/Update.cpp, which is not vendored; the
-// logic here is the subset a library needs -- no renaming and no updating of
-// existing members, because every az_writer builds a fresh archive.
+// logic here is the subset a library needs.
+//
+// Updating is not a second code path: it is the same UpdateItems call, with the
+// members to keep listed alongside the new ones and identified by their index in
+// the source. The handlers ask the callback per item -- GetUpdateItemInfo -- and
+// "not new, not changed, index k" is what makes them copy that member's stored
+// bytes instead of asking for a stream and recompressing it.
 //
 // Codec settings reach the handler through ISetProperties using the same names
 // the 7-Zip command line uses, because that is what the handlers parse:
@@ -18,6 +23,7 @@
 #include "az_internal.h"
 
 #include <algorithm>
+#include <atomic>
 #include <ctime>
 
 namespace az {
@@ -28,7 +34,10 @@ enum ItemKind
 {
   kItemFile = 0,
   kItemBuffer,
-  kItemDir
+  kItemDir,
+  // A member already in the archive that the rewrite should carry over untouched.
+  // Carries no payload and no properties: see CUpdateCallback::GetUpdateItemInfo.
+  kItemKeep
 };
 
 struct Item
@@ -49,10 +58,12 @@ struct Item
   // Z7_CLASS_IMP_COM_* makes AddRef/Release private on the concrete class.
   CMyComPtr<IUnknown> BufferOwner;
   const Byte *BufferData;
+  // kItemKeep only: which entry of the source archive this is.
+  Int32 IndexInArchive;
 
   Item() : Kind(kItemFile), Size(0), IsDir(false), HasAttrib(false), Attrib(0),
            HasPosixMode(false), PosixMode(0), MTime(0), CTime(0), ATime(0),
-           BufferData(NULL) {}
+           BufferData(NULL), IndexInArchive(-1) {}
 };
 
 bool ReadFileInfo(const UString &path, UInt64 &size, bool &isDir,
@@ -199,13 +210,28 @@ STDMETHODIMP CUpdateCallback::SetCompleted(const UInt64 *value)
   return S_OK;
 }
 
-// IArchiveUpdateCallback -- every member is new data with new properties.
+// IArchiveUpdateCallback -- new members carry new data and new properties; a
+// kItemKeep entry answers "not new, not changed, and here is which member it is",
+// which is the branch the handlers read as "copy the stored bytes verbatim".
 STDMETHODIMP CUpdateCallback::GetUpdateItemInfo(UInt32 index, Int32 *newData, Int32 *newProps,
                                                 UInt32 *indexInArchive)
 {
-  UNUSED_VAR(index)
-  // newData must stay 1: with 0 the handlers try to copy the payload from
-  // indexInArchive, which is "not in the archive" for every item we add.
+  if (!_items || index >= _items->Size())
+    return E_INVALIDARG;
+
+  const Item &item = (*_items)[index];
+  if (item.Kind == kItemKeep)
+  {
+    if (item.IndexInArchive < 0)
+      return E_INVALIDARG;
+    if (newData)        *newData = 0;
+    if (newProps)       *newProps = 0;
+    if (indexInArchive) *indexInArchive = (UInt32)item.IndexInArchive;
+    return S_OK;
+  }
+
+  // newData must stay 1 for everything else: with 0 the handlers try to copy the
+  // payload from indexInArchive, which is "not in the archive" for an added item.
   // Directories therefore have to answer kpidSize -- see GetProperty below.
   if (newData)        *newData = 1;
   if (newProps)       *newProps = 1;
@@ -244,6 +270,17 @@ STDMETHODIMP CUpdateCallback::GetProperty(UInt32 index, PROPID propID, PROPVARIA
     return E_INVALIDARG;
 
   const Item &item = (*_items)[index];
+
+  // A kept member declared itself "properties unchanged", so the handler is
+  // supposed to read them off the archive. Answering anyway would mean inventing
+  // a size or a name, and a wrong one is silent corruption -- say it loudly.
+  if (item.Kind == kItemKeep)
+  {
+    Status = AZ_ERROR_UNSUPPORTED;
+    StatusDetail = "the handler asked for properties of a member it was told to keep";
+    return E_FAIL;
+  }
+
   NWindows::NCOM::CPropVariant prop;
 
   switch (propID)
@@ -307,6 +344,19 @@ STDMETHODIMP CUpdateCallback::GetStream(UInt32 index, ISequentialInStream **inSt
     return E_INVALIDARG;
 
   const Item &item = (*_items)[index];
+
+  // Same contract as GetProperty: a kept member is copied out of the archive by
+  // the handler, never handed over as a stream. Both GetStream call sites in
+  // ZipHandlerOut.cpp sit inside `if (ui.NewData)`, so reaching here means a
+  // handler disagrees with that reading -- fail the write instead of shipping a
+  // member whose payload came from somewhere else.
+  if (item.Kind == kItemKeep)
+  {
+    Status = AZ_ERROR_UNSUPPORTED;
+    StatusDetail = "the handler asked for a stream for a member it was told to keep";
+    return E_FAIL;
+  }
+
   _progress.SetEntry(item.Name);
 
   if (item.IsDir)
@@ -489,9 +539,21 @@ struct WriterCtx
   CMyComPtr<IOutStream> FileOutRef;
   COutFileStream *FileOut;
 
+  // Update-in-place. SourceArchive is a handle this writer opened and owns: the
+  // handler holding the parsed database *is* the writer, and it keeps reading
+  // member bytes off that stream while UpdateItems runs. SourceItemCount bounds
+  // az_writer_keep_member -- ZipHandlerOut indexes m_Items[indexInArc] with no
+  // bounds check of its own, so an out-of-range index here is an out-of-bounds
+  // read inside the handler, not a graceful failure.
+  az_archive SourceArchive;
+  UInt32 SourceItemCount;
+  bool IsUpdate;
+  UString TempPath;   // where finish writes before swapping it over DestPath
+
   WriterCtx() : Callback(NULL), FormatIndex(-1), VolumeSize(0), ToMemory(false),
                 Finished(false), Failed(false), HasCallbacks(false),
-                MemOut(NULL), FileOut(NULL)
+                MemOut(NULL), FileOut(NULL), SourceArchive(NULL), SourceItemCount(0),
+                IsUpdate(false)
   {
     memset(&Opts, 0, sizeof(Opts));
     memset(&Callbacks, 0, sizeof(Callbacks));
@@ -504,6 +566,20 @@ struct WriterCtx
       return NULL;
     OwnedStrings.push_back(s);
     return OwnedStrings.back().c_str();
+  }
+
+  ~WriterCtx()
+  {
+    // An update that never reached its swap leaves two things behind that nobody
+    // else can clean up: a read handle still locking the original, and a
+    // half-written temporary beside it.
+    if (SourceArchive)
+      az_archive_close(SourceArchive);
+    if (!TempPath.IsEmpty())
+    {
+      std::error_code ignored;
+      std::filesystem::remove(az::UToPath(TempPath), ignored);
+    }
   }
 };
 
@@ -721,9 +797,11 @@ az_result AddTreeRecursive(WriterCtx *ctx, const UString &rootU, const UString &
 
 namespace {
 
-// The real entry point behind az_writer_open / az_writer_open_memory.
+// The real entry point behind az_writer_open / az_writer_open_memory /
+// az_writer_open_existing. `updatePath` is NULL unless this writer rewrites an
+// archive that is already on disk.
 az_result WriterOpenInternal(const char *path_utf8, const az_create_options *opts,
-                             bool toMemory, az_writer *out)
+                             bool toMemory, az_writer *out, const char *updatePath)
 {
   *out = NULL;
 
@@ -747,24 +825,59 @@ az_result WriterOpenInternal(const char *path_utf8, const az_create_options *opt
     resolved.multi_thread = 1;
   }
 
-  const char *formatName = (resolved.format && *resolved.format) ? resolved.format : "7z";
-
-  uint32_t fmtIndex = 0;
-  if (az_format_find(formatName, &fmtIndex) != AZ_OK)
-    return az::Fail(AZ_ERROR_UNSUPPORTED, "unknown archive format '%s'", formatName);
-
-  const CObjectVector<az::Format> &formats = az::Formats();
-  if (!formats[fmtIndex].CanWrite)
-    return az::Fail(AZ_ERROR_UNSUPPORTED, "format '%s' cannot be written", formatName);
-
   std::unique_ptr<az::WriterCtx> ctx(new az::WriterCtx());
-  ctx->FormatIndex = (int)fmtIndex;
-  ctx->FormatName = formats[fmtIndex].Name;
   ctx->ToMemory = toMemory;
-  ctx->DestPath = toMemory ? UString() : az::Utf8ToU(path_utf8);
+
+  // Which handler, and where the bytes go. Creating an archive asks the engine for
+  // a handler by name; updating one opens the file on disk and takes that same
+  // COM instance, because for these formats it answers both sides.
+  CMyComPtr<IOutArchive> outArchive;
+  AString formatNameA;
+
+  if (updatePath)
+  {
+    az_archive handle = NULL;
+    UInt32 itemCount = 0;
+    AString fmt;
+    const az_result opened = az::OpenForUpdate(az::Utf8ToU(updatePath), resolved.password,
+                                               &handle, outArchive, &itemCount, &fmt);
+    if (opened != AZ_OK)
+      return opened;
+
+    ctx->IsUpdate = true;
+    ctx->SourceArchive = handle;
+    ctx->SourceItemCount = itemCount;
+    ctx->DestPath = az::Utf8ToU(updatePath);
+    ctx->FormatIndex = az::FindFormatIndex(fmt.Ptr());
+    formatNameA = fmt;
+    ctx->FormatName = az::Utf8ToU(fmt.Ptr());
+  }
+  else
+  {
+    const char *formatName = (resolved.format && *resolved.format) ? resolved.format : "7z";
+
+    uint32_t fmtIndex = 0;
+    if (az_format_find(formatName, &fmtIndex) != AZ_OK)
+      return az::Fail(AZ_ERROR_UNSUPPORTED, "unknown archive format '%s'", formatName);
+
+    const CObjectVector<az::Format> &formats = az::Formats();
+    if (!formats[fmtIndex].CanWrite)
+      return az::Fail(AZ_ERROR_UNSUPPORTED, "format '%s' cannot be written", formatName);
+
+    ctx->FormatIndex = (int)fmtIndex;
+    ctx->FormatName = formats[fmtIndex].Name;
+    ctx->DestPath = toMemory ? UString() : az::Utf8ToU(path_utf8);
+    formatNameA = az::UToUtf8A(ctx->FormatName);
+
+    const HRESULT created = az::CreateOutArchive((int)fmtIndex, outArchive);
+    if (created != S_OK)
+      return az::FailHr(created, AZ_ERROR_GENERIC, "creating the archive handler");
+  }
+
+  ctx->OutArchive = outArchive;
 
   // Copy every string the caller passed, so the options struct may die.
-  resolved.format          = ctx->Own(formatName);
+  resolved.format          = ctx->Own(formatNameA.Ptr());
   resolved.method          = ctx->Own(resolved.method);
   resolved.password        = ctx->Own(resolved.password);
   resolved.volume_size     = ctx->Own(resolved.volume_size);
@@ -786,12 +899,6 @@ az_result WriterOpenInternal(const char *path_utf8, const az_create_options *opt
   resolved.callbacks = ctx->HasCallbacks ? &ctx->Callbacks : NULL;
 
   ctx->Opts = resolved;
-
-  CMyComPtr<IOutArchive> outArchive;
-  const HRESULT created = az::CreateOutArchive((int)fmtIndex, outArchive);
-  if (created != S_OK)
-    return az::FailHr(created, AZ_ERROR_GENERIC, "creating the archive handler");
-  ctx->OutArchive = outArchive;
 
   {
     CMyComPtr<ISetProperties> setProps;
@@ -825,14 +932,53 @@ AZ_API az_result AZ_CALL az_writer_open(const char *path_utf8,
     return az::Fail(AZ_ERROR_INVALID_ARG, "az_writer_open: out is NULL");
   if (!path_utf8 || !*path_utf8)
     return az::Fail(AZ_ERROR_INVALID_ARG, "az_writer_open: path is empty");
-  return WriterOpenInternal(path_utf8, opts, false, out);
+  return WriterOpenInternal(path_utf8, opts, false, out, NULL);
 }
 
 AZ_API az_result AZ_CALL az_writer_open_memory(const az_create_options *opts, az_writer *out)
 {
   if (!out)
     return az::Fail(AZ_ERROR_INVALID_ARG, "az_writer_open_memory: out is NULL");
-  return WriterOpenInternal(NULL, opts, true, out);
+  return WriterOpenInternal(NULL, opts, true, out, NULL);
+}
+
+AZ_API az_result AZ_CALL az_writer_open_existing(const char *path_utf8,
+                                                 const az_create_options *opts,
+                                                 az_writer *out)
+{
+  if (!out)
+    return az::Fail(AZ_ERROR_INVALID_ARG, "az_writer_open_existing: out is NULL");
+  if (!path_utf8 || !*path_utf8)
+    return az::Fail(AZ_ERROR_INVALID_ARG, "az_writer_open_existing: path is empty");
+  return WriterOpenInternal(NULL, opts, false, out, path_utf8);
+}
+
+AZ_API az_result AZ_CALL az_writer_keep_member(az_writer writer, uint32_t index_in_archive)
+{
+  if (!writer)
+    return az::Fail(AZ_ERROR_INVALID_ARG, "az_writer_keep_member: writer is NULL");
+
+  az::WriterCtx *ctx = (az::WriterCtx *)writer;
+  if (ctx->Finished || ctx->Failed)
+    return az::Fail(AZ_ERROR_ALREADY_DONE, "writer is already finished");
+  if (!ctx->IsUpdate)
+    return az::Fail(AZ_ERROR_INVALID_ARG,
+                    "az_writer_keep_member: this writer is creating a new archive, "
+                    "there is nothing already in it to keep");
+
+  // The handlers index their own item table on this number without checking it,
+  // so the bound has to be enforced here or an out-of-range index becomes a
+  // wild read inside the handler.
+  if (index_in_archive >= ctx->SourceItemCount)
+    return az::Fail(AZ_ERROR_INVALID_ARG, "member %u is out of range (%u members)",
+                    index_in_archive, ctx->SourceItemCount);
+
+  az::Item &item = ctx->Items.AddNew();
+  item.Kind = az::kItemKeep;
+  item.IndexInArchive = (Int32)index_in_archive;
+  item.IsDir = false;
+  item.Size = 0;
+  return az::Ok();
 }
 
 AZ_API az_result AZ_CALL az_writer_add_file(az_writer writer, const char *source_path_utf8,
@@ -1055,13 +1201,44 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
       ctx->Failed = true;
       return mk;
     }
+
+    // An update must not write into the file it is reading -- the source's stored
+    // bytes are still being copied out of it. Write beside it and swap afterwards.
+    UString writeTarget = ctx->DestPath;
+    if (ctx->IsUpdate)
+    {
+      // Beside the original, so the swap at the end is a rename within one volume
+      // rather than a copy across two. The process id separates concurrent writers;
+      // the counter separates two updates of the same file in a row.
+      #ifdef _WIN32
+      const unsigned owner = (unsigned)::GetCurrentProcessId();
+      #else
+      const unsigned owner = (unsigned)::getpid();
+      #endif
+      static std::atomic<unsigned> seq(0);
+
+      std::error_code ignored;
+      for (unsigned attempt = 0;; attempt++)
+      {
+        ctx->TempPath = ctx->DestPath;
+        ctx->TempPath += L".aztmp";
+        ctx->TempPath.Add_UInt32(owner);
+        ctx->TempPath += L'-';
+        ctx->TempPath.Add_UInt32(seq.fetch_add(1));
+        if (attempt >= 64 ||
+            !std::filesystem::exists(az::UToPath(ctx->TempPath), ignored))
+          break;
+      }
+      writeTarget = ctx->TempPath;
+    }
+
     COutFileStream *fileStream = new COutFileStream();
     ctx->FileOutRef = fileStream;
     ctx->FileOut = fileStream;
-    if (!fileStream->Create_ALWAYS(us2fs(ctx->DestPath.Ptr())))
+    if (!fileStream->Create_ALWAYS(us2fs(writeTarget.Ptr())))
     {
       ctx->Failed = true;
-      return az::Fail(AZ_ERROR_IO, "cannot create '%s'", az::UToStd(ctx->DestPath).c_str());
+      return az::Fail(AZ_ERROR_IO, "cannot create '%s'", az::UToStd(writeTarget).c_str());
     }
     if (ctx->Opts.preallocate)
     {
@@ -1107,6 +1284,36 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
       ctx->Failed = true;
       return az::FailHr(closeRes, AZ_ERROR_IO, "closing the archive file");
     }
+  }
+
+  if (ctx->IsUpdate)
+  {
+    // The handler still has the original open, and Windows refuses to rename over
+    // a file that is open without FILE_SHARE_DELETE -- 7-Zip's input stream is
+    // exactly that. Let it go first; the copy is finished by now, so nothing needs
+    // it. Until this swap lands, the archive on disk is still the old one, which is
+    // why every failure below says so instead of leaving "did it work?" open.
+    if (ctx->SourceArchive)
+    {
+      az_archive_close(ctx->SourceArchive);
+      ctx->SourceArchive = NULL;
+    }
+
+    const std::filesystem::path temp = az::UToPath(ctx->TempPath);
+    const std::filesystem::path target = az::UToPath(ctx->DestPath);
+    std::error_code ec;
+    std::filesystem::rename(temp, target, ec);
+    if (ec)
+    {
+      std::error_code ignored;
+      std::filesystem::remove(temp, ignored);
+      ctx->TempPath.Empty();
+      ctx->Failed = true;
+      return az::Fail(AZ_ERROR_IO,
+                      "the rebuilt archive could not replace '%s' (%s) -- the original "
+                      "is untouched", az::UToStd(ctx->DestPath).c_str(), ec.message().c_str());
+    }
+    ctx->TempPath.Empty();
   }
 
   if (ctx->ToMemory && out_data)

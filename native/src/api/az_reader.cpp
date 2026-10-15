@@ -1243,3 +1243,59 @@ AZ_API az_result AZ_CALL az_entry_read_stream(az_archive archive, uint64_t index
     return stream->Status();
   return az::Ok();
 }
+
+// ---------------------------------------------------------------------------
+// The write side of an already-open archive.
+// ---------------------------------------------------------------------------
+
+namespace az {
+
+az_result OpenForUpdate(const UString &path, const char *passwordUtf8,
+                        az_archive *outHandle, CMyComPtr<IOutArchive> &outArchive,
+                        UInt32 *outItemCount, AString *outFormatName)
+{
+  *outHandle = NULL;
+  outArchive.Release();
+  if (outItemCount)
+    *outItemCount = 0;
+  if (outFormatName)
+    outFormatName->Empty();
+
+  CInFileStream *fileStream = new CInFileStream();
+  CMyComPtr<IInStream> stream(fileStream);
+  if (!fileStream->Open(us2fs(path.Ptr())))
+    return Fail(AZ_ERROR_NOT_FOUND, "cannot open '%s' for update", UToStd(path).c_str());
+
+  // The password has to be in place before Open, not after: an encrypted 7z asks
+  // for it while the header is being decrypted, so a handle opened without it is
+  // already unusable rather than merely unreadable.
+  az_open_options openOpts;
+  memset(&openOpts, 0, sizeof(openOpts));
+  openOpts.struct_size = sizeof(openOpts);
+  openOpts.password = passwordUtf8;
+
+  ArchiveCtx *ctx = NULL;
+  const az_result r = OpenStreamInternal(stream, path, path, &openOpts, &ctx);
+  if (r != AZ_OK)
+    return r;
+
+  // One instance, two interfaces: that is how 7-Zip's handlers are built, and it
+  // is the only way to rewrite a file without opening it twice.
+  const HRESULT qi = ctx->Archive.QueryInterface(IID_IOutArchive, &outArchive);
+  if (qi != S_OK || !outArchive)
+  {
+    const AString name = ctx->FormatName;
+    delete ctx;
+    return Fail(AZ_ERROR_UNSUPPORTED,
+                "format '%s' cannot update an existing archive in place", name.Ptr());
+  }
+
+  *outHandle = (az_archive)ctx;
+  if (outItemCount)
+    *outItemCount = ctx->NumItems;
+  if (outFormatName)
+    *outFormatName = ctx->FormatName;
+  return Ok();
+}
+
+} // namespace az

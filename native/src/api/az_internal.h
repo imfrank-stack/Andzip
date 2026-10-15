@@ -125,6 +125,16 @@ int FindFormatIndex(const char *nameOrExtension);
 HRESULT CreateInArchive(int formatIndex, CMyComPtr<IInArchive> &out);
 HRESULT CreateOutArchive(int formatIndex, CMyComPtr<IOutArchive> &out);
 
+// Open a file so that it can be rewritten in place. Lives in az_reader.cpp, where
+// the context behind the opaque handle is defined: for the updatable formats one
+// COM instance answers both IInArchive and IOutArchive, and the handler keeps
+// reading member bytes off this stream while UpdateItems runs.
+// *outHandle must be closed with az_archive_close once the copy is done and
+// before the temporary is swapped over the original.
+az_result OpenForUpdate(const UString &path, const char *passwordUtf8,
+                        az_archive *outHandle, CMyComPtr<IOutArchive> &outArchive,
+                        UInt32 *outItemCount, AString *outFormatName);
+
 // ---------------------------------------------------------------------------
 // Global settings
 // ---------------------------------------------------------------------------

@@ -411,6 +411,34 @@ AZ_API az_result AZ_CALL az_writer_open(const char *path_utf8,
 AZ_API az_result AZ_CALL az_writer_open_memory(const az_create_options *opts,
                                                az_writer *out);
 
+/*
+ * Rewrite an archive that already exists: add members, and -- by simply not
+ * listing a member -- delete one. The file at path_utf8 is opened for reading
+ * here, so opts->password is the password for *reading* it, not just for writing.
+ * Returns AZ_ERROR_UNSUPPORTED when the format cannot update in place; an
+ * encrypted-header 7z or a damaged header is refused by the engine itself and
+ * that refusal is passed through rather than dressed up as success.
+ *
+ * Members to keep are listed with az_writer_keep_member and carry no payload:
+ * the handler copies their stored bytes verbatim, so keeping a 100 GB member does
+ * not become recompressing a 100 GB member. Name, times and attributes come from
+ * the archive too -- that is what "newProps = 0" means to 7-Zip.
+ *
+ * finish writes a temporary beside the original, closes the read handle, then
+ * swaps the temporary in -- writing into the very file being read would truncate
+ * the source mid-copy. That swap needs exclusive-enough sharing, so any *other*
+ * handle the caller still holds on this file (a browse handle, say) must be
+ * closed first; if the swap is refused, the original is left untouched and the
+ * error says so.
+ */
+AZ_API az_result AZ_CALL az_writer_open_existing(const char *path_utf8,
+                                                 const az_create_options *opts,
+                                                 az_writer *out);
+
+/* List an existing member as "keep it". index_in_archive addresses the members of
+ * the archive passed to az_writer_open_existing, in listing order. */
+AZ_API az_result AZ_CALL az_writer_keep_member(az_writer writer, uint32_t index_in_archive);
+
 /* Add a file, or a whole directory tree when recurse is non-zero. */
 AZ_API az_result AZ_CALL az_writer_add_file(az_writer writer,
                                             const char *source_path_utf8,

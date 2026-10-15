@@ -1067,6 +1067,262 @@ static void TestForeignArchive()
   EndTest();
 }
 
+// ---------------------------------------------------------------------------
+// Updating an archive that already exists.
+// ---------------------------------------------------------------------------
+
+struct Seen
+{
+  std::string name;
+  uint64_t size;
+  uint64_t packed;
+  uint32_t crc;
+  std::vector<unsigned char> data;
+};
+
+static bool ListArchive(const fs::path &p, const char *password, std::vector<Seen> &out)
+{
+  out.clear();
+  az_open_options oo = AZ_OPEN_OPTIONS_INIT;
+  oo.password = password;
+  az_archive arc = NULL;
+  if (az_archive_open(p.string().c_str(), &oo, &arc) != AZ_OK)
+  {
+    std::printf("  FAIL open %s: %s\n", p.string().c_str(), az_last_error_message());
+    return false;
+  }
+
+  uint64_t count = 0;
+  az_archive_entry_count(arc, &count);
+  for (uint64_t i = 0; i < count; i++)
+  {
+    az_entry_info e;
+    std::memset(&e, 0, sizeof(e));
+    e.struct_size = sizeof(e);
+    if (az_entry_get(arc, i, &e) != AZ_OK)
+    {
+      az_archive_close(arc);
+      return false;
+    }
+    Seen s;
+    s.name = e.name ? e.name : "";
+    s.size = e.size;
+    s.packed = e.packed_size;
+    s.crc = e.crc;
+    if (!e.is_dir)
+    {
+      std::vector<unsigned char> buf((size_t)(e.size ? e.size : 1));
+      size_t written = 0;
+      const az_result rr = az_entry_read(arc, i, buf.data(), buf.size(), &written);
+      buf.resize(written);
+      if (rr == AZ_OK)
+        s.data = buf;
+      else
+        std::printf("  FAIL read %s: %s\n", s.name.c_str(), az_last_error_message());
+    }
+    az_entry_release(&e);
+    out.push_back(s);
+  }
+  az_archive_close(arc);
+  return true;
+}
+
+static const Seen *FindMember(const std::vector<Seen> &seen, const std::string &name)
+{
+  for (size_t i = 0; i < seen.size(); i++)
+    if (seen[i].name == name)
+      return &seen[i];
+  return NULL;
+}
+
+// Builds a file-backed archive holding `names` with distinct payloads.
+static bool CreateSeed(const fs::path &p, const char *format,
+                       const std::vector<std::string> &names, const char *password = NULL)
+{
+  az_create_options co = AZ_CREATE_OPTIONS_INIT;
+  co.format = format;
+  co.password = password;
+  az_writer w = NULL;
+  if (az_writer_open(p.string().c_str(), &co, &w) != AZ_OK)
+    return false;
+  for (size_t i = 0; i < names.size(); i++)
+  {
+    const std::vector<unsigned char> payload = MakePayload((size_t)(i + 1) * 4096);
+    if (az_writer_add_buffer(w, payload.data(), payload.size(), names[i].c_str(), NULL) != AZ_OK)
+    {
+      az_writer_free(w);
+      return false;
+    }
+  }
+  const az_result r = az_writer_finish(w, NULL, NULL);
+  az_writer_free(w);
+  return r == AZ_OK;
+}
+
+// Opens `p` for update, applies `keep` (indices into the current listing) plus one
+// added member, and writes it back.
+static az_result Rewrite(const fs::path &p, const char *password,
+                         const std::vector<uint32_t> &keep, const char *addName)
+{
+  az_create_options co = AZ_CREATE_OPTIONS_INIT;
+  co.password = password;
+  az_writer w = NULL;
+  az_result r = az_writer_open_existing(p.string().c_str(), &co, &w);
+  if (r != AZ_OK)
+    return r;
+  for (size_t i = 0; i < keep.size(); i++)
+  {
+    r = az_writer_keep_member(w, keep[i]);
+    if (r != AZ_OK)
+      break;
+  }
+  if (r == AZ_OK && addName)
+  {
+    const std::vector<unsigned char> payload = MakePayload(5000);
+    r = az_writer_add_buffer(w, payload.data(), payload.size(), addName, NULL);
+  }
+  const az_result done = az_writer_finish(w, NULL, NULL);
+  az_writer_free(w);
+  return r != AZ_OK ? r : done;
+}
+
+static void TestUpdateExisting()
+{
+  BeginTest("update an existing archive");
+
+  const char *formats[] = { "zip", "7z", "tar" };
+  for (int f = 0; f < 3; f++)
+  {
+    const char *format = formats[f];
+    const fs::path p = g_tmp / (std::string("upd-") + format + "." + format);
+    const std::vector<std::string> names = { "a.txt", "b.txt", "c.txt" };
+    CHECK(CreateSeed(p, format, names));
+
+    std::vector<Seen> before;
+    CHECK(ListArchive(p, NULL, before));
+    CHECK(before.size() == 3);
+    if (before.size() != 3)
+      continue;
+
+    // A rewrite that keeps everything and adds one member. The kept members'
+    // packed sizes must be *identical* afterwards: that is the difference between
+    // "the handler copied the stored bytes" and "we silently recompressed them",
+    // and only the first one makes a 100 GB member affordable to keep.
+    const fs::path pristine = g_tmp / (std::string("pristine-") + format);
+    std::error_code cpec;
+    fs::copy_file(p, pristine, fs::copy_options::overwrite_existing, cpec);
+    std::vector<unsigned char> pristineBytes;
+    CHECK(ReadFile(pristine, pristineBytes));
+
+    CHECK(Rewrite(p, NULL, { 0, 1, 2 }, "d.txt") == AZ_OK);
+
+    std::vector<Seen> after;
+    CHECK(ListArchive(p, NULL, after));
+    CHECK(after.size() == 4);
+    for (size_t i = 0; i < names.size() && i < before.size(); i++)
+    {
+      const Seen *kept = FindMember(after, before[i].name);
+      CHECK(kept != NULL);
+      if (!kept)
+        continue;
+      CHECK(SameBytes(kept->data, before[i].data));
+      if (before[i].packed != UINT64_MAX)
+        CHECK(kept->packed == before[i].packed);
+    }
+    const Seen *added = FindMember(after, "d.txt");
+    CHECK(added != NULL);
+    if (added)
+      CHECK(added->data.size() == 5000);
+
+    // Deleting is just not listing. Keep two of the four.
+    std::vector<Seen> four;
+    CHECK(ListArchive(p, NULL, four) && four.size() == 4);
+    uint32_t keepA = 0, keepB = 0;
+    for (uint32_t i = 0; i < four.size(); i++)
+    {
+      if (four[i].name == "a.txt") keepA = i;
+      if (four[i].name == "c.txt") keepB = i;
+    }
+    CHECK(Rewrite(p, NULL, { keepA, keepB }, NULL) == AZ_OK);
+    std::vector<Seen> two;
+    CHECK(ListArchive(p, NULL, two));
+    CHECK(two.size() == 2);
+    CHECK(FindMember(two, "a.txt") != NULL);
+    CHECK(FindMember(two, "c.txt") != NULL);
+    CHECK(FindMember(two, "b.txt") == NULL);
+    CHECK(FindMember(two, "d.txt") == NULL);
+
+    // A refused update must leave the file exactly as it was -- "it failed" that
+    // is not true is the one outcome nobody can recover from.
+    const uint32_t bogus = 9999;
+    CHECK(az_writer_open_existing(p.string().c_str(), NULL, NULL) == AZ_ERROR_INVALID_ARG);
+    {
+      az_writer probe = NULL;
+      CHECK(az_writer_open_existing(p.string().c_str(), NULL, &probe) == AZ_OK);
+      if (probe)
+      {
+        CHECK(az_writer_keep_member(probe, bogus) == AZ_ERROR_INVALID_ARG);
+        az_writer_free(probe);
+      }
+    }
+    std::vector<unsigned char> stillThere;
+    CHECK(ReadFile(p, stillThere));
+    CHECK(!stillThere.empty());
+    // Nothing in the directory should be left over from a swap that never happened.
+    int strays = 0;
+    for (fs::directory_iterator it(g_tmp, cpec), end; it != end; it.increment(cpec))
+      if (it->path().string().find(".aztmp") != std::string::npos)
+        strays++;
+    CHECK(strays == 0);
+  }
+
+  // A header-encrypted 7z with the key is an ordinary update; without it there is
+  // no member list to copy from, so the writer must refuse before touching the
+  // file. The interesting half is the second one: an update that listed nothing
+  // would produce an empty archive and report success, and "it failed" that is not
+  // true is the one outcome nobody can recover from.
+  {
+    const fs::path p = g_tmp / "he7z.7z";
+    az_create_options co = AZ_CREATE_OPTIONS_INIT;
+    co.format = "7z";
+    co.password = "pw";
+    co.encryption = AZ_ENC_AES256;
+    co.encrypt_headers = 1;
+    az_writer w = NULL;
+    if (az_writer_open(p.string().c_str(), &co, &w) == AZ_OK)
+    {
+      const std::vector<unsigned char> payload = MakePayload(100);
+      CHECK(az_writer_add_buffer(w, payload.data(), payload.size(), "x.txt", NULL) == AZ_OK);
+      CHECK(az_writer_finish(w, NULL, NULL) == AZ_OK);
+      az_writer_free(w);
+
+      // With the password: an update that keeps the one member must still have it.
+      CHECK(Rewrite(p, "pw", { 0 }, "y.txt") == AZ_OK);
+      std::vector<Seen> both;
+      CHECK(ListArchive(p, "pw", both));
+      CHECK(both.size() == 2);
+      const Seen *kept = FindMember(both, "x.txt");
+      CHECK(kept != NULL);
+      if (kept)
+        CHECK(SameBytes(kept->data, payload));
+
+      // Without the key there is no member list to copy from, so the update must
+      // not even start -- and the file must be exactly what it was.
+      std::vector<unsigned char> before;
+      CHECK(ReadFile(p, before));
+      az_writer blind = NULL;
+      CHECK(az_writer_open_existing(p.string().c_str(), NULL, &blind) != AZ_OK);
+      if (blind)
+        az_writer_free(blind);
+      std::vector<unsigned char> after;
+      CHECK(ReadFile(p, after));
+      CHECK(SameBytes(before, after));
+    }
+  }
+
+  EndTest();
+}
+
 int main()
 {
   // Unbuffered: if a test crashes the process we still need to see which one.
@@ -1101,6 +1357,7 @@ int main()
   TestForeignArchive();
   TestBadInput();
   TestSplitVolumesUnsupported();
+  TestUpdateExisting();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
 
