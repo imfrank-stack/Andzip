@@ -66,13 +66,33 @@ public sealed class InstallerWindow : Window
 
     /// <summary>页与页之间不至于跳得太厉害；也不写死高度 —— 1.9.2 那次写死过，把内容切掉了一半。</summary>
     private readonly ContentControl _host = new() { MinHeight = 200 };
+
     private readonly StackPanel _footer = new()
     {
         Orientation = Orientation.Horizontal,
         Spacing = Design.Space.X3,
         HorizontalAlignment = HorizontalAlignment.Right,
-        Margin = new Thickness(0, Design.Space.X4, 0, 0),
+        // 下边距与正文那一圈（<see cref="Stack"/> 的 24）同档：页脚不该贴着自己那张卡片的底沿
+        // ——用户 2026-10-16 的话是「这些按钮太靠下了」。
+        Margin = new Thickness(0, Design.Space.X4, 0, Design.Space.X6),
     };
+
+    /// <summary>
+    /// 正文 + 页脚这整块。<strong>两行都是 Auto</strong>：页脚紧跟正文，剩下的那一截留在页脚
+    /// <strong>下面</strong>，而不是顶在正文与页脚之间。
+    /// <para>为什么值得分开写（3.6.0）：窗口的高度是<strong>只长不缩</strong>的
+    /// （见 <see cref="HoldHeight"/>，那是 2.4.0 为"按下的那一下松手落到窗口外面"立的规矩），
+    /// 而"短的那几页"于是会多出一大截高度。以前那一截留在正文那一格里，页脚被顶到卡片最下沿 ——
+    /// 安装完成页上就是"正文在上面、按钮孤零零贴在底下"，用户的原话是「这些按钮太靠下了」。
+    /// 把多余的高度放到页脚下面之后，每一页的按钮都紧跟正文。</para>
+    /// </summary>
+    private readonly Grid _root = new() { RowDefinitions = new RowDefinitions("Auto,Auto") };
+
+    /// <summary>
+    /// 换页时"只长不缩"的那条底线（内容区的下限高度）。<strong>给界面用例用</strong>：
+    /// headless 的窗口不真的跟着内容改尺寸，那条规矩只能按它自己的读数来量（<c>InstallerTests</c>）。
+    /// </summary>
+    internal double HeldContentHeight => _root.MinHeight;
 
     private readonly TextBox _location = new();
     private readonly Button _browse = new() { MinWidth = 88 };
@@ -206,7 +226,7 @@ public sealed class InstallerWindow : Window
         // 而这里没有"回滚"可做（我们只会复制一个文件，不会先备份旧的）。
         Closing += (_, e) => e.Cancel = _busy;
 
-        var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+        var root = _root;
         Grid.SetRow(_host, 0);
         Grid.SetRow(_footer, 1);
         root.Children.Add(_host);
@@ -276,17 +296,21 @@ public sealed class InstallerWindow : Window
     internal const string ArgumentReplaceOther = "/replace-other";
 
     /// <summary>
-    /// 记下这一页正文的高度，作为之后每一页的下限 —— 页与页之间<strong>只长不缩</strong>。
+    /// 记下这一页把窗口撑到了多高，作为之后每一页的下限 —— 页与页之间<strong>只长不缩</strong>。
     /// <para>为什么值得单独一招：这扇窗的高度是跟着内容走的（<c>SizeToContent.Height</c>），
     /// 而「选定安装位置」那一页比「正在安装」高两百多像素。点「安装」的那一瞬间页面就换成了进度页，
     /// 窗口当场缩掉一截，用户的<strong>松手</strong>事件却还在原来那个坐标上 —— 那一下落在了窗口外面。
     /// 真机核对里它的样子是"完成页一闪而过，向导自己关了，还顺手把 Andzip 启动了"：
     /// 没收到松手的那一份 Avalonia 一直以为左键按着，等完成页把窗口撑回来、
     /// 「完成」正好长在静止不动的指针底下，那一次积压的按下就在它身上结了账。</para>
-    /// <para>高度不缩之后，进度页的页脚与位置页在同一格，松手落在页脚那块空白上，碰不到任何按钮。
-    /// 参考软件（Inno Setup）那张向导也是所有页同一个高度，这不是为了修 bug 才发明的规矩。</para>
+    /// <para>高度不缩之后，换到进度页时松手落在页脚那一带碰不到任何按钮
+    /// （进度页本来就没有按钮，见 <see cref="Buttons"/>）。参考软件（Inno Setup）
+    /// 那张向导也是所有页同一个高度，这不是为了修 bug 才发明的规矩。</para>
+    /// <para><strong>量的是整块内容区（<c>_root</c>）而不是正文那一格</strong>（3.6.0）：
+    /// 撑住的总高度是一样的（窗口因此仍不缩），差别只在多出来的那一截留在哪里 ——
+    /// 留在正文那一格里会把页脚顶到卡片最下沿，留在页脚下面才是"页脚紧跟正文"。见 <see cref="_root"/>。</para>
     /// </summary>
-    private void HoldHeight() => _host.MinHeight = Math.Max(_host.MinHeight, _host.Bounds.Height);
+    private void HoldHeight() => _root.MinHeight = Math.Max(_root.MinHeight, _root.Bounds.Height);
 
     private Control Build(WizardPage page) => page switch
     {
