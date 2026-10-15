@@ -98,10 +98,6 @@ TEXT_BTN_OK                             = 确定(&O)
 ; ---- 选择解压路径对话框（FR-3.1）----
 TEXT_TITLE_EXTRACT_PATH                 = 选择解压路径
 TEXT_LABEL_DEST_PATH                    = 目标路径(&D)
-TEXT_QUICK_DESKTOP                      = 桌面
-TEXT_QUICK_MY_DOCUMENTS                 = 我的文档
-TEXT_QUICK_MY_PICTURES                  = 我的图片
-TEXT_QUICK_MY_COMPUTER                  = 我的电脑
 TEXT_SECTION_EXTRACT                    = 解压缩:
 TEXT_RADIO_ALL_FILES                    = 全部文件(&A)
 TEXT_RADIO_SELECTED_FILES               = 选定的文件(&S)

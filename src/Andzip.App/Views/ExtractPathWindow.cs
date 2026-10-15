@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Controls.Primitives;
 using Avalonia.Platform.Storage;
 
 namespace Andzip.App.Views;
@@ -17,9 +16,14 @@ public sealed record ExtractPathChoice(
 
 /// <summary>
 /// 「选择解压路径」对话框（FR-3.1 / 参考截图 04）：
-/// 目标路径（可编辑下拉）+ 浏览（系统文件夹选择对话框）；快捷位置一行；
+/// 目标路径（可编辑下拉）+ 浏览（系统文件夹选择对话框）；
 /// 「解压缩:」全部文件 / 选定的文件（无选中时禁用）+ 新建文件夹；
 /// 复选项：解压到同名文件夹（默认勾选）/ 解压后删除压缩文件 / 记住设置；确定 / 取消。
+/// <para>
+/// 0.x 这里还有一行「桌面 / 我的文档 / 我的图片 / 我的电脑」快捷按钮，3.0.1 删掉了：
+/// 四个目标里三个是系统已知文件夹，而路径框本来就是可编辑下拉，「浏览」又直接开系统的
+/// 文件夹选择器 —— 那一行只是把系统里已经有的东西抄一份到对话框里占一行。
+/// </para>
 /// <para>
 /// 这里<strong>没有</strong>自己画的目录树了。0.11.0 之前右边那块是一棵手写的
 /// <c>TreeView</c>，而且它根本展不开（<c>ItemTemplate</c> 用的是扁平模板，没把
@@ -52,7 +56,9 @@ public sealed class ExtractPathWindow : Window
 
         Title = lang.Label("TEXT_TITLE_EXTRACT_PATH");
         Width = 700;
-        Height = 292;
+        // 高度跟着内容走，不是写死一个数：这一扇排到第 5 行时才 292 DIP 装得下按钮，
+        // 少一行、换一句翻译就会把「确定」顶到窗口边上（实测贴到只剩 2 物理像素）。
+        SizeToContent = SizeToContent.Height;
         MinWidth = 560;
         MinHeight = 280;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -73,13 +79,6 @@ public sealed class ExtractPathWindow : Window
 
         var browseButton = new Button { Content = lang.Label("TEXT_BTN_BROWSE"), MinWidth = 110 }.Ghost();
         browseButton.Click += async (_, _) => await BrowseAsync();
-
-        // ---- 快捷位置：横向一行，等宽 ----
-        var quickPanel = new UniformGrid { Rows = 1, Margin = new Thickness(0, 0, 0, 14) };
-        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_DESKTOP", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
-        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_MY_DOCUMENTS", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
-        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_MY_PICTURES", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
-        AddQuickLocation(quickPanel, lang, "TEXT_QUICK_MY_COMPUTER", Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\");
 
         // ---- 解压缩: 全部 / 选定 + 新建文件夹 ----
         var allFiles = new RadioButton
@@ -155,19 +154,18 @@ public sealed class ExtractPathWindow : Window
         var layout = new Grid
         {
             Margin = new Thickness(16),
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto"),
         };
         AddRow(layout, 0, BuildFieldRow(lang.Label("TEXT_LABEL_DEST_PATH"), _pathCombo, browseButton));
-        AddRow(layout, 1, quickPanel);
-        AddRow(layout, 2, scopeRow);
-        AddRow(layout, 3, new StackPanel
+        AddRow(layout, 1, scopeRow);
+        AddRow(layout, 2, new StackPanel
         {
             Orientation = Orientation.Vertical,
             Spacing = 6,
             Children = { _intoFolderCheck, _deleteArchiveCheck, _rememberCheck },
         });
-        AddRow(layout, 4, _hint);
-        AddRow(layout, 5, buttons);
+        AddRow(layout, 3, _hint);
+        AddRow(layout, 4, buttons);
 
         this.Chromeless(lang, layout);
     }
@@ -198,28 +196,6 @@ public sealed class ExtractPathWindow : Window
         row.Children.Add(field);
         row.Children.Add(trailing);
         return row;
-    }
-
-    /// <summary>
-    /// 一个快捷位置按钮。路径为空（比如这台机器没有"我的图片"重定向到别处）就不加这个按钮 ——
-    /// 摆一个点了什么也不会发生的按钮，比少一个按钮更糟。
-    /// </summary>
-    private void AddQuickLocation(UniformGrid panel, LangCatalog lang, string textKey, string path)
-    {
-        if (string.IsNullOrEmpty(path))
-        {
-            return;
-        }
-
-        var button = new Button
-        {
-            Content = lang.Label(textKey),
-            Margin = new Thickness(0, 0, 8, 0),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-        }.PinFace();
-        button.Click += (_, _) => _pathCombo.Text = path;
-        panel.Children.Add(button);
     }
 
     /// <summary>

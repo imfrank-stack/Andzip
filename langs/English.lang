@@ -98,10 +98,6 @@ TEXT_BTN_OK                             = &OK
 ; ---- Extract path dialog (FR-3.1) ----
 TEXT_TITLE_EXTRACT_PATH                 = Extract to
 TEXT_LABEL_DEST_PATH                    = Destination &path
-TEXT_QUICK_DESKTOP                      = Desktop
-TEXT_QUICK_MY_DOCUMENTS                 = My Documents
-TEXT_QUICK_MY_PICTURES                  = My Pictures
-TEXT_QUICK_MY_COMPUTER                  = My Computer
 TEXT_SECTION_EXTRACT                    = Extract:
 TEXT_RADIO_ALL_FILES                    = All &files
 TEXT_RADIO_SELECTED_FILES               = &Selected files

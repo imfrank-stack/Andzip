@@ -4,7 +4,9 @@ using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Menu;
 using Andzip.Core.Settings;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 
@@ -496,6 +498,58 @@ public class UiFeatureWiringTests
 
         Assert.True(path.IsEditable);
         Assert.Equal(@"C:\somewhere", path.Text);
+    }
+
+    /// <summary>
+    /// 「选择解压路径」的高度跟着内容走，不许写死一个数。
+    /// <para>
+    /// 这一扇以前写死 <c>Height = 292</c> 却排了 6 行，真机上「确定」的下沿离窗口底边只剩
+    /// <strong>2 个物理像素</strong>（该留的是 16 DIP）。
+    /// </para>
+    /// <para>
+    /// <strong>这条断言问的是机制，不是像素 —— 因为像素在这里问不出来。</strong>
+    /// 把 <c>Height = 292</c> 放回去，本套件的几何断言照样全绿：headless 的窗口按内容量尺寸、
+    /// 不按请求值裁剪，"控件落在视口外面"这件事在 headless 里根本不存在
+    /// （与 2.5.0 那节没有滚动条的设置页、2.9.0 那颗掉出窗口的「最长」下拉框同一族，
+    /// 见开发记录第 56、62 条）。所以屏幕上的那一份核对记在第九节，这里只钉住成因：
+    /// 一个写死的高度。
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ExtractPathDialogSizesItselfToItsContent()
+    {
+        var dialog = new ExtractPathWindow(TestLang.Chinese(), @"C:\somewhere\box.zip").Shown();
+
+        Assert.Equal(SizeToContent.Height, dialog.SizeToContent);
+        Assert.True(double.IsNaN(dialog.Height),
+            "这一扇又写死了一个高度 —— 内容多一行，「确定」就会被顶到窗口外面，"
+            + "而 headless 全绿，只有真屏幕看得见");
+    }
+
+    /// <summary>
+    /// 「桌面 / 我的文档 / 我的图片 / 我的电脑」那一行删掉了：路径框本来就是可编辑下拉，
+    /// 「浏览」又直接开系统的文件夹选择器，那一行只是把系统里已有的东西抄一份进来占一行。
+    /// <para>
+    /// 断言钉的是那一行的<strong>形状</strong>（一行等宽的 <see cref="UniformGrid"/>）而不是按钮个数 ——
+    /// 窗口里量出来的 Button 有 10 颗，因为标题栏那顆关闭钮与 <c>.Picker()</c> 嵌的
+    /// ToggleButton 都是 Button 的子类，数个数会连它们一起算进去，红了也说不清是谁多出来的。
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ExtractPathDialogHasNoQuickLocationRow()
+    {
+        var lang = TestLang.Chinese();
+        var dialog = new ExtractPathWindow(lang, @"C:\somewhere\box.zip").Shown();
+
+        Assert.Empty(VisualQuery.Of<UniformGrid>(dialog));
+
+        // 留下的是这四颗，各自还活着。
+        foreach (var key in new[] { "TEXT_BTN_BROWSE", "TEXT_BTN_NEW_FOLDER", "TEXT_BTN_OK", "TEXT_BTN_CANCEL" })
+        {
+            var wanted = lang.Get(key).Replace("&", string.Empty, StringComparison.Ordinal);
+            Assert.Contains(VisualQuery.Of<Button>(dialog), b =>
+                Equals(b.Content?.ToString(), wanted) && b.IsEnabled);
+        }
     }
 
     // ---------------------------------- 新建压缩文件：默认包名与格式列表
