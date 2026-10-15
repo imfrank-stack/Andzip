@@ -22,6 +22,58 @@ public class AppSettingsTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// 一个实例保存时，不许抹掉另一个实例刚写进去的键。
+    /// <para>这台机器上同时开着几个 Andzip 是常态 —— 每次双击都起一个新进程，而每个进程手里
+    /// 是它<strong>启动那一刻</strong>读到的整份快照。用户报的「双击直接解压怎么设都没用」
+    /// 就是这条：在 B 窗口里选了「直接解压」并落盘，回到已经开着的 A 窗口打开一个包，
+    /// A 记一笔最近文件、把它那份<strong>没见过这个键</strong>的快照整个写回去 —— 键消失了，
+    /// 下一次双击又变回打开主窗口。</para>
+    /// <para>所以 <c>Save</c> 必须是"只写我改过的那几键"，不是"把我记得的全部重写一遍"。</para>
+    /// </summary>
+    [Fact]
+    public void SaveFromAnOlderSnapshotKeepsKeysAnotherInstanceWrote()
+    {
+        var opened = AppSettings.Load(_path);
+        opened.SetString(SettingKeys.RecentFiles, "a.zip");
+        opened.Save(_path);
+
+        // 另一个实例（设置窗口）写入双击这一项；上面那份快照没见过它
+        var dialog = AppSettings.Load(_path);
+        dialog.SetString(SettingKeys.DoubleClickAction, "extract");
+        dialog.Save(_path);
+
+        // 老实例只是记了一笔最近文件 —— 这一次写盘不该把上面那条抹掉
+        opened.SetString(SettingKeys.RecentFiles, "a.zip;b.zip");
+        opened.Save(_path);
+
+        var onDisk = AppSettings.Load(_path);
+        Assert.Equal("extract", onDisk.GetString(SettingKeys.DoubleClickAction));
+        Assert.Equal("a.zip;b.zip", onDisk.GetString(SettingKeys.RecentFiles));
+    }
+
+    /// <summary>
+    /// 反过来也要成立：显式删掉的键，合并写回时不能又从磁盘上长回来。
+    /// 「设置 → 安全」关掉保存口令时要删 <c>password_vault_paths</c> 那一行，
+    /// 只删内存不删磁盘等于开关关了、清单还在。
+    /// </summary>
+    [Fact]
+    public void SaveAppliesAnExplicitRemovalToWhatIsOnDisk()
+    {
+        var first = AppSettings.Load(_path);
+        first.SetString(SettingKeys.RecentFiles, "a.zip");
+        first.SetString("password_vault_paths", @"C:\a.zip|C:\b.zip");
+        first.Save(_path);
+
+        var second = AppSettings.Load(_path);
+        second.SetString("password_vault_paths", null);
+        second.Save(_path);
+
+        var onDisk = AppSettings.Load(_path);
+        Assert.False(onDisk.Has("password_vault_paths"));
+        Assert.Equal("a.zip", onDisk.GetString(SettingKeys.RecentFiles));
+    }
+
     [Fact]
     public void Load_MissingFile_YieldsDefaults()
     {
@@ -137,13 +189,14 @@ public class AppSettingsTests : IDisposable
         Assert.NotEqual(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar), Path.GetDirectoryName(path));
     }
 
-    // ---------- Reload：两份实例并存时的唯一安全网 ----------
+    // ---------- 两份实例并存：各写各的键，谁也不许抹掉谁 ----------
 
     /// <summary>
-    /// 主窗口与设置窗口各持一份实例，而写盘是"整份快照盖过去"。
-    /// 不重读的话有两件事会同时发生：界面按旧值重新应用（看着像设置没生效），
-    /// 以及主窗口下一次写盘把用户刚改的那一项抹掉（连重启都找不回来）。
-    /// 0.13.0 之前「自动展开树里的文件夹」就是这么坏的。
+    /// 主窗口与设置窗口（以及另一个双击起来的进程）各持一份实例。
+    /// <para>3.1.1 之前写盘是"整份快照盖过去"，于是老快照会把别人刚写的键抹掉，
+    /// 用户看到的就是「自动展开树里的文件夹」（0.13.0）与「双击直接解压」（3.1.1）
+    /// 这两次"设了没用"。现在 <c>Save</c> 只写自己改过的键，这一组用例钉的就是这两半：
+    /// 没碰过的键必须活着，碰过的键按最后落盘的算。</para>
     /// </summary>
     [Fact]
     public void Reload_PicksUpWhatAnotherInstanceWrote()
@@ -163,11 +216,16 @@ public class AppSettingsTests : IDisposable
         Assert.False(window.GetBool("view_auto_expand_tree", fallback: true));
     }
 
+    /// <summary>
+    /// 同一个键被两个实例改过时：后落盘的那一份赢 —— 这是没有锁的键值文件的边界。
+    /// <para>3.1.1 起 <c>Save</c> 只写自己改过的键，"谁没碰过的键都不该消失"由
+    /// <see cref="SaveFromAnOlderSnapshotKeepsKeysAnotherInstanceWrote"/> 钉住；这一条钉的是另一半：
+    /// 真的改了同一个键，仍然按最后写的算。想让自己写的值不被别人盖掉，办法还是先
+    /// <c>Reload</c> 再改（0.13.0 那条老规矩，它从"必须"降级成"想赢就得重读"）。</para>
+    /// </summary>
     [Fact]
-    public void StaleSnapshot_SaveErasesWhatAnotherInstanceWrote()
+    public void TwoInstancesWritingTheSameKey_LastWriterWins()
     {
-        // 反向钉住后果（而不是修复）：不重读就直接写盘，别人刚写的值会整条消失。
-        // 这条用例读起来像在给 bug 背书，它的用处是说明为什么 Reload 不能省。
         var window = AppSettings.Load(_path);
         window.SetString("language", "SimpChinese");
         window.Save(_path);
@@ -176,22 +234,22 @@ public class AppSettingsTests : IDisposable
         dialog.SetString("language", "English");
         dialog.Save(_path);
 
+        // 窗口手里那份还是 SimpChinese，但它没改过这个键 —— 再写一次不该动磁盘。
         window.Save(_path);
+        Assert.Equal("English", AppSettings.Load(_path).GetString("language"));
 
-        var afterClobber = AppSettings.Load(_path).GetString("language");
-        Assert.True(afterClobber == "SimpChinese", $"旧快照写盘应当把 English 抹掉，实际留下的是「{afterClobber}」");
+        // 它真的改了这个键，那就是后写的赢。
+        window.SetString("language", "SimpChinese");
+        window.Save(_path);
+        Assert.Equal("SimpChinese", AppSettings.Load(_path).GetString("language"));
 
-        // 反过来，先重读再写就两全：这一项保住了，窗口自己要记的那一项也记上了。
-        var other = AppSettings.Load(_path);
-        other.SetString("language", "English");
-        other.Save(_path);
-
+        // 先重读再改，两边都不丢：别人写的键保住了，窗口自己要记的那一项也记上了。
         window.Reload(_path);
         window.SetString("recent_files", @"C:\a.zip");
         window.Save(_path);
 
         var final = AppSettings.Load(_path);
-        Assert.Equal("English", final.GetString("language"));
+        Assert.Equal("SimpChinese", final.GetString("language"));
         Assert.Equal(@"C:\a.zip", final.GetString("recent_files"));
     }
 

@@ -21,6 +21,14 @@ public sealed class AppSettings
 
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 这个实例改过、但还没落盘的键。<see cref="Save"/> 只写这些，见 <see cref="Save"/> 那段。
+    /// </summary>
+    private readonly HashSet<string> _dirty = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>被显式删掉（<c>SetString(key, null)</c>）的键 —— 合并写回时要真的从磁盘上抹掉。</summary>
+    private readonly HashSet<string> _removed = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>设置文件的默认路径（%APPDATA%\Andzip\settings.ini）。拿不到用户目录时退回临时目录。</summary>
     public static string DefaultFilePath
     {
@@ -57,6 +65,8 @@ public sealed class AppSettings
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         _values.Clear();
+        _dirty.Clear();
+        _removed.Clear();
         if (!File.Exists(path))
         {
             return;
@@ -80,6 +90,19 @@ public sealed class AppSettings
         }
     }
 
+    /// <summary>
+    /// 落盘：<strong>只把这个实例改过的那几个键并回去</strong>，不是把内存里记得的全部重写一遍。
+    /// <para>为什么必须这样：这台机器上同时开着几个 Andzip 是常态 —— 每次双击压缩包都起一个新进程，
+    /// 每个进程手里是它<strong>启动那一刻</strong>读到的整份快照。旧写法（整文件覆盖）让任何一个
+    /// 老快照都能把别人刚写的键抹掉，而且抹掉的键连重启都找不回来（文件已经被覆盖了）。
+    /// 用户报的「双击直接解压怎么设都没用」就是这么来的：在 B 窗口里选了「直接解压」并落盘，
+    /// 回到早就开着的 A 窗口打开一个包，A 记一笔最近文件，顺手把 <c>double_click_action</c>
+    /// 一起擦掉了。</para>
+    /// <para>所以这里先重读磁盘，把<strong>自己改过的</strong>键盖上去、<strong>自己删过的</strong>键抹掉，
+    /// 再写回；写完把合并结果同步回本实例，下一次保存不带旧值。
+    /// 两个进程<strong>同时</strong>改同一个键仍然是后写的赢 —— 那是没有锁的键值文件的边界，
+    /// 但"谁没碰过的键都不该消失"这一条从此成立。</para>
+    /// </summary>
     public void Save(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -90,13 +113,39 @@ public sealed class AppSettings
             Directory.CreateDirectory(directory);
         }
 
-        var lines = new List<string>(_values.Count + 2)
+        var merged = new AppSettings();
+        merged.Reload(path);
+
+        foreach (var key in _dirty)
+        {
+            if (_values.TryGetValue(key, out var value))
+            {
+                merged._values[key] = value;
+            }
+        }
+
+        foreach (var key in _removed)
+        {
+            merged._values.Remove(key);
+        }
+
+        var lines = new List<string>(merged._values.Count + 2)
         {
             "; Andzip 设置文件。删除本文件即恢复全部默认值。",
             "; 手工编辑后需重启程序生效。",
         };
-        lines.AddRange(_values.Select(pair => $"{pair.Key} = {pair.Value}"));
+        lines.AddRange(merged._values.Select(pair => $"{pair.Key} = {pair.Value}"));
         File.WriteAllLines(path, lines);
+
+        // 本实例跟着磁盘上的这一份：刚写出去的键不再是"待写"，而别人写的键从这里开始也算见过。
+        _values.Clear();
+        foreach (var pair in merged._values)
+        {
+            _values[pair.Key] = pair.Value;
+        }
+
+        _dirty.Clear();
+        _removed.Clear();
     }
 
     public string GetString(string key, string fallback = "")
@@ -108,10 +157,14 @@ public sealed class AppSettings
         if (value is null)
         {
             _values.Remove(key);
+            _dirty.Remove(key);
+            _removed.Add(key);
         }
         else
         {
             _values[key] = value;
+            _removed.Remove(key);
+            _dirty.Add(key);
         }
     }
 
@@ -120,7 +173,8 @@ public sealed class AppSettings
             ? value.Equals("1", StringComparison.OrdinalIgnoreCase) || value.Equals("true", StringComparison.OrdinalIgnoreCase)
             : fallback;
 
-    public void SetBool(string key, bool value) => _values[key] = value ? "1" : "0";
+    /// <summary>写布尔一律走 <see cref="SetString"/>：脏键只在那一处登记，漏一处就等于白改。</summary>
+    public void SetBool(string key, bool value) => SetString(key, value ? "1" : "0");
 
     /// <summary>
     /// 整数值。存的不是数字（手改过、或来自更新版本）时回落到 <paramref name="fallback"/>，
@@ -129,7 +183,7 @@ public sealed class AppSettings
     public int GetInt(string key, int fallback = 0)
         => _values.TryGetValue(key, out var value) && int.TryParse(value, out var parsed) ? parsed : fallback;
 
-    public void SetInt(string key, int value) => _values[key] = value.ToString(CultureInfo.InvariantCulture);
+    public void SetInt(string key, int value) => SetString(key, value.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>分号分隔的字符串列表；空值表示空列表。</summary>
     public IReadOnlyList<string> GetStringList(string key)
