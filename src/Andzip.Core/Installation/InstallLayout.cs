@@ -218,7 +218,24 @@ public static class InstallLayout
         var name = Path.GetFileNameWithoutExtension(executablePath);
         return name.StartsWith(InstallerFileNamePrefix, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// 另一个作用域：装之前要先去看的那一处。
+    /// <para>存在的理由是"一台机器上只该有一份 Andzip"这条规矩 —— 两份同时在的代价不是磁盘上
+    /// 多 20 MB，而是桌面上两个都叫 Andzip 的图标、卸载表里两条都叫 Andzip 的项，
+    /// 以及两套文件关联互相盖（HKCU 压过 HKLM，于是"给所有人装"的那一份的关联永远不生效）。</para>
+    /// </summary>
+    public static InstallScope Opposite(InstallScope scope)
+        => scope == InstallScope.AllUsers ? InstallScope.CurrentUser : InstallScope.AllUsers;
 }
+
+/// <summary>
+/// 这台机器上已经装着的那一份：在哪个作用域名下、装在哪个目录、卸载表记的是哪个版本。
+/// </summary>
+/// <param name="Version">卸载表里的 <c>DisplayVersion</c>；没记时为 null。
+/// 界面上报的是"另一份是 2.8.0，在 C:\Program Files\Andzip" ——
+/// 版本只是让人认出来是哪一次装的，判据是目录。</param>
+public sealed record InstalledCopy(InstallScope Scope, string Directory, string? Version);
 
 /// <summary>
 /// 向导里「选定安装位置」那一页要报的三个事实，以及安装进行中的每一步。

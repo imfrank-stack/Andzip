@@ -87,26 +87,38 @@ internal sealed class InstallationService
     /// 测试与 <c>/selftest</c> 传探针键名，于是这一条可以在不碰开发机的前提下真跑。</param>
     public InstallPlan RecordedPlan(string uninstallKey = InstallLayout.UninstallKey)
     {
-        var machine = Recorded(InstallScope.AllUsers, uninstallKey);
-        var user = Recorded(InstallScope.CurrentUser, uninstallKey);
+        var machine = InstalledCopy(InstallScope.AllUsers, uninstallKey);
+        var user = InstalledCopy(InstallScope.CurrentUser, uninstallKey);
 
-        // 机器级与当前用户级可以同时在（先给自己装、后来又给所有人装一次），
-        // 而卸载程序是被某个具体 exe 的 UninstallString 拉起来的 —— 那个 exe 在哪，卸的就是哪一份。
+        // 一台机器上只该有一份（见 InstalledCopy），但"另一份还在"是这台机器当下的事实：
+        // 卸载程序是被某个具体 exe 的 UninstallString 拉起来的 —— 那个 exe 在哪，卸的就是哪一份。
         var scope = InstallLayout.ScopeFor(
-            Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty), machine, user);
+            Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty), machine?.Directory, user?.Directory);
         var recorded = scope == InstallScope.AllUsers ? machine : user;
 
         // 记着的位置已经不在盘上了（用户自己删了目录）也要照用：卸载要做的是
         // "把记着的那几处收干净"，指回默认目录反而会去删一个跟这次无关的位置。
-        return CurrentPlan(scope, string.IsNullOrWhiteSpace(recorded) ? null : recorded)
-            with { UninstallKey = uninstallKey };
+        return CurrentPlan(scope, recorded?.Directory) with { UninstallKey = uninstallKey };
+    }
 
-        string? Recorded(InstallScope scope, string key)
+    /// <summary>
+    /// 这个作用域下<strong>卸载表记着</strong>的那一份；没装过返回 null。
+    /// <para>判据是 <c>InstallLocation</c> 有值 —— 一条没有位置的卸载项没法照着它收回任何东西，
+    /// 把它当"装过"会让向导去卸一个不存在的地方。</para>
+    /// <para>存在的理由是"一台机器上只该有一份 Andzip"：装之前先去看<strong>另一个</strong>作用域
+    /// （<see cref="InstallLayout.Opposite"/>），有就报出来并先卸掉，不然桌面上会有两个都叫
+    /// Andzip 的图标、卸载表里两条都叫 Andzip 的项，而两套文件关联互相盖。</para>
+    /// </summary>
+    public InstalledCopy? InstalledCopy(InstallScope scope, string uninstallKey = InstallLayout.UninstallKey)
+    {
+        using var root = _root(scope);
+        using var opened = root.OpenSubKey(uninstallKey);
+        if (opened?.GetValue("InstallLocation") is not string { Length: > 0 } location)
         {
-            using var root = _root(scope);
-            using var opened = root.OpenSubKey(key);
-            return opened?.GetValue("InstallLocation") as string;
+            return null;
         }
+
+        return new InstalledCopy(scope, location, opened.GetValue("DisplayVersion") as string);
     }
 
     /// <summary>

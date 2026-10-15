@@ -183,9 +183,104 @@ public class MenuHoverTests
         }
     }
 
-    /// <summary>把「文件」菜单打开。返回窗口与那一条菜单栏，调用方负责 <see cref="Close"/>。</summary>
-    private static (Window, Menu) OpenFileMenu()
+    /// <summary>
+    /// 指针离开「菜单栏那一项 + 它开着的下拉」之后，下拉自己合上（3.2.0，用户报的）。
+    /// <para>用户 2026-10-15 的话：「当我的鼠标离开『帮助』那个区域的时候，自动关闭框体」。
+    /// Avalonia 的默认行为是"点开就一直挂着"，直到点别处或 Esc —— 而这块下拉压在主界面上，
+    /// 指针一移开它就变成一块没人管的白板。</para>
+    /// <para>后半条量的是<strong>连菜单模式一起退掉</strong>：只把 <c>IsSubMenuOpen</c> 置假，
+    /// 这一项仍留在 <c>Menu</c> 的菜单模式里、还是 <c>:selected</c>，主题那圈蓝就一直挂着。
+    /// 真机上量的：从没打开过 = 白 <c>FFFFFF</c>，按 Esc 关 = 白，指针离开关 = <c>CFECF8</c> 底
+    /// 配 <c>41B1E1</c> 边。Esc 走的是菜单自己那条收菜单的路，所以这里也走它。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void LeavingTheMenuAreaClosesTheDropDown()
     {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+
+            // 指针先真的落在那一项上（用户点开菜单就是这个形状），再移开
+            Hover(window, top);
+            Assert.True(top.IsSubMenuOpen, "前提：菜单已经打开了。");
+
+            window.MouseMove(new Point(window.Bounds.Width - 30, window.Bounds.Height - 30));
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+
+            Assert.False(top.IsSubMenuOpen, "指针已经离开菜单区域，下拉还开着。");
+
+            var blue = SampleBand(window, top).Count(IsThemeBlue);
+            Assert.True(blue == 0,
+                $"指针离开之后「{top.Header}」上还留着 {blue} 个蓝像素 —— 下拉合上了，"
+                + "但这一项没退出菜单模式，仍带着主题那圈 :selected 蓝");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>
+    /// 从菜单栏那一项往下挪进下拉里，菜单<strong>不许</strong>被关掉。
+    /// <para>这一条是上一条的反面，也是它真正的难点：下拉与菜单栏那一项分属两处
+    /// （弹窗住在本窗口的 <c>OverlayLayer</c> 上），指针跨过去的那一刻那一项必然收到一次
+    /// <c>PointerExited</c> —— 照着事件关，菜单点不动。所以要量的是<strong>位置</strong>：
+    /// 指针这会儿是不是还在这一项与它的弹窗围成的区域里。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void MovingFromTheHeaderIntoTheDropDownKeepsItOpen()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+            Hover(window, top);
+
+            var leaf = LeafOf(window);
+            Hover(window, leaf);
+
+            Assert.True(top.IsSubMenuOpen, $"指针从「{top.Header}」挪进了下拉（{leaf.Header}），菜单却被关掉了。");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>
+    /// 指针从来没进过菜单区域时，鼠标动一下不许把菜单收掉。
+    /// <para>键盘（Alt）开出来的菜单就是这个形状：用户的手不在鼠标上。这一条挡的是
+    /// "关闭"那一半被写成"只要指针不在区域里就关" —— 那样键盘用户一碰鼠标菜单就没了。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AMenuOpenedWithoutThePointerSurvivesAMouseMove()
+    {
+        var (window, menu) = OpenFileMenu();
+        try
+        {
+            var top = (MenuItem)menu.Items[0]!;
+            Assert.True(top.IsSubMenuOpen, "前提：菜单已经打开了。");
+
+            // 指针一直停在离菜单很远的地方，只在远处挪一下
+            window.MouseMove(new Point(20, window.Bounds.Height - 30));
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+            window.MouseMove(new Point(40, window.Bounds.Height - 30));
+            Dispatcher.UIThread.RunJobs();
+            UiWait.Pump(60);
+
+            Assert.True(top.IsSubMenuOpen, "指针压根没进过菜单区域，菜单却被鼠标的移动关掉了。");
+        }
+        finally
+        {
+            Close(window, menu);
+        }
+    }
+
+    /// <summary>把「文件」菜单打开。返回窗口与那一条菜单栏，调用方负责 <see cref="Close"/>。</summary>
+    private static (Window, Menu) OpenFileMenu()    {
         var menu = MainMenuBar.Create(TestLang.Chinese(), new Dictionary<string, System.Action>());
 
         // 菜单栏只占顶部那一行：Menu 自己会拉满整个 Panel，那样弹窗底下垫的还是菜单条的白。

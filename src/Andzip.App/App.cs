@@ -87,9 +87,15 @@ public sealed class App : Application
                 desktop.MainWindow = new InstallerWindow(
                     lang,
                     startsAsUninstaller: Has("/uninstall"),
-                    // 提权之后那一个新的实例带着这个开关：范围在那一步已经定了，
-                    // 而且这一份有了管理员权限，再问一遍"装给谁"是白问
-                    preselectedScope: Has("/all-users") ? InstallScope.AllUsers : null);
+                    // 提权之后那一个新的实例带着这两个开关之一：范围在那一步已经定了，
+                    // 而且这一份有了管理员权限，再问一遍"装给谁"是白问。两个都要 ——
+                    // "只给自己装，但要先卸掉 Program Files 里那一份"也会提权，
+                    // 那时范围仍然是当前用户。
+                    preselectedScope: Has(InstallerWindow.ArgumentAllUsers) ? InstallScope.AllUsers
+                        : Has(InstallerWindow.ArgumentCurrentUser) ? InstallScope.CurrentUser
+                        : null,
+                    // 卸另一份这件事跨不过进程：不提权就删不动，提了权回来又不能让它忘了要删
+                    replaceOther: Has(InstallerWindow.ArgumentReplaceOther));
                 base.OnFrameworkInitializationCompleted();
                 return;
             }

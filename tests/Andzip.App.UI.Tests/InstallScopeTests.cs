@@ -47,6 +47,7 @@ public class InstallScopeTests : IDisposable
     public void Dispose()
     {
         Registry.CurrentUser.DeleteSubKeyTree(ProbeKey, throwOnMissingSubKey: false);
+        Registry.CurrentUser.DeleteSubKeyTree(OneCopyRoot, throwOnMissingSubKey: false);
 
         try
         {
@@ -331,6 +332,183 @@ public class InstallScopeTests : IDisposable
         InstallDirectory = @"X:\Programs\Andzip",
         ExecutablePath = @"X:\Programs\Andzip\Andzip.exe",
     };
+
+    // ---------------- 一台机器只留一份：另一个作用域里那一份要先卸掉 ----------------
+
+    /// <summary>
+    /// 两个作用域各自的 HKCU 子键。
+    /// <para>与真的机器同构：<strong>相对键名是同一个，差别只在挂在哪个根上</strong> ——
+    /// 所以 <see cref="InstallationService.InstalledCopy"/> 用"另一个作用域 + 同一个键名"去问，
+    /// 问得到的就是另一份，问不到就是没有。用 <see cref="BothUsers"/> 那种"两个作用域同一个根"
+    /// 反而测不出这一条（两份会重叠成一份）。</para>
+    /// </summary>
+    private static RegistryKey ScopeRoot(InstallScope scope)
+        => Registry.CurrentUser.CreateSubKey(
+            $@"{OneCopyRoot}\{(scope == InstallScope.AllUsers ? "Machine" : "User")}");
+
+    private const string OneCopyRoot = @"Software\Andzip.Tests\OneCopy";
+    private const string OneCopyEntry = "Entry";
+
+    private InstallPlan One(InstallScope scope)
+        => (scope == InstallScope.AllUsers ? _machine : _user) with { UninstallKey = OneCopyEntry };
+
+    /// <summary>
+    /// 装第二份之前，向导必须先把第一份说出来。
+    /// <para>用户 2026-10-15 的话是「为所有用户安装和为我安装，会安装两份 App，这不对吧」——
+    /// 截图里桌面上并排两个都叫 Andzip 的图标，属性页一个指向 Program Files、一个指向
+    /// %LOCALAPPDATA%\Programs。两份同时在的代价不是磁盘，是这两行：<strong>没人分得清哪个是哪个</strong>。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheScopePageNamesTheOtherCopyAndOffersToRemoveIt()
+    {
+        var lang = TestLang.Chinese();
+        var machine = One(InstallScope.AllUsers);
+
+        InstallThrough(lang, machine);
+
+        var window = new InstallerWindow(
+            lang, One(InstallScope.CurrentUser), registryRoot: ScopeRoot,
+            startsAsUninstaller: false, preselectedScope: null, elevate: null).Shown();
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        var shown = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.True(shown.Contains(machine.InstallDirectory, StringComparison.Ordinal),
+            $"范围那一页没说出另一份在哪：{shown}");
+
+        var box = Assert.Single(VisualQuery.Of<CheckBox>(window), c => c.IsVisible);
+        Assert.True(box.IsChecked == true, "「装之前先卸载那一份」默认就该开着 —— 那是这条流程的规矩。");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 换作用域 = 换"对面那一份是谁"：这一行与那颗勾要跟着出现、跟着消失。
+    /// <para>为什么单独一条：同组其余几条都只在<strong>进页面时那一个作用域</strong>下读了一次，
+    /// 把两个单选钮的事件接线整段删掉它们照样全绿 —— 而那正是用户在真机上会撞的形状：
+    /// 从「仅为我自己」切到「所有用户」，警告还写着上一作用域那一份的目录，
+    /// 或者反过来，明明对面有一份却一个字不提，直接放过去装出第二份。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FlippingTheScopeRereadsWhichCopyIsTheOtherOne()
+    {
+        var lang = TestLang.Chinese();
+        var user = One(InstallScope.CurrentUser);
+
+        // 这台机器上只有「仅为我自己」那一份
+        InstallThrough(lang, user);
+
+        var window = new InstallerWindow(
+            lang, user, registryRoot: ScopeRoot,
+            startsAsUninstaller: false, preselectedScope: null, elevate: null).Shown();
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        Assert.DoesNotContain(VisualQuery.Of<CheckBox>(window), c => c.IsVisible);
+        Assert.DoesNotContain(user.InstallDirectory,
+            string.Join("|", VisualQuery.VisibleTexts(window)), StringComparison.Ordinal);
+
+        // 切到「所有用户」：对面那一份就是刚装好的这一份，必须当场说出来
+        Radios(window)[1].IsChecked = true;
+        UiWait.Pump(80);
+
+        var flipped = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.Contains(user.InstallDirectory, flipped, StringComparison.Ordinal);
+        Assert.Single(VisualQuery.Of<CheckBox>(window), c => c.IsVisible);
+
+        // 再切回去：不许留着上一作用域那一条（那是一句针对<strong>另一个目录</strong>的话）
+        Radios(window)[0].IsChecked = true;
+        UiWait.Pump(80);
+
+        Assert.DoesNotContain(VisualQuery.Of<CheckBox>(window), c => c.IsVisible);
+        Assert.DoesNotContain(user.InstallDirectory,
+            string.Join("|", VisualQuery.VisibleTexts(window)), StringComparison.Ordinal);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 不卸另一份就不给继续。
+    /// <para>这里挡住而不是"随你便"：一台机器一份是这条流程的规矩，
+    /// 真需要两份并存的人该用绿色版（那个目录谁都不写）。
+    /// 停下来的位置也要对 —— 跳过这一步去装，等于那条警告白写。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void RefusingToRemoveTheOtherCopyStopsTheWizard()
+    {
+        var lang = TestLang.Chinese();
+        var machine = One(InstallScope.AllUsers);
+        var user = One(InstallScope.CurrentUser);
+
+        InstallThrough(lang, machine);
+
+        var window = new InstallerWindow(
+            lang, user, registryRoot: ScopeRoot,
+            startsAsUninstaller: false, preselectedScope: null, elevate: null).Shown();
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        Assert.Single(VisualQuery.Of<CheckBox>(window), c => c.IsVisible).IsChecked = false;
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        var shown = string.Join("|", VisualQuery.VisibleTexts(window));
+        Assert.True(shown.Contains(lang.Label("TEXT_SETUP_SCOPE_TITLE"), StringComparison.Ordinal),
+            $"不同意卸掉另一份，就该停在范围那一页：{shown}");
+        Assert.Contains(lang.Label("TEXT_SETUP_REPLACE_OTHER_REQUIRED"), shown);
+        Assert.False(File.Exists(user.ExecutablePath), "被挡住了却还是开始装了。");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 同意之后：进度页第一步先卸另一份，再装这一份，最后这台机器上只剩这一份。
+    /// <para>顺序要紧 —— 先装再卸会把刚装好的那一份的注册表项一起收掉（两个作用域在测试里
+    /// 是两把不同的键，在真机上是同一个相对键名挂在两个根上）。</para>
+    /// <para>这一条只断言<strong>程序文件与卸载表那两处</strong>：测试里"另一份的落点"是拿
+    /// 当前这一份的 <c>_given</c> 改出来的（那是让整条往返不碰开发机的唯一办法），
+    /// 所以另一份的快捷方式路径在测试里不是它真装时那一条。真的那一处由
+    /// <c>PlanForScope → CurrentPlan(otherScope, dir)</c> 在运行时算，见开发记录第 69 条。</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AgreeingRemovesTheOtherCopyBeforeInstallingThisOne()
+    {
+        var lang = TestLang.Chinese();
+        var machine = One(InstallScope.AllUsers);
+        var user = One(InstallScope.CurrentUser);
+
+        InstallThrough(lang, machine);
+        Assert.True(File.Exists(machine.ExecutablePath), "前提：另一份没装出来。");
+
+        var window = new InstallerWindow(
+            lang, user, registryRoot: ScopeRoot,
+            startsAsUninstaller: false, preselectedScope: null, elevate: null).Shown();
+        Click(window, lang, "TEXT_BTN_NEXT");
+
+        Click(window, lang, "TEXT_BTN_NEXT");   // 范围（勾着"先卸另一份"）→ 位置
+        UncheckExtras(window);
+        Click(window, lang, "TEXT_BTN_INSTALL");
+
+        var shown = WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
+        Assert.True(shown.Contains(lang.Label("TEXT_SETUP_DONE_TITLE"), StringComparison.Ordinal));
+        Assert.False(File.Exists(machine.ExecutablePath), "说好了先卸另一份，Program Files 的替身里那一份还在。");
+        Assert.True(Registry.CurrentUser.OpenSubKey($@"{OneCopyRoot}\Machine\{OneCopyEntry}") is null,
+            "另一份的卸载表还在 —— 卸载表里会同时出现两条 Andzip。");
+        Assert.True(File.Exists(user.ExecutablePath), "这一份没装上。");
+
+        window.Close();
+    }
+
+    /// <summary>走完一次向导装好一份（两个勾选项关掉，免得动开发机上的关联与右键菜单）。</summary>
+    private void InstallThrough(LangCatalog lang, InstallPlan plan)
+    {
+        var window = new InstallerWindow(
+            lang, plan, registryRoot: ScopeRoot,
+            startsAsUninstaller: false, preselectedScope: null, elevate: null).Shown();
+
+        Click(window, lang, "TEXT_BTN_NEXT");
+        Click(window, lang, "TEXT_BTN_NEXT");
+        UncheckExtras(window);
+        Click(window, lang, "TEXT_BTN_INSTALL");
+        WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
+        window.Close();
+    }
 
     // --------------------------------------------------------------- 小工具
 

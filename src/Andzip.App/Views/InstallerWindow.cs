@@ -90,6 +90,19 @@ public sealed class InstallerWindow : Window
     private readonly RadioButton _forAll = new();
     private readonly TextBlock _scopeError = new() { IsVisible = false };
 
+    /// <summary>另一个作用域里已经装着的那一份：这一行说它是谁、在哪，以及要不要先卸掉。</summary>
+    private readonly TextBlock _scopeConflict = new() { IsVisible = false };
+    private readonly CheckBox _replaceOther = new() { IsVisible = false };
+
+    /// <summary>进「安装范围」那一页时读到的另一份；null 表示这台机器上只有正在装的这一份。</summary>
+    private InstalledCopy? _otherCopy;
+
+    /// <summary>
+    /// 这一次装之前要不要先卸掉另一作用域那一份。提权之后重开的那一份靠命令行把它接回来
+    /// （<c>/replace-other</c>）—— 范围与这一项都得跨进程带过去，否则提权回来就忘了要做什么。
+    /// </summary>
+    private bool _replaceOtherRequested;
+
     /// <summary>确认页上那句"没拿到管理员权限，收不了机器级那一份"。平时不占地方。</summary>
     private readonly TextBlock _uninstallError = new() { IsVisible = false };
     private readonly CheckBox _runAfter = new();
@@ -118,13 +131,16 @@ public sealed class InstallerWindow : Window
     /// 范围在那一步已经定了（而且这一份有权限了），所以直接从「选定安装位置」那一页开始，
     /// 不再问第二遍"装给谁"。</param>
     /// <param name="elevate">要管理员时怎么提权（默认以管理员身份重启自己）。测试传假的。</param>
+    /// <param name="replaceOther">提权重开之后那一份用它接回"装之前先卸掉另一作用域那一份"这件事 ——
+    /// 范围在那一步已经问过一遍，不该再问第二次，但也不能忘。</param>
     public InstallerWindow(
         LangCatalog lang,
         InstallPlan? plan = null,
         bool startsAsUninstaller = false,
         InstallScope? preselectedScope = null,
-        Func<InstallScope, bool>? elevate = null)
-        : this(lang, plan, null, startsAsUninstaller, preselectedScope, elevate)
+        Func<InstallScope, bool>? elevate = null,
+        bool replaceOther = false)
+        : this(lang, plan, null, startsAsUninstaller, preselectedScope, elevate, replaceOther)
     {
     }
 
@@ -137,14 +153,19 @@ public sealed class InstallerWindow : Window
         Func<InstallScope, RegistryKey>? registryRoot,
         bool startsAsUninstaller,
         InstallScope? preselectedScope,
-        Func<InstallScope, bool>? elevate)
+        Func<InstallScope, bool>? elevate,
+        bool replaceOther = false)
     {
         _lang = lang;
         _service = registryRoot is null ? new InstallationService(lang) : new InstallationService(lang, registryRoot);
         _given = plan;
         _uninstaller = startsAsUninstaller;
+        _replaceOtherRequested = replaceOther;
         _elevate = elevate ?? (scope => Elevation.TryRelaunch(
-            _uninstaller ? "/uninstall" : $"/install {ArgumentAllUsers}"));
+            _uninstaller
+                ? "/uninstall"
+                : $"/install {(scope == InstallScope.AllUsers ? ArgumentAllUsers : ArgumentCurrentUser)}"
+                    + (_replaceOtherRequested ? " " + ArgumentReplaceOther : string.Empty)));
 
         _plan = plan ?? (startsAsUninstaller ? _service.RecordedPlan() : _service.CurrentPlan());
 
@@ -235,8 +256,24 @@ public sealed class InstallerWindow : Window
         }
     }
 
-    /// <summary>提权重启时带上这个开关：那一份实例据此跳过「安装范围」那一页。</summary>
+    /// <summary>
+    /// 提权重启时带上这两个开关之一：那一份实例据此跳过「安装范围」那一页 —— 范围在那一步已经
+    /// 问过、而且这一份有权限了，再问一遍是白问。
+    /// <para><strong>两个都要，不能只发一个"要不要机器级"</strong>：提权的原因现在有两种，
+    /// 一种是"装到 Program Files"，另一种是"只给自己装，但要先卸掉 Program Files 里那一份"。
+    /// 后者提权之后范围仍然是<em>当前用户</em>，只发 <c>/all-users</c> 或不发就会让那一份
+    /// 要么按机器级去装、要么回到欢迎页重新问一遍。</para>
+    /// </summary>
     internal const string ArgumentAllUsers = "/all-users";
+
+    internal const string ArgumentCurrentUser = "/current-user";
+
+    /// <summary>
+    /// 提权重启时带上这个开关：那一份实例装之前先卸掉另一作用域里的那一份。
+    /// <para>为什么要跨进程带：卸掉 <c>Program Files</c> 里那一份要管理员，而"给自己装"
+    /// 本身不要 —— 于是提权是<em>为了这次卸载</em>而发生的，意图不能留在被关掉的那一份里。</para>
+    /// </summary>
+    internal const string ArgumentReplaceOther = "/replace-other";
 
     /// <summary>
     /// 记下这一页正文的高度，作为之后每一页的下限 —— 页与页之间<strong>只长不缩</strong>。
@@ -397,6 +434,21 @@ public sealed class InstallerWindow : Window
         options.Children.Add(_forAll);
         body.Children.Add(options);
 
+        // 换作用域就是换"另一份在哪"，所以这一行跟着两个钮动 —— 不是进页面时读一次就冻住。
+        // IsCheckedChanged 而不是 Checked：后者在 Avalonia 11.3 已标弃用，本仓库其余七处接的都是前者。
+        _forUser.IsCheckedChanged += (_, _) => RefreshConflict();
+        _forAll.IsCheckedChanged += (_, _) => RefreshConflict();
+
+        _replaceOther.Content = _lang.Label("TEXT_SETUP_REPLACE_OTHER");
+        _replaceOther.IsChecked = true;
+        _replaceOther.FontSize = Design.Type.Body;
+
+        _scopeConflict.Foreground = Design.Semantic.WarningText;
+        _scopeConflict.FontSize = Design.Type.Caption;
+        _scopeConflict.TextWrapping = TextWrapping.Wrap;
+        body.Children.Add(_scopeConflict);
+        body.Children.Add(_replaceOther);
+
         body.Children.Add(Text("TEXT_SETUP_SCOPE_NOTE", Design.Type.Caption, secondary: true));
 
         _scopeError.Foreground = Design.Semantic.Danger;
@@ -404,7 +456,36 @@ public sealed class InstallerWindow : Window
         _scopeError.TextWrapping = TextWrapping.Wrap;
         body.Children.Add(_scopeError);
 
+        RefreshConflict();
+
         return body;
+    }
+
+    /// <summary>
+    /// 另一个作用域里有没有已经装着的一份，有的话把话说清楚，并问要不要先卸掉。
+    /// <para>一台机器上留两份不是"多占 20 MB"：桌面上是两个都叫 Andzip 的图标、
+    /// 卸载表里是两条都叫 Andzip 的项，而两套文件关联互相盖（HKCU 压过 HKLM，
+    /// "给所有人装"那一份的关联永远不生效）。用户 2026-10-15 的话是"这不对吧"。</para>
+    /// </summary>
+    private void RefreshConflict()
+    {
+        var scope = _forAll.IsChecked == true ? InstallScope.AllUsers : InstallScope.CurrentUser;
+        _otherCopy = _service.InstalledCopy(InstallLayout.Opposite(scope), _plan.UninstallKey);
+
+        if (_otherCopy is not { } other)
+        {
+            _scopeConflict.IsVisible = false;
+            _replaceOther.IsVisible = false;
+            return;
+        }
+
+        _scopeConflict.Text = _lang.Format(
+            "TEXT_SETUP_SCOPE_CONFLICT",
+            ("scope", _lang.Label(other.Scope == InstallScope.AllUsers ? "TEXT_SETUP_SCOPE_ALL" : "TEXT_SETUP_SCOPE_USER")),
+            ("version", other.Version is { Length: > 0 } v ? v : _lang.Label("TEXT_SETUP_VERSION_UNKNOWN")),
+            ("dir", other.Directory));
+        _scopeConflict.IsVisible = true;
+        _replaceOther.IsVisible = true;
     }
 
     /// <summary>
@@ -419,8 +500,27 @@ public sealed class InstallerWindow : Window
         var scope = _forAll.IsChecked == true ? InstallScope.AllUsers : InstallScope.CurrentUser;
         var chosen = PlanForScope(scope);
 
-        if (Elevation.Needed(chosen))
+        // 两枚钮是事后读的，页面进来之后用户可能已经换过作用域 —— 重算一次再决定。
+        RefreshConflict();
+        _scopeError.IsVisible = false;
+
+        if (_otherCopy is { } stale && _replaceOther.IsChecked != true)
         {
+            // 不卸另一份就再装一份，等于亲手造出用户刚刚说"这不对吧"的那个状态。
+            // 这里挡住而不是"随你便"：一台机器一份是这条流程的规矩，要两份的人该用绿色版。
+            _scopeError.Text = _lang.Label("TEXT_SETUP_REPLACE_OTHER_REQUIRED");
+            _scopeError.IsVisible = true;
+            return;
+        }
+
+        // 卸掉机器级那一份要管理员，而"只给自己装"这一步本身不要 —— 所以提不提权
+        // 要看<strong>两件事加起来</strong>，不能只问这一次要装到哪。
+        var removing = _otherCopy is { } copy ? PlanForScope(copy.Scope, copy.Directory) : null;
+
+        if (Elevation.Needed(chosen) || (removing is { } other && Elevation.Needed(other)))
+        {
+            _replaceOtherRequested = removing is not null;
+
             if (_elevate(scope))
             {
                 Close();
@@ -432,7 +532,7 @@ public sealed class InstallerWindow : Window
             return;
         }
 
-        _scopeError.IsVisible = false;
+        _replaceOtherRequested = removing is not null;
         _plan = chosen;
 
         // 换作用域就把位置换成那一个作用域自己的默认目录（Program Files ↔ %LOCALAPPDATA%\Programs）。
@@ -446,8 +546,24 @@ public sealed class InstallerWindow : Window
     /// 换作用域算一份新落点。<strong>测试给的落点不换目录</strong>：那几处临时目录与探针键是
     /// "整条往返真跑一遍而不碰开发机"的全部凭据，换成真的 Program Files 就等于往开发机上装东西。
     /// </summary>
-    private InstallPlan PlanForScope(InstallScope scope)
-        => _given is null ? _service.CurrentPlan(scope) : _given with { Scope = scope };
+    /// <param name="directory">已经装好的那一份记着的目录（卸它时要按这个找回自己）；
+    /// null 用该作用域的默认位置。</param>
+    private InstallPlan PlanForScope(InstallScope scope, string? directory = null)
+    {
+        if (_given is null)
+        {
+            return _service.CurrentPlan(scope, directory);
+        }
+
+        return directory is null
+            ? _given with { Scope = scope }
+            : _given with
+            {
+                Scope = scope,
+                InstallDirectory = directory,
+                ExecutablePath = Path.Combine(directory, InstallLayout.ExeName),
+            };
+    }
 
     private Control Location()
     {
@@ -642,7 +758,24 @@ public sealed class InstallerWindow : Window
                 var source = Environment.ProcessPath
                     ?? throw new InvalidOperationException("拿不到自己的 exe 路径，无法复制。");
 
-                var outcome = await Task.Run(() => _service.Install(_plan, source, associate, contextMenu, progress));
+                // 现读一次，不用页面上那一条：从看到冲突到按下安装之间，用户可能已经从
+                // 控制面板把另一份卸了 —— 按屏幕上那行字去卸一个已经不存在的目录会报错给他看。
+                var stale = _replaceOtherRequested
+                    ? _service.InstalledCopy(InstallLayout.Opposite(_plan.Scope), _plan.UninstallKey)
+                    : null;
+
+                var outcome = await Task.Run(() =>
+                {
+                    if (stale is not null)
+                    {
+                        // 先卸另一份再装这一份。顺序反了会得到"两份都在，关联指向刚装的这一份"，
+                        // 而用户要的是一台机器一份。卸不掉就直接失败，不带着那份继续装。
+                        progress.Report(new ProgressStep("TEXT_SETUP_STEP_REPLACE_OTHER", 0));
+                        _service.Uninstall(PlanForScope(stale.Scope, stale.Directory));
+                    }
+
+                    return _service.Install(_plan, source, associate, contextMenu, progress);
+                });
                 _result = DoneMessage(outcome);
             }
             else

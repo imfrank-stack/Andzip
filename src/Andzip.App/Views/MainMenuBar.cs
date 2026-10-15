@@ -31,7 +31,8 @@ internal static class MainMenuBar
 
         foreach (var top in MainMenuModel.Create())
         {
-            var topItem = new MenuItem { Header = lang.Label(top.TextKey) }.MenuGrayHover().RoundOnOpen();
+            var topItem = new MenuItem { Header = lang.Label(top.TextKey) }
+                .MenuGrayHover().RoundOnOpen().CloseWhenPointerLeaves();
 
             foreach (var item in top.Items)
             {
