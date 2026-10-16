@@ -21,7 +21,7 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 /// 主菜单结构（对应需求文档附录 A，7 个顶级菜单）。
 /// <para>已接入的命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
 /// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、文件查找（Ctrl+F）、设置（F5）、
-/// 视图切换（F6）、关于（F1）、打开 Andzip 安装目录、转到官网，
+/// 关于（F1）、打开 Andzip 安装目录、转到官网，
 /// 以及「编辑」整排七项（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径，3.4.0）、
 /// 「视图 → 列设置」（4.1.0，勾一列当场少一列，选择记进 <c>hidden_columns</c>）。</para>
 /// <para><strong>模型里 <c>Enabled</c> 的语义是"这条实装过了"</strong>，不是"这条现在能点" ——
@@ -83,9 +83,6 @@ public static class MainMenuModel
     /// <summary>在资源管理器里打开当前压缩包所在目录并选中它。</summary>
     public const string CommandOpenArchiveFolder = "file.openfolder";
 
-    /// <summary>启动画面 / 压缩包视图切换（F6）。</summary>
-    public const string CommandToggleStartScreen = "view.start";
-
     /// <summary>
     /// 「视图 → 列设置」。<strong>这一条不是一条命令，而是一个子菜单的挂载点</strong>：
     /// 点它没有动作，展开的是"每一列勾着 / 不勾"那一排（与「最近的文件」同一种形状，
@@ -103,9 +100,6 @@ public static class MainMenuModel
 
     /// <summary>设置窗口（F5）。</summary>
     public const string CommandSettings = "options.settings";
-
-    /// <summary>密码管理器：本程序在系统凭据里存过哪些包的口令，以及删掉它们。</summary>
-    public const string CommandPasswordManager = "options.passman";
 
     /// <summary>在当前打开的压缩包清单里找文件（Ctrl+F）。</summary>
     public const string CommandFindFiles = "find.files";
@@ -232,24 +226,24 @@ public static class MainMenuModel
             // 没有接线的灰占位，真正的注册与撤销在「设置 → 文件关联」和「设置 → 上下文菜单」
             // 那两页上，各自都有「立即应用」。摆两条点了什么也不发生的菜单，
             // 只是让人以为这功能缺着（见开发记录第七节第 60 条那条不变式）。
-            MenuItemModel.Separator(),
-            new("options.passman", "MENUSTR_PASSMAN", Enabled: true, CommandId: CommandPasswordManager),
+            // 「密码管理器」4.3.0 跟着它背后那层存储一起删了 —— 这一页现在只有「设置」一条，
+            // 所以这一组不再需要分隔线。
         ]),
 
         new("view", "MENUSTR_VIEW",
         [
-            new("view.start", "MENUSTR_VIEW_STARTSCREEN", "F6", Enabled: true, CommandId: CommandToggleStartScreen),
+            // 「启动画面」（F6 在首页与压缩包视图之间来回）4.3.0 删了：来回这两面各有各的入口
+            // ——「文件 → 关闭压缩文件」回首页，打开一个包进压缩包视图，这一条是第三扇门。
+            // 「状态栏」「置顶」「颜色设置」也一并删：前一条与「设置 → 查看」里那个真正的开关
+            // 重复（而且这一条还是灰的），后两条对应的功能压根不存在。
             new("view.tree", "MENUSTR_VIEW_TREECONTROL", "F7"),
             new("view.comment", "MENUSTR_VIEW_COMMENT", "F8"),
             MenuItemModel.Separator(),
             new("view.preview", "MENUSTR_VIEW_PREVIEW"),
-            new("view.statusbar", "MENUSTR_VIEW_STATUS_BAR"),
             new("view.toolbar", "MENUSTR_VIEW_TOOLBAR"),
             new("view.style", "MENUSTR_VIEW_LISTVIEW"),
             new("view.columns", "MENUSTR_VIEW_COLUMN", Enabled: true, CommandId: CommandColumns),
             MenuItemModel.Separator(),
-            new("view.ontop", "MENUSTR_VIEW_ALWAYS_ON_TOP"),
-            new("view.color", "MENUSTR_VIEW_COLOR_SETTING"),
             new("view.theme", "MENUSTR_VIEW_THEME", Enabled: true, CommandId: CommandToggleTheme),
         ]),
 
@@ -265,8 +259,8 @@ public static class MainMenuModel
             MenuItemModel.Separator(),
             // 「转到帮助页面」删掉了（2.8.0）：它和「转到官网」是同一个目标换两个名字，
             // 而项目现在只有一个对外地址 —— 与其摆两条让人猜哪条是真的，不如只留一条。
+            // 「转到用户论坛」4.3.0 也删了：它从挂上来那天就是灰的，因为没有那个地址。
             new("help.folder", "MENUSTR_OPEN_FOLDER", Enabled: true, CommandId: CommandOpenInstallFolder),
-            new("help.forum", "MENUSTR_FORUM"),
             new("help.homepage", "MENUSTR_HOMEPAGE", Enabled: true, CommandId: CommandHomepage),
         ]),
     ];

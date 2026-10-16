@@ -426,23 +426,7 @@ TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT   = Once you type a password to open an en
 TEXT_SETTINGS_PASSWORDS_REMEMBERED      = ${count} archive password(s) remembered this run
 TEXT_BTN_FORGET_PASSWORDS               = Clear remembered passwords
 TEXT_SETTINGS_NO_PASSWORDS              = No passwords remembered this run yet.
-TEXT_SETTINGS_STORE_IN_VAULT            = Keep passwords in the Windows Credential Manager (across restarts)
-TEXT_SETTINGS_STORE_IN_VAULT_HINT       = When on, a password you type once for an archive is stored in Windows' credential store: encrypted by the system, readable only by your own account, and the same archive opens without asking again after a reboot. Passwords are never written to the settings file or the registry. Turning this off deletes every password already stored. It protects against plaintext on disk and against other accounts — it does not protect against a program running as you, and it does not claim to.
-TEXT_SETTINGS_STORED_PASSWORDS          = ${count} archive password(s) stored across restarts
-TEXT_SETTINGS_NO_STORED_PASSWORDS       = No passwords stored across restarts yet.
-TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = To see which archives are stored, or delete one: Options → Password manager. That screen lists paths and save times only — it never shows a password, and you cannot add one there. The only way to add one is to leave the switch above on and open the archive once.
-
-; ---- Password manager (Options → Password manager) ----
-TEXT_TITLE_PASSWORD_MANAGER             = Password manager
-TEXT_PASSWORD_MANAGER_INTRO             = These are the passwords this program has already put in the Windows Credential Manager, in two columns: which archive, and when it was saved. The passwords themselves never appear on this screen and are not entered here — to add one, turn on the saving switch in Settings → Security and open that archive once.
-TEXT_PASSWORD_MANAGER_UNSUPPORTED       = This machine has no system credential store to keep passwords in, so they stay in this run's memory only and disappear when the program exits.
-TEXT_PASSWORD_MANAGER_EMPTY             = No passwords have been stored for any archive.
-TEXT_PASSWORD_MANAGER_COUNT             = ${count} entries.
-TEXT_PASSWORD_MANAGER_SAVED             = saved ${when}
-TEXT_PASSWORD_MANAGER_DELETE_ONE        = Delete selected
-TEXT_PASSWORD_MANAGER_DELETE_ALL        = Delete all
-TEXT_PASSWORD_MANAGER_ASK_DELETE_ALL    = Delete all ${count} entries? Afterwards, opening those archives will ask for the password again.
-TEXT_TITLE_PASSWORD_NOT_SAVED           = Password not saved
+TEXT_SETTINGS_PASSWORD_MEMORY_NOTE      = This page does exactly what it says: passwords are kept for this run only. Since 3.0.0 there was also a tier that kept them in the Windows Credential Manager across restarts, with a Options → Password manager screen to go with it; that whole tier was removed in 4.3.0. An archive tool that holds on to your passwords can only ever "store" and "delete" them, and every consequence of that lands on you while the benefit stays invisible. With it gone, nothing writes a password to disk anywhere.
 
 ; ---- 安装器（正常安装 / 卸载）----
 TEXT_TITLE_INSTALLER                     = Install Andzip
@@ -547,18 +531,13 @@ MENUSTR_COPY_FULL_PATHNAMES             = Copy full file path
 MENUSTR_FIND_ITEM                       = Find Files (&I)
 
 MENUSTR_SETTING_SUB                     = &Settings
-MENUSTR_PASSMAN                         = Password manager...
 
-MENUSTR_VIEW_STARTSCREEN                = Start screen
 MENUSTR_VIEW_TREECONTROL                = Folder tree
 MENUSTR_VIEW_COMMENT                    = Archive comment
 MENUSTR_VIEW_PREVIEW                    = Image preview
-MENUSTR_VIEW_STATUS_BAR                 = Status bar
 MENUSTR_VIEW_TOOLBAR                    = Toolbar
 MENUSTR_VIEW_LISTVIEW                   = View style
 MENUSTR_VIEW_COLUMN                     = Columns
-MENUSTR_VIEW_ALWAYS_ON_TOP              = Always on top
-MENUSTR_VIEW_COLOR_SETTING              = Color settings...
 MENUSTR_VIEW_THEME                      = Dark mode
 
 MENUSTR_TOOLS_REPAIR                    = Repair archive...
@@ -566,7 +545,6 @@ MENUSTR_TOOLS_RECOVERY                  = Password recovery...
 
 MENUSTR_ABOUT                           = &About Andzip
 MENUSTR_OPEN_FOLDER                     = Open Andzip install folder (&O)
-MENUSTR_FORUM                           = Go to user forum (&F)
 MENUSTR_HOMEPAGE                        = Go to website (&W)
 
 ; ---- "Edit" menu (3.4.0): add/remove/rename, archive comment, clipboard ----

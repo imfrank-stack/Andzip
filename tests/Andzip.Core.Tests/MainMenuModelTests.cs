@@ -84,7 +84,7 @@ public class MainMenuModelTests
         Assert.Contains(menus.Single(m => m.Id == "file").Items, i => i.Shortcut == "Ctrl+N");
         Assert.Contains(menus.Single(m => m.Id == "file").Items, i => i.Shortcut == "Shift+Ctrl+Del");
         Assert.Contains(menus.Single(m => m.Id == "edit").Items, i => i.Shortcut == "Ctrl+Shift+M");
-        Assert.Contains(menus.Single(m => m.Id == "view").Items, i => i.Shortcut == "F6");
+        Assert.Contains(menus.Single(m => m.Id == "view").Items, i => i.Shortcut == "F7");
         Assert.Contains(menus.Single(m => m.Id == "help").Items, i => i.Shortcut == "F1");
     }
 
@@ -106,11 +106,10 @@ public class MainMenuModelTests
         Assert.True(homepage.Enabled);
         Assert.Equal(MainMenuModel.CommandHomepage, homepage.CommandId);
 
-        // 「转到用户论坛」还没有地址，所以它还得是灰的占位。拿官网凑一个是最容易犯、
-        // 也最难看出来的假 —— 点了确实有浏览器弹出来，只是去的不是它说的那个地方。
-        var forum = items.Single(i => i.Id == "help.forum");
-        Assert.False(forum.Enabled);
-        Assert.Null(forum.CommandId);
+        // 「转到用户论坛」4.3.0 整条删掉了。它从挂上来那天就是灰的占位，理由当时就写清楚了：
+        // 没有那个地址，而拿官网凑一个是最容易犯、也最难看出来的假 —— 点了确实有浏览器弹出来，
+        // 只是去的不是它说的那个地方。既然永远不会有那个地址，留着这一行就是留一个永远点不动的入口。
+        Assert.DoesNotContain(items, i => i.Id == "help.forum");
 
         // 「转到帮助页面」整条删掉：它和「转到官网」是同一个目标换两个名字。
         Assert.DoesNotContain(items, i => i.Id == "help.page");

@@ -28,7 +28,8 @@ public class HelpMenuTests
     }
 
     /// <summary>
-    /// 界面上真的看得见这三条活的、论坛那条仍然诚实地区着，而「转到帮助页面」整条不在了。
+    /// 界面上真的看得见那三条活的，「转到帮助页面」与「转到用户论坛」两条都不在，
+    /// 而这一排一共就三条 —— 多摆一条永远点不动的，不如不摆。
     /// <para>读的是<strong>真菜单</strong>不是模型：模型改对了而 <c>MainMenuBar</c> 把它过滤掉，
     /// 用户看到的还是旧的那一排。</para>
     /// </summary>
@@ -40,7 +41,8 @@ public class HelpMenuTests
 
         try
         {
-            var items = MenuWalk.All(Assert.Single(VisualQuery.Of<Menu>(window))).ToList();
+            var menu = VisualQuery.Of<Menu>(window).Single();
+            var items = MenuWalk.All(menu).ToList();
 
             string Visible(string key) => lang.Get(key).Replace("&", string.Empty, StringComparison.Ordinal);
 
@@ -50,10 +52,13 @@ public class HelpMenuTests
                 Assert.True(item.IsEnabled, $"「{Visible(key)}」在模型里已启用，界面上却是灰的");
             }
 
-            // 「转到用户论坛」还没有地址。没有地址就还没有这一条 —— 拿官网凑一个是最容易犯、
-            // 也最难被发现的假：点了确实有浏览器弹出来，只是去的不是它说的那个地方。
-            var forum = Assert.Single(items, i => Equals(i.Header?.ToString(), Visible("MENUSTR_FORUM")));
-            Assert.False(forum.IsEnabled, "还没有论坛地址，这条必须灰着");
+            // 「转到用户论坛」4.3.0 整条删了：没有那个地址，也不会有。这里按"这一排到底有几条"
+            // 断言，而不是去找那条已经不存在的文案 —— 键都跟着删了，读它只会先抛在取文案这一步。
+            // 拿官网凑一个论坛地址是最容易犯、也最难被发现的假：点了确实有浏览器弹出来，
+            // 只是去的不是它说的那个地方。
+            var help = Assert.Single(menu.Items.OfType<MenuItem>(),
+                i => Equals(i.Header?.ToString(), Visible("MENUSTR_HELP")));
+            Assert.Equal(3, help.Items.OfType<MenuItem>().Count());
 
             Assert.DoesNotContain(items, i => Equals(i.Header?.ToString(), Visible("MENUSTR_HELPPAGE")));
         }

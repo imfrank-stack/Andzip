@@ -100,8 +100,6 @@ public sealed class MainWindow : Window
     private AboutWindow? _about;
     private PasswordRecoveryWindow? _recovery;
 
-    /// <summary>密码管理器同一时刻只留一扇：开两扇列着一模一样清单的窗口，用户要开始数哪扇是真的。</summary>
-    private PasswordManagerWindow? _passwordManager;
     private readonly AppSettings _settings;
 
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
@@ -166,7 +164,6 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandDeleteArchive] = DeleteArchiveToRecycleBin,
             [MainMenuModel.CommandPermanentDeleteArchive] = PermanentlyDeleteArchive,
             [MainMenuModel.CommandOpenArchiveFolder] = OpenArchiveFolder,
-            [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
             [MainMenuModel.CommandToggleTheme] = ToggleTheme,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
@@ -178,7 +175,6 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandPasteEntries] = PasteEntriesAsync,
             [MainMenuModel.CommandCopyPaths] = CopyPathsAsync,
             [MainMenuModel.CommandRecoverPassword] = OpenPasswordRecoveryDialog,
-            [MainMenuModel.CommandPasswordManager] = OpenPasswordManagerDialog,
             [MainMenuModel.CommandAbout] = OpenAboutDialog,
             [MainMenuModel.CommandOpenInstallFolder] = OpenInstallFolder,
             [MainMenuModel.CommandHomepage] = OpenHomepage,
@@ -512,27 +508,9 @@ public sealed class MainWindow : Window
             _listing?.ArchivePath,
             PickArchiveAsync,
             PickDictionaryAsync,
-            (archive, password) => RememberPassword(archive, password));
+            (archive, password) => Session.Passwords.Remember(archive, password));
         window.Closed += (_, _) => _recovery = null;
         _recovery = window;
-        window.Show(this);
-    }
-
-    /// <summary>
-    /// 「选项 → 密码管理器」。存储直接取 <see cref="Session.Passwords"/> 上挂着的那一份 ——
-    /// 全程序只该有一个凭据存储实例，再开一份就是两个缓存互相看不见。
-    /// </summary>
-    private void OpenPasswordManagerDialog()
-    {
-        if (_passwordManager is { } existing)
-        {
-            existing.Activate();
-            return;
-        }
-
-        var window = new PasswordManagerWindow(_lang, Session.Passwords.Persistent);
-        window.Closed += (_, _) => _passwordManager = null;
-        _passwordManager = window;
         window.Show(this);
     }
 
@@ -1528,26 +1506,6 @@ public sealed class MainWindow : Window
         ShowHome();
     }
 
-    /// <summary>首页 / 压缩包视图切换（F6，FR-1.5）；未打开压缩包时保持首页。</summary>
-    private void ToggleStartScreen()
-    {
-        if (_browser is null || _listing is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(_contentHost.Content, _homeContent))
-        {
-            _contentHost.Content = _browser.Root;
-            Title = ArchiveTitle(_listing.ArchivePath);
-        }
-        else
-        {
-            _contentHost.Content = _homeContent;
-            Title = EngineTitle;
-        }
-    }
-
     // ---------- 命令 ----------
 
     /// <summary>
@@ -1682,21 +1640,6 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// 记下一个口令，并把"没能存进系统凭据"那一句实话讲出来。
-    /// <para>不吞掉返回值是这条存在的唯一理由：内存里记上了、持久层没收（口令超过单条凭据的
-    /// 字节上限，或系统直接拒绝写入）时，用户以为重启之后还能直接打开 —— 那句"已经保存"是假的。
-    /// 反过来这里<strong>不</strong>弹"保存成功"：一切正常时什么都不说，只在没存成的时候开口。</para>
-    /// </summary>
-    private void RememberPassword(string archivePath, string? password)
-    {
-        if (Session.Passwords.Remember(archivePath, password) is { } reason)
-        {
-            var warn = new MessageWindow(_lang, _lang.Get("TEXT_TITLE_PASSWORD_NOT_SAVED"), reason);
-            _ = warn.ShowDialog(this);
-        }
-    }
-
-    /// <summary>
     /// 读取清单并切到压缩包视图。加密包会在这里问密码 —— 清单本身就在包里，
     /// 所以「先试一次、要密码再问」比「先问一遍再试」少一次无谓的弹窗。
     /// </summary>
@@ -1743,7 +1686,7 @@ public sealed class MainWindow : Window
 
         if (password is { Length: > 0 })
         {
-            RememberPassword(archivePath, password);
+            Session.Passwords.Remember(archivePath, password);
         }
 
         ShowArchiveView(listing);
@@ -1868,7 +1811,7 @@ public sealed class MainWindow : Window
         // 从没验证过的口令直接失败 —— 用户看到的「密码错误」是他根本没输过的东西。
         if (prompted)
         {
-            RememberPassword(archivePath, password);
+            Session.Passwords.Remember(archivePath, password);
         }
 
         var extractionDefaults = ExtractionDefaults.Load(_settings);
@@ -1975,7 +1918,7 @@ public sealed class MainWindow : Window
         // 都不算，后者连包都没打开（缺文件、口令错），把那个口令记下来只会让下次开机直接失败。
         if (prompted && verified)
         {
-            RememberPassword(archivePath, password);
+            Session.Passwords.Remember(archivePath, password);
         }
 
         // 坏的是 ZIP 时，"要不要修"就在这一屏问完：用户刚看完坏成员名单，让他自己去找

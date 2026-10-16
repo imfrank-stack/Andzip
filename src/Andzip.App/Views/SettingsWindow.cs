@@ -2106,7 +2106,10 @@ public sealed class SettingsWindow : Window
 
     /// <summary>
     /// 安全页：本次运行的口令记忆。
-    /// <para>页面上那句"为什么没有跨重启的口令管理器"是刻意向用户解释少做了什么，
+    /// <para>这一页只有一个开关与一个"清掉"的动作。3.0.0 起这里还有第二层（跨重启，
+    /// 落在 Windows 凭据管理器上）与一扇「密码管理器」，4.3.0 整层撤掉了 ——
+    /// 于是这一页重新变成"能做的与写得一样多"。</para>
+    /// <para>页面上那句"口令不出这台机器、也不落盘"是刻意向用户说清楚少做了什么，
     /// 而不是留一个空板块让人以为还没加载出来。</para>
     /// </summary>
     private sealed class SecurityPage : ISettingsPage
@@ -2119,13 +2122,7 @@ public sealed class SettingsWindow : Window
         private readonly Button _clearButton;
         private readonly Button _applyButton;
 
-        /// <summary>跨重启那一层；这台机器上没有操作系统凭据存储时为 null。</summary>
-        private readonly Andzip.Core.Archive.IPersistentPasswordStore? _vault;
-        private readonly SettingToggle? _persist;
-        private readonly TextBlock? _stored;
-
         private bool _live;
-        private bool _livePersist;
 
         public SecurityPage(SettingsWindow owner, LangCatalog lang, AppSettings settings, string settingsPath)
         {
@@ -2133,7 +2130,6 @@ public sealed class SettingsWindow : Window
             _owner = owner;
             _lang = lang;
             _settingsPath = settingsPath;
-            _vault = Session.Passwords.Persistent;
 
             _remember = Check(lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS"), UpdateApplyState,
                 lang.Label("TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT"));
@@ -2147,15 +2143,6 @@ public sealed class SettingsWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Left,
             }.Ghost();
             _clearButton.Click += (_, _) => { Session.Passwords.Clear(); RefreshRemembered(); };
-
-            // 只有这台机器真有凭据存储时才摆这一行 —— 否则它是一个按下去什么也开不了的开关，
-            // 而设置页的规矩是"只放真正生效的项"。
-            if (_vault is not null)
-            {
-                _persist = Check(lang.Label("TEXT_SETTINGS_STORE_IN_VAULT"), UpdateApplyState,
-                    lang.Label("TEXT_SETTINGS_STORE_IN_VAULT_HINT"));
-                _stored = new TextBlock { Foreground = HintText, Margin = new Thickness(24, 4, 0, 0) };
-            }
 
             _applyButton = new Button
             {
@@ -2172,13 +2159,7 @@ public sealed class SettingsWindow : Window
             panel.Children.Add(_remember);
             panel.Children.Add(_remembered);
             panel.Children.Add(_clearButton);
-            if (_persist is { } persist)
-            {
-                panel.Children.Add(persist);
-                panel.Children.Add(_stored!);
-            }
-
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_PASSWORD_MANAGER_NOTE")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_PASSWORD_MEMORY_NOTE")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -2192,12 +2173,7 @@ public sealed class SettingsWindow : Window
         {
             var saved = AppSettings.Load(_settingsPath);
             _live = saved.GetBool(SettingKeys.RememberPasswordsThisSession, fallback: true);
-            _livePersist = saved.GetBool(SettingKeys.StorePasswordsInVault);
             _remember.IsChecked = _live;
-            if (_persist is { } persist)
-            {
-                persist.IsChecked = _livePersist;
-            }
 
             RefreshRemembered();
             UpdateApplyState();
@@ -2218,38 +2194,20 @@ public sealed class SettingsWindow : Window
                 ? _lang.Label("TEXT_SETTINGS_NO_PASSWORDS")
                 : _lang.Format("TEXT_SETTINGS_PASSWORDS_REMEMBERED", ("count", count.ToString()));
             _clearButton.IsEnabled = count > 0;
-
-            if (_stored is { } storedLine)
-            {
-                var storedCount = _vault?.List().Count ?? 0;
-                storedLine.Text = storedCount == 0
-                    ? _lang.Label("TEXT_SETTINGS_NO_STORED_PASSWORDS")
-                    : _lang.Format("TEXT_SETTINGS_STORED_PASSWORDS", ("count", storedCount.ToString()));
-            }
         }
 
-        private void UpdateApplyState()
-        {
-            var desiredPersist = _persist?.IsChecked == true;
-            _applyButton.IsEnabled = (_remember.IsChecked == true) != _live || desiredPersist != _livePersist;
-        }
+        private void UpdateApplyState() => _applyButton.IsEnabled = (_remember.IsChecked == true) != _live;
 
         private void Apply()
         {
             var desired = _remember.IsChecked == true;
-            var desiredPersist = _persist?.IsChecked == true;
-            if (desired == _live && desiredPersist == _livePersist)
+            if (desired == _live)
             {
                 return;
             }
 
             var settings = AppSettings.Load(_settingsPath);
             settings.SetBool(SettingKeys.RememberPasswordsThisSession, desired);
-            if (_persist is not null)
-            {
-                settings.SetBool(SettingKeys.StorePasswordsInVault, desiredPersist == true);
-            }
-
             settings.Save(_settingsPath);
 
             Session.Passwords.Enabled = desired;
@@ -2258,14 +2216,6 @@ public sealed class SettingsWindow : Window
                 // 关掉的同时把已经记住的清掉 —— 不然"关掉"只是不再新增，
                 // 用户以为没了、其实还在内存里。
                 Session.Passwords.Clear();
-            }
-
-            Session.Passwords.PersistPasswords = desiredPersist == true;
-            if (_livePersist && desiredPersist != true)
-            {
-                // 同上，只是这一层删的是磁盘上的凭据。所以那一行的说明里写明了"关掉会删掉已存的"，
-                // 而不是让用户事后自己猜。
-                _vault?.Clear();
             }
 
             RefreshRemembered();

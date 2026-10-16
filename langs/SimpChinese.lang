@@ -423,23 +423,7 @@ TEXT_SETTINGS_REMEMBER_PASSWORDS_HINT   = 打开一个加密包时输过一次�
 TEXT_SETTINGS_PASSWORDS_REMEMBERED      = 本次运行已记住 ${count} 个包的口令
 TEXT_BTN_FORGET_PASSWORDS               = 清除已记住的口令
 TEXT_SETTINGS_NO_PASSWORDS              = 本次运行还没有记住任何口令。
-TEXT_SETTINGS_STORE_IN_VAULT            = 把口令保存在 Windows 凭据管理器里（跨重启）
-TEXT_SETTINGS_STORE_IN_VAULT_HINT       = 打开之后，某个包输对过一次口令就存进 Windows 的凭据存储：由系统加密、只有你这个账户读得到，下次开机再打开同一个包不再问。口令不会写进设置文件，也不会写进注册表。关掉这一项会删掉已经保存的全部口令。它挡住的是"明文躺在磁盘上"和"别人用别的账户读走"，挡不住以你的身份运行的程序 —— 这一条不夸口。
-TEXT_SETTINGS_STORED_PASSWORDS          = 已跨重启保存 ${count} 个包的口令
-TEXT_SETTINGS_NO_STORED_PASSWORDS       = 还没有跨重启保存的口令。
-TEXT_SETTINGS_PASSWORD_MANAGER_NOTE     = 想看存了哪些包、或者删掉其中某一条：「选项 → 密码管理器」。那一屏只列路径和保存时间，不显示口令，也不在那里添加 —— 加口令只有一条路：开着上面这个开关，正常打开那个包输一次。
-
-; ---- 密码管理器（选项 → 密码管理器）----
-TEXT_TITLE_PASSWORD_MANAGER             = 密码管理器
-TEXT_PASSWORD_MANAGER_INTRO             = 下面是本程序已经存进 Windows 凭据管理器的口令，一共两列：哪个包、什么时候存的。口令本身不在这一屏上出现，也不在这里输入 —— 要新增一条，就开着「设置 → 安全」里的保存开关，正常打开那个包输一次口令。
-TEXT_PASSWORD_MANAGER_UNSUPPORTED       = 这台机器上没有可用来保存口令的系统凭据存储，所以口令只会留在本次运行的内存里，退出程序就没了。
-TEXT_PASSWORD_MANAGER_EMPTY             = 还没有为任何包保存口令。
-TEXT_PASSWORD_MANAGER_COUNT             = 共 ${count} 条。
-TEXT_PASSWORD_MANAGER_SAVED             = ${when} 保存
-TEXT_PASSWORD_MANAGER_DELETE_ONE        = 删除选中
-TEXT_PASSWORD_MANAGER_DELETE_ALL        = 全部删除
-TEXT_PASSWORD_MANAGER_ASK_DELETE_ALL    = 要删掉全部 ${count} 条吗？删掉之后，下次打开这些包需要重新输入口令。
-TEXT_TITLE_PASSWORD_NOT_SAVED           = 口令没有保存
+TEXT_SETTINGS_PASSWORD_MEMORY_NOTE      = 这一页能做的与写得一样多：口令只在这一次运行里记着。3.0.0 起这里还有一层"跨重启保存在 Windows 凭据管理器里"与一扇「密码管理器」，4.3.0 整层撤掉了 —— 一个解压工具替用户保管口令，能做的只有"存着"与"删掉"，而这件事的后果全归用户，好处却看不见摸不着。撤掉之后没有任何一处把口令写到盘上。
 
 ; ---- 安装器（正常安装 / 卸载）----
 TEXT_TITLE_INSTALLER                     = 安装 Andzip
@@ -544,18 +528,13 @@ MENUSTR_COPY_FULL_PATHNAMES             = 复制文件完整路径
 MENUSTR_FIND_ITEM                       = 文件查找(&I)
 
 MENUSTR_SETTING_SUB                     = 设置(&S)
-MENUSTR_PASSMAN                         = 密码管理器...
 
-MENUSTR_VIEW_STARTSCREEN                = 启动画面
 MENUSTR_VIEW_TREECONTROL                = 树形目录
 MENUSTR_VIEW_COMMENT                    = 压缩文件注释
 MENUSTR_VIEW_PREVIEW                    = 图像预览
-MENUSTR_VIEW_STATUS_BAR                 = 状态栏
 MENUSTR_VIEW_TOOLBAR                    = 工具栏
 MENUSTR_VIEW_LISTVIEW                   = 视图样式
 MENUSTR_VIEW_COLUMN                     = 列设置
-MENUSTR_VIEW_ALWAYS_ON_TOP              = 置顶
-MENUSTR_VIEW_COLOR_SETTING              = 颜色设置...
 MENUSTR_VIEW_THEME                      = 深色模式
 
 MENUSTR_TOOLS_REPAIR                    = 修复压缩包...
@@ -563,7 +542,6 @@ MENUSTR_TOOLS_RECOVERY                  = 密码恢复...
 
 MENUSTR_ABOUT                           = 关于 Andzip(&A)
 MENUSTR_OPEN_FOLDER                     = 打开 Andzip 安装目录(&O)
-MENUSTR_FORUM                           = 转到用户论坛(&F)
 MENUSTR_HOMEPAGE                        = 转到官网(&W)
 
 ; ---- 「编辑」菜单（3.4.0）：增删改名 / 压缩文件注释 / 剪贴板 ----
