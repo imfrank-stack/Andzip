@@ -15,10 +15,20 @@ internal sealed record RecentFilesMenu(
     Action<string> Open,
     Action Clear);
 
+/// <summary>
+/// 「视图 → 列设置」那一排要的两件事：现在关着哪些列、把某一列打开或关掉。
+/// <para>列的<strong>名单与标题不在这里</strong> —— 它们只有一个来源（<c>ArchiveView</c> 的列表定义），
+/// 菜单照着那份枚举。两边各写一份的话，改日菜单上就会有一行"文件版本"而表头根本没有那一列。</para>
+/// </summary>
+internal sealed record ColumnMenu(
+    Func<IReadOnlyList<string>> LoadHidden,
+    Action<string, bool> SetVisible);
+
 /// <summary>主菜单栏：由 <see cref="MainMenuModel"/>（需求文档附录 A 结构）渲染。</summary>
 internal static class MainMenuBar
 {
-    public static Menu Create(LangCatalog lang, IReadOnlyDictionary<string, Action> commands, RecentFilesMenu? recent = null)
+    public static Menu Create(LangCatalog lang, IReadOnlyDictionary<string, Action> commands,
+        RecentFilesMenu? recent = null, ColumnMenu? columns = null)
     {
         var menu = new Menu
         {
@@ -62,6 +72,11 @@ internal static class MainMenuBar
                     AttachRecentFiles(menuItem, lang, recent);
                 }
 
+                if (item.CommandId == MainMenuModel.CommandColumns && columns is not null)
+                {
+                    AttachColumns(menuItem, lang, columns);
+                }
+
                 topItem.Items.Add(menuItem);
             }
 
@@ -77,6 +92,7 @@ internal static class MainMenuBar
     /// </summary>
     private static void AttachRecentFiles(MenuItem host, LangCatalog lang, RecentFilesMenu recent)
     {
+        host.RoundOnOpen();
         Rebuild();
         host.SubmenuOpened += (_, _) => Rebuild();
 
@@ -111,5 +127,45 @@ internal static class MainMenuBar
             };
             host.Items.Add(clear);
         }
+    }
+
+    /// <summary>
+    /// 「视图 → 列设置」：每一列一行，勾着 = 显示。每次展开重建（与「最近的文件」同一个理由：
+    /// 关掉一列之后再看这排，勾必须已经变了，而不是等重启）。
+    /// </summary>
+    private static void AttachColumns(MenuItem host, LangCatalog lang, ColumnMenu columns)
+    {
+        // 这一层自己也是个子菜单：弹窗的面色是我们第一次展开时写上去的局部值，
+        // 顶层那一次 RoundPopups 管不到它（它那时还没打开），所以这一项自己要挂一次。
+        host.RoundOnOpen();
+        Rebuild();
+        host.SubmenuOpened += (_, _) => Rebuild();
+
+        void Rebuild()
+        {
+            host.Items.Clear();
+
+            var hidden = new HashSet<string>(columns.LoadHidden(), StringComparer.Ordinal);
+
+            foreach (var (key, title) in ArchiveView.ToggleableColumns(lang))
+            {
+                var visible = !hidden.Contains(key);
+                var item = new MenuItem
+                {
+                    Header = title,
+                    Icon = visible ? Check() : null,
+                }.MenuGrayHover();
+
+                item.Click += (_, _) => columns.SetVisible(key, !visible);
+                host.Items.Add(item);
+            }
+        }
+
+        static Control Check() => new TextBlock
+        {
+            Text = "✓",
+            FontSize = Design.Type.Body,
+            Foreground = Design.Ink.Primary,
+        };
     }
 }

@@ -22,7 +22,8 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 /// <para>已接入的命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
 /// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、文件查找（Ctrl+F）、设置（F5）、
 /// 视图切换（F6）、关于（F1）、打开 Andzip 安装目录、转到官网，
-/// 以及「编辑」整排七项（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径，3.4.0）。</para>
+/// 以及「编辑」整排七项（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径，3.4.0）、
+/// 「视图 → 列设置」（4.1.0，勾一列当场少一列，选择记进 <c>hidden_columns</c>）。</para>
 /// <para><strong>模型里 <c>Enabled</c> 的语义是"这条实装过了"</strong>，不是"这条现在能点" ——
 /// 后者由窗口按当前视图与选择现算（见 <see cref="ArchiveOnlyCommands"/> 与
 /// <see cref="SelectionCommands"/>）。
@@ -86,6 +87,13 @@ public static class MainMenuModel
     public const string CommandToggleStartScreen = "view.start";
 
     /// <summary>
+    /// 「视图 → 列设置」。<strong>这一条不是一条命令，而是一个子菜单的挂载点</strong>：
+    /// 点它没有动作，展开的是"每一列勾着 / 不勾"那一排（与「最近的文件」同一种形状，
+    /// 所以它同样要登记进主窗口那份"命令在别处接走"的名单里，不然构造时就抛）。
+    /// </summary>
+    public const string CommandColumns = "view.columns";
+
+    /// <summary>
     /// 深色模式开关。它做的事与「设置 → 查看 → 界面主题」里那一档是同一件，
     /// 只是<strong>给一个看得见的位置</strong> —— 那个下拉住在九页设置的第五页里，
     /// 用户找不到它，于是"夜间模式"这个已经做完的功能在界面上等于不存在
@@ -143,6 +151,9 @@ public static class MainMenuModel
     /// 只有"正开着某个压缩包"才能用的命令。模型里给 <c>Enabled: true</c>（表示这些是实装过的，
     /// 不是占位），窗口按当前视图把不符合条件的那几条真的置灰 ——
     /// 首页上摆一条能点、点了什么也没有的「删除压缩文件」比灰着更糟。
+    /// <para>「列设置」在这一组里是因为它<strong>改的是那张表的长相</strong>：首页上没有表，
+    /// 勾一下什么也不会发生（选择照样落盘，下一次开包生效）。让一条看得见、点下去没反应的
+    /// 菜单去"教"用户这个软件还有列可以挑，不如等那张表真的在屏幕上时再给这个入口。</para>
     /// </summary>
     public static IReadOnlyList<string> ArchiveOnlyCommands { get; } =
     [
@@ -151,6 +162,7 @@ public static class MainMenuModel
         CommandPermanentDeleteArchive,
         CommandOpenArchiveFolder,
         CommandFindFiles,
+        CommandColumns,
     ];
 
     /// <summary>
@@ -234,7 +246,7 @@ public static class MainMenuModel
             new("view.statusbar", "MENUSTR_VIEW_STATUS_BAR"),
             new("view.toolbar", "MENUSTR_VIEW_TOOLBAR"),
             new("view.style", "MENUSTR_VIEW_LISTVIEW"),
-            new("view.columns", "MENUSTR_VIEW_COLUMN"),
+            new("view.columns", "MENUSTR_VIEW_COLUMN", Enabled: true, CommandId: CommandColumns),
             MenuItemModel.Separator(),
             new("view.ontop", "MENUSTR_VIEW_ALWAYS_ON_TOP"),
             new("view.color", "MENUSTR_VIEW_COLOR_SETTING"),

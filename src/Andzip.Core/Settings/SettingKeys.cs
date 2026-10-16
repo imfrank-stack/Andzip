@@ -133,6 +133,16 @@ public static class SettingKeys
     /// </summary>
     public const string ViewTheme = "theme_mode";
 
+    /// <summary>
+    /// 被关掉的列表列，<c>;</c> 分隔的列标识（<c>compressed-size</c>、<c>crc</c>…，
+    /// 名单只有一个来源，见 <c>ArchiveView.BuildColumns</c>）。<strong>存的是"关掉的"而不是"开着的"</strong>：
+    /// 键缺失 = 一列都不关，正是引入这一项之前的界面。
+    /// <para>它<strong>不在「设置 → 查看」那一页上</strong> —— 那一页的开关是"程序长什么样"
+    /// （工具栏、树、主题），这一键是"那张表列出哪几栏"，两件事各有一个主人。
+    /// 一个键只归一处管（1.6.0 立的规矩）：两边都能改的话，两边就都会把对方的改动盖掉。</para>
+    /// </summary>
+    public const string HiddenColumns = "hidden_columns";
+
     // ------------------------------------------------------- 查看页：图标配色
     //
     // 用户自己调的那套渐变。存字符串而不是打包成一坨 JSON：这个设置文件的规矩就是

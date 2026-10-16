@@ -53,6 +53,13 @@ internal sealed class ArchiveView : IDisposable
     private readonly ArchiveFolderNode _root;
     private readonly Dictionary<ArchiveFolderNode, TreeViewItem> _treeItems = new();
     private readonly ColumnSpec[] _columns;
+
+    /// <summary>
+    /// 要画出来的列在 <see cref="_columns"/> 里的下标（按顺序，名称列永远第一，
+    /// 末尾那条吃剩余宽度的填充列永远在）。<strong>排序、列宽、表头点击都仍按真实下标说话</strong> ——
+    /// 换成"第几列"的序号来存，勾掉一列就会把所有已排序的列与记住的列宽整体错位。
+    /// </summary>
+    private int[] _shown;
     private readonly double[] _columnWidths = [.. DefaultColumnWidths];
     private readonly ViewDefaults _view;
 
@@ -88,7 +95,8 @@ internal sealed class ArchiveView : IDisposable
     /// </summary>
     /// <param name="view">「设置 → 查看」带来的界面骨架选择：树要不要、状态栏要不要、
     /// 开出来是列表还是图标。默认全开、默认列表 —— 与引入这一页之前完全一致。</param>
-    public ArchiveView(LangCatalog lang, ArchiveListing listing, ViewDefaults? view = null)
+    public ArchiveView(LangCatalog lang, ArchiveListing listing, ViewDefaults? view = null,
+        IEnumerable<string>? hiddenColumns = null)
     {
         _lang = lang;
         _listing = listing;
@@ -96,6 +104,7 @@ internal sealed class ArchiveView : IDisposable
         _root = ArchiveHierarchy.Build(listing);
         _current = _root;
         _columns = BuildColumns(lang);
+        _shown = Shown(_columns, hiddenColumns);
 
         _listToggle = ViewBar.Toggle(Icons.ListMode, lang.Label("TEXT_VIEW_DETAILS"), () => SetIconView(false));
         _iconToggle = ViewBar.Toggle(Icons.IconMode, lang.Label("TEXT_VIEW_ICONS"), () => SetIconView(true));
@@ -112,6 +121,17 @@ internal sealed class ArchiveView : IDisposable
 
     /// <summary>整块内容（树 + 详情 + 底部栏），挂到主窗口的内容区。</summary>
     public Control Root { get; }
+
+    /// <summary>
+    /// 换掉"关掉了哪些列"并<strong>就地</strong>重画（「视图 → 列设置」勾一下就走这条路）。
+    /// <para>不重建整份视图：重建会把当前所在的文件夹、展开状态与选中项一起丢掉，
+    /// 而"把 CRC 那一列关掉"不该让用户回到根目录重找一遍自己刚才在看的东西。</para>
+    /// </summary>
+    public void SetHiddenColumns(IEnumerable<string> hiddenColumns)
+    {
+        _shown = Shown(_columns, hiddenColumns);
+        Render();
+    }
 
     // ---------- 布局 ----------
 
@@ -469,14 +489,17 @@ internal sealed class ArchiveView : IDisposable
             VerticalAlignment = VerticalAlignment.Top,
         };
 
-        for (var i = 0; i < _columns.Length; i++)
+        // 画的是 _shown 里那几列，但每一格都带着自己的<strong>真实列号</strong>（index）：
+        // 排序状态、列宽、菜单里的勾选都以真实列号为身份 —— 用"第几格"当身份，
+        // 勾掉一列就会让记住的宽度与排序整体错位一格。
+        for (var position = 0; position < _shown.Length; position++)
         {
-            var index = i;
+            var index = _shown[position];
             var cell = new Button
             {
                 Content = new TextBlock
                 {
-                    Text = _columns[i].Title,
+                    Text = _columns[index].Title,
                     FontSize = Design.Type.Body,
                     FontWeight = Design.Type.Semibold,
                     Foreground = PrimaryText,
@@ -494,18 +517,18 @@ internal sealed class ArchiveView : IDisposable
                 VerticalContentAlignment = VerticalAlignment.Center,
             }.PinFace();
 
-            if (_columns[i].Compare is not null)
+            if (_columns[index].Compare is not null)
             {
                 cell.Cursor = new Cursor(StandardCursorType.Hand);
                 cell.Click += (_, _) => SortBy(index);
             }
 
-            if (index == _sortColumn && _columns[i].Compare is not null)
+            if (index == _sortColumn && _columns[index].Compare is not null)
             {
                 ((TextBlock)cell.Content).Text += _sortAscending ? "  ▲" : "  ▼";
             }
 
-            Grid.SetColumn(cell, ContentColumn(index));
+            Grid.SetColumn(cell, ContentColumn(position));
             header.Children.Add(cell);
 
             if (index < _columnWidths.Length)
@@ -519,8 +542,8 @@ internal sealed class ArchiveView : IDisposable
                     VerticalAlignment = VerticalAlignment.Stretch,
                     Cursor = new Cursor(StandardCursorType.SizeWestEast),
                 };
-                splitter.DragCompleted += (_, _) => CommitColumnWidths(header, index);
-                Grid.SetColumn(splitter, ContentColumn(index) + 1);
+                splitter.DragCompleted += (_, _) => CommitColumnWidths(header, position);
+                Grid.SetColumn(splitter, ContentColumn(position) + 1);
                 header.Children.Add(splitter);
             }
         }
@@ -536,9 +559,15 @@ internal sealed class ArchiveView : IDisposable
     private ColumnDefinitions BuildColumnDefinitions()
     {
         var definitions = new ColumnDefinitions();
-        foreach (var width in _columnWidths)
+        foreach (var index in _shown)
         {
-            definitions.Add(new ColumnDefinition(new GridLength(width, GridUnitType.Pixel))
+            // 末尾那条填充列不吃宽度：它占的就是最后那一列星号，所以这里跳过它。
+            if (index >= _columnWidths.Length)
+            {
+                continue;
+            }
+
+            definitions.Add(new ColumnDefinition(new GridLength(_columnWidths[index], GridUnitType.Pixel))
             {
                 MinWidth = MinimumColumnWidth,
             });
@@ -565,21 +594,22 @@ internal sealed class ArchiveView : IDisposable
     /// 那一列会回到一致的值，不会出现表头与内容错位。
     /// </para>
     /// </summary>
-    private void CommitColumnWidths(Grid header, int index)
+    private void CommitColumnWidths(Grid header, int position)
     {
-        RememberWidth(header, index);
-        RememberWidth(header, index + 1);
+        RememberWidth(header, position);
+        RememberWidth(header, position + 1);
         Render();
     }
 
-    private void RememberWidth(Grid header, int index)
+    private void RememberWidth(Grid header, int position)
     {
-        if (index >= _columnWidths.Length)
+        if (position >= _shown.Length || _shown[position] >= _columnWidths.Length)
         {
             return;
         }
 
-        var width = header.ColumnDefinitions[ContentColumn(index)].Width.Value;
+        var index = _shown[position];
+        var width = header.ColumnDefinitions[ContentColumn(position)].Width.Value;
         if (double.IsFinite(width) && width >= MinimumColumnWidth)
         {
             _columnWidths[index] = width;
@@ -614,20 +644,20 @@ internal sealed class ArchiveView : IDisposable
             Height = 28,
         };
 
-        for (var i = 0; i < _columns.Length; i++)
+        for (var position = 0; position < _shown.Length; position++)
         {
             var text = new TextBlock
             {
-                Text = _columns[i].Text(entry),
+                Text = _columns[_shown[position]].Text(entry),
                 FontSize = Design.Type.Body,
                 LineHeight = Design.Type.BodyLineHeight,
-                Foreground = i == 0 ? PrimaryText : SecondaryText,
+                Foreground = position == 0 ? PrimaryText : SecondaryText,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
             Control cell = text;
-            if (i == 0)
+            if (position == 0)
             {
                 // 名称列是「图标 + 文字」。这里必须用 Grid 而不是 StackPanel：StackPanel 测量
                 // 子项时给的是无限宽度，TextBlock 因此永远不会被约束，长名字会直接压到隔壁列上。
@@ -642,7 +672,7 @@ internal sealed class ArchiveView : IDisposable
                 cell = name;
             }
 
-            Grid.SetColumn(cell, ContentColumn(i));
+            Grid.SetColumn(cell, ContentColumn(position));
             row.Children.Add(cell);
         }
 
@@ -840,21 +870,40 @@ internal sealed class ArchiveView : IDisposable
 
     private static ColumnSpec[] BuildColumns(LangCatalog lang) =>
     [
-        new(lang.Label("TEXT_COLUMN_NAME"), e => e.Name, (a, b) => string.CompareOrdinal(a.Name, b.Name)),
-        new(lang.Label("TEXT_COLUMN_COMPRESSED_SIZE"), e => e.IsDirectory ? string.Empty : e.CompressedSize.ToString("N0"), Number(e => e.CompressedSize)),
-        new(lang.Label("TEXT_COLUMN_ORIGINAL_SIZE"), e => e.IsDirectory ? string.Empty : e.Size.ToString("N0"), Number(e => e.Size)),
-        new(lang.Label("TEXT_COLUMN_TYPE"), e => TypeText(lang, e), (a, b) => string.CompareOrdinal(TypeText(lang, a), TypeText(lang, b))),
-        new(lang.Label("TEXT_COLUMN_MODIFIED"), ModifiedText,
+        new("name", lang.Label("TEXT_COLUMN_NAME"), e => e.Name, (a, b) => string.CompareOrdinal(a.Name, b.Name)),
+        new("compressed-size", lang.Label("TEXT_COLUMN_COMPRESSED_SIZE"), e => e.IsDirectory ? string.Empty : e.CompressedSize.ToString("N0"), Number(e => e.CompressedSize)),
+        new("original-size", lang.Label("TEXT_COLUMN_ORIGINAL_SIZE"), e => e.IsDirectory ? string.Empty : e.Size.ToString("N0"), Number(e => e.Size)),
+        new("type", lang.Label("TEXT_COLUMN_TYPE"), e => TypeText(lang, e), (a, b) => string.CompareOrdinal(TypeText(lang, a), TypeText(lang, b))),
+        new("modified", lang.Label("TEXT_COLUMN_MODIFIED"), ModifiedText,
             (a, b) => DateTime.Compare(a.Modified ?? default, b.Modified ?? default)),
-        new(lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), e => e.Method ?? string.Empty,
+        new("method", lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), e => e.Method ?? string.Empty,
             (a, b) => string.CompareOrdinal(a.Method ?? string.Empty, b.Method ?? string.Empty)),
-        new(lang.Label("TEXT_LABEL_ENCRYPTION_METHOD"), e => e.IsEncrypted ? lang.Label("TEXT_ENCRYPTED_FLAG") : string.Empty, null),
-        new(lang.Label("TEXT_COLUMN_CRC"), e => e.Crc?.ToString("x8") ?? string.Empty, null),
-        new(lang.Label("TEXT_COLUMN_ATTRIBUTES"), AttributeText, null),
-        new(lang.Label("TEXT_COLUMN_COMMENT"), e => e.Comment ?? string.Empty, null),
-        new(lang.Label("TEXT_COLUMN_EXTRA"), e => ExtraText(lang, e), null),
-        new(string.Empty, _ => string.Empty, null),
+        new("encryption", lang.Label("TEXT_LABEL_ENCRYPTION_METHOD"), e => e.IsEncrypted ? lang.Label("TEXT_ENCRYPTED_FLAG") : string.Empty, null),
+        new("crc", lang.Label("TEXT_COLUMN_CRC"), e => e.Crc?.ToString("x8") ?? string.Empty, null),
+        new("attributes", lang.Label("TEXT_COLUMN_ATTRIBUTES"), AttributeText, null),
+        new("comment", lang.Label("TEXT_COLUMN_COMMENT"), e => e.Comment ?? string.Empty, null),
+        new("extra", lang.Label("TEXT_COLUMN_EXTRA"), e => ExtraText(lang, e), null),
+        new(string.Empty, string.Empty, _ => string.Empty, null),
     ];
+
+    /// <summary>
+    /// 「视图 → 列设置」那一排要列出来的列：<strong>名称列永远在，末尾那条吃剩余宽度的填充列不算</strong>。
+    /// <para>标题与表头读的是同一份 <see cref="BuildColumns"/> —— 菜单里写「修改日期」而表头写「修改时间」
+    /// 这种错，在这里结构上就发生不了。</para>
+    /// </summary>
+    public static IReadOnlyList<(string Key, string Title)> ToggleableColumns(LangCatalog lang)
+        => [.. BuildColumns(lang)
+            .Where(column => column.Key.Length > 0 && column.Key != "name")
+            .Select(column => (column.Key, column.Title))];
+
+    /// <summary>按"关掉了哪些"算出要画的下标表。空集合与 null 同义：全都显示。</summary>
+    private static int[] Shown(ColumnSpec[] columns, IEnumerable<string>? hiddenColumns)
+    {
+        var hidden = new HashSet<string>(hiddenColumns ?? [], StringComparer.Ordinal);
+
+        return [.. Enumerable.Range(0, columns.Length)
+            .Where(i => columns[i].Key.Length == 0 || columns[i].Key == "name" || !hidden.Contains(columns[i].Key))];
+    }
 
     private static Comparison<ArchiveEntryInfo> Number(Func<ArchiveEntryInfo, long> selector)
         => (a, b) => selector(a).CompareTo(selector(b));
@@ -931,5 +980,5 @@ internal sealed class ArchiveView : IDisposable
     }
 
     /// <summary>一列的定义：表头文案、单元格文本、可选比较器（null 表示该列不可排序）。</summary>
-    private sealed record ColumnSpec(string Title, Func<ArchiveEntryInfo, string> Text, Comparison<ArchiveEntryInfo>? Compare);
+    private sealed record ColumnSpec(string Key, string Title, Func<ArchiveEntryInfo, string> Text, Comparison<ArchiveEntryInfo>? Compare);
 }

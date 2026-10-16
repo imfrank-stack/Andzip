@@ -84,7 +84,8 @@ public sealed class MainWindow : Window
     /// 已启用、但<strong>不归主窗口命令表管</strong>的那几条。「最近的文件」的条目是展开时现生成的
     /// （见 <c>MainMenuBar</c>），它没有"点一下这条菜单"这个动作。
     /// </summary>
-    private static readonly IReadOnlyList<string> HandledElsewhere = [MainMenuModel.CommandRecentFiles];
+    private static readonly IReadOnlyList<string> HandledElsewhere =
+        [MainMenuModel.CommandRecentFiles, MainMenuModel.CommandColumns];
 
     private FindWindow? _find;
     private AboutWindow? _about;
@@ -103,11 +104,22 @@ public sealed class MainWindow : Window
     /// <summary>「设置 → 高级 → 标题栏显示完整路径」。</summary>
     private bool _titleShowsFullPath;
 
+    /// <summary>
+    /// 「视图 → 列设置」里被关掉的列。<strong>它不在 <see cref="_view"/> 里</strong>：
+    /// 那一份是「设置 → 查看」那一页的数据形状，这一份归「视图」菜单管；
+    /// 混在一起的话，设置页每次「应用」都会顺手把用户刚从菜单里关掉的列放回来
+    /// —— 一个键只归一处管，这条规矩在 1.6.0 就是为这个立的。
+    /// <para>它是<strong>全局</strong>的，不是"每个包一套列"：列的选择关于这个界面，
+    /// 下一次打开任何包都该还是那些列。</para>
+    /// </summary>
+    private readonly List<string> _hiddenColumns;
+
     public MainWindow(LangCatalog lang, AppSettings settings)
     {
         _lang = lang;
         _settings = settings;
         _view = ViewDefaults.Load(settings);
+        _hiddenColumns = [.. settings.GetStringList(SettingKeys.HiddenColumns)];
 
         Title = EngineTitle;
         Width = 1040;
@@ -166,7 +178,8 @@ public sealed class MainWindow : Window
         var root = new DockPanel();
 
         _menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
-            LoadRecentFiles, OpenRecentFile, ClearRecentFiles));
+            LoadRecentFiles, OpenRecentFile, ClearRecentFiles),
+            new ColumnMenu(() => _hiddenColumns, SetColumnVisible));
 
         // 模型里 Enabled: true 的语义是"这条实装过了"。自称实装了却没接到命令，界面上就是
         // 一条黑字、能点、点下去什么都不发生 —— 那比灰着危险得多（文件菜单那四条置灰的同一条判断）。
@@ -409,7 +422,7 @@ public sealed class MainWindow : Window
     private void ShowArchiveView(ArchiveListing listing)
     {
         _browser?.Dispose();
-        _browser = new ArchiveView(_lang, listing, _view);
+        _browser = new ArchiveView(_lang, listing, _view, _hiddenColumns);
         _listing = listing;
         CloseFindWindow();
         _contentHost.Content = _browser.Root;
@@ -1525,6 +1538,31 @@ public sealed class MainWindow : Window
         _settings.SetString(SettingKeys.ViewTheme, mode.ToStorage());
         _settings.Save(AppSettings.DefaultFilePath);
         ApplyViewDefaults();
+    }
+
+    /// <summary>
+    /// 「视图 → 列设置」勾 / 取消一列：改内存里那一份、落盘、<strong>当场</strong>重画。
+    /// <para>重画走 <see cref="ArchiveView.SetHiddenColumns"/> 而不是重建整份视图 ——
+    /// 关掉一列不该把用户送回根目录重找自己刚才在看的东西。</para>
+    /// <para>存的是"关掉了哪些"，不是"显示着哪些"：新增一列时默认就是显示的，
+    /// 老设置里没提到它，不用为每一列写一次迁移。首页上这一项是灰的（在
+    /// <see cref="MainMenuModel.ArchiveOnlyCommands"/> 里），所以这里不必为"没开着包"另写一支。</para>
+    /// </summary>
+    private void SetColumnVisible(string key, bool visible)
+    {
+        if (visible)
+        {
+            _hiddenColumns.Remove(key);
+        }
+        else if (!_hiddenColumns.Contains(key))
+        {
+            _hiddenColumns.Add(key);
+        }
+
+        _settings.SetStringList(SettingKeys.HiddenColumns, _hiddenColumns);
+        _settings.Save(AppSettings.DefaultFilePath);
+
+        _browser?.SetHiddenColumns(_hiddenColumns);
     }
 
     /// <summary>
