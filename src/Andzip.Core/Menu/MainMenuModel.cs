@@ -47,6 +47,23 @@ public static class MainMenuModel
     /// <summary>测试压缩包完整性（Ctrl+T；未打开时同样先选择压缩包）。</summary>
     public const string CommandTestArchive = "file.test";
 
+    /// <summary>
+    /// 扫描压缩包里的恶意软件（Ctrl+I）。<strong>Andzip 自己没有病毒库，也不上传任何文件</strong>：
+    /// 这一条做的只是"把这个文件交给这台机器上已经注册的反恶意软件引擎（AMSI）判断一次"。
+    /// 引擎不在、或它管不了这类内容，界面上就照实说。
+    /// </summary>
+    public const string CommandScanArchive = "file.scan";
+
+    /// <summary>另起一个 Andzip 进程，开一扇新窗口（Ctrl+Shift+N）。当前开着包就一起带过去。</summary>
+    public const string CommandNewWindow = "file.newwindow";
+
+    /// <summary>
+    /// 同上，但那一扇是<strong>提权之后</strong>启动的（Ctrl+Alt+N）。
+    /// <para>提权框由系统弹、由用户按 —— 这一条存在的意义就是"用户明确要一次管理员窗口"，
+    /// 其余任何路径都不许顺手提权（红线：绝不静默提权）。</para>
+    /// </summary>
+    public const string CommandNewWindowAdmin = "file.newwindowadmin";
+
     /// <summary>修复损坏的 ZIP（三种模式由用户选；只写副本，绝不动原包）。</summary>
     public const string CommandRepairArchive = "tools.repair";
 
@@ -169,11 +186,11 @@ public static class MainMenuModel
             new("file.openfolder", "MENUSTR_OPEN_ARCHIVE_FOLDER", Enabled: true, CommandId: CommandOpenArchiveFolder),
             MenuItemModel.Separator(),
             new("file.test", "MENUSTR_TEST_ARCHIVE", "Ctrl+T", Enabled: true, CommandId: CommandTestArchive),
-            new("file.scan", "MENUSTR_SCAN_ARCHIVE", "Ctrl+I"),
+            new("file.scan", "MENUSTR_SCAN_ARCHIVE", "Ctrl+I", Enabled: true, CommandId: CommandScanArchive),
             new("file.extract", "MENUSTR_EXTRACT_FILE", "Ctrl+E", Enabled: true, CommandId: CommandExtractArchive),
             MenuItemModel.Separator(),
-            new("file.newwindow", "MENUSTR_NEW_WINDOW", "Ctrl+Shift+N"),
-            new("file.newwindowadmin", "MENUSTR_NEW_WINDOW_ADMIN", "Ctrl+Alt+N"),
+            new("file.newwindow", "MENUSTR_NEW_WINDOW", "Ctrl+Shift+N", Enabled: true, CommandId: CommandNewWindow),
+            new("file.newwindowadmin", "MENUSTR_NEW_WINDOW_ADMIN", "Ctrl+Alt+N", Enabled: true, CommandId: CommandNewWindowAdmin),
             MenuItemModel.Separator(),
             new("file.exit", "MENUSTR_EXIT", "Ctrl+W", Enabled: true, CommandId: CommandExit),
         ]),

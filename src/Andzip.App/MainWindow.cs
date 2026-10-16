@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using Andzip.App.Services;
 using Andzip.App.Views;
@@ -136,6 +137,9 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandCloseArchive] = CloseArchive,
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
             [MainMenuModel.CommandTestArchive] = TestArchiveAsync,
+            [MainMenuModel.CommandScanArchive] = ScanForMalwareAsync,
+            [MainMenuModel.CommandNewWindow] = () => NewWindow(elevated: false),
+            [MainMenuModel.CommandNewWindowAdmin] = () => NewWindow(elevated: true),
             [MainMenuModel.CommandRepairArchive] = () => RepairArchiveAsync(),
             [MainMenuModel.CommandSaveArchiveAs] = SaveArchiveAsAsync,
             [MainMenuModel.CommandDeleteArchive] = DeleteArchiveToRecycleBin,
@@ -552,6 +556,125 @@ public sealed class MainWindow : Window
 
     /// <summary>「帮助 → 转到官网」：交给系统默认浏览器。地址只有一个来源，见 <c>AndzipLinks</c>。</summary>
     private void OpenHomepage() => AboutWindow.OpenUrl(AndzipLinks.Homepage);
+
+    // ---------- 文件 → 扫描恶意软件 / 新建程序窗口（普通与管理员） ----------
+
+    /// <summary>
+    /// 「扫描压缩包中的恶意软件」（Ctrl+I）：把这<strong>一个包文件</strong>交给本机已注册的反恶意软件
+    /// 引擎（AMSI）问一次。没有包开着就先让人挑一个，与「测试压缩包」同一套路。
+    /// <para><strong>Andzip 不带病毒库，也不上传任何文件</strong> —— 这一条只是"问"，
+    /// 问不到（这台机器上没有引擎、引擎报错、文件太大）就照实说问不到，不猜"干净"。
+    /// 详见 <see cref="AntimalwareScanner"/>。</para>
+    /// <para>进度条是不确定态：引擎不给百分比，编一根假走的条比没有条更糟。</para>
+    /// <para>AMSI 没有可中断的点，所以这里的"取消"只能是<strong>不再等它</strong>：结果回来时
+    /// 用户已经取消，就一个字都不说 —— 那时候把回来的那句"没发现"摆到屏幕上，是替引擎撒谎。</para>
+    /// </summary>
+    private async void ScanForMalwareAsync()
+    {
+        var path = _listing?.ArchivePath ?? await PickArchiveAsync();
+        if (path is null)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_SCANNING",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+
+        _ = progress.ShowDialog(this);
+
+        AntimalwareScanner.Report report;
+        try
+        {
+            report = await Task.Run(() => AntimalwareScanner.Scan(path), cts.Token);
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+            // 取消不算故障；其余（文件被占用、路径没了）原样转达。
+            if (ex is not OperationCanceledException)
+            {
+                await ShowMessageAsync("TEXT_TITLE_ERROR", ex.Message);
+            }
+
+            return;
+        }
+
+        progress.Close();
+
+        if (cts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await ShowMessageAsync("TEXT_TITLE_SCAN", ScanVerdictText(report));
+    }
+
+    private string ScanVerdictText(AntimalwareScanner.Report report)
+    {
+        // 每一句都是两段：第一段答"结果是什么"，第二段说"这话的边界在哪"。
+        // 语言包一行一条，段落由这里拼 —— 换行不是文案的事，是显示的事。
+        string Two(string first, string second) => string.Join(Environment.NewLine, first, _lang.Get(second));
+
+        return report.Verdict switch
+        {
+            AntimalwareScanner.Verdict.Clean => Two(_lang.Get("TEXT_SCAN_CLEAN"), "TEXT_SCAN_NOTE"),
+            AntimalwareScanner.Verdict.Detected => Two(_lang.Get("TEXT_SCAN_DETECTED"), "TEXT_SCAN_HANDLING"),
+            AntimalwareScanner.Verdict.NoEngine => Two(_lang.Get("TEXT_SCAN_NO_ENGINE"), "TEXT_SCAN_NO_ENGINE_HOW"),
+            AntimalwareScanner.Verdict.TooBig => Two(
+                _lang.Format("TEXT_SCAN_TOO_BIG", ("limit", (AntimalwareScanner.LimitBytes / 1024 / 1024).ToString())),
+                "TEXT_SCAN_TOO_BIG_NOTE"),
+            _ => _lang.Format("TEXT_SCAN_FAILED", ("code", report.Code ?? "?")),
+        };
+    }
+
+    /// <summary>
+    /// 「新建程序窗口」与它的管理员版（Ctrl+Shift+N / Ctrl+Alt+N）：<strong>另起一个进程</strong>，
+    /// 不是在当前窗口里再开一块内容区 —— 参考软件那两条也是两个进程，管理员那一扇才装得下
+    /// 后面要做的"改系统位置"这类事。
+    /// <para>命令行必须自己带上 <c>/task=open</c>：不带开关的那一条是<strong>双击</strong>的语义，
+    /// 做什么由「设置 → 解压 → 双击压缩包文件时」决定 —— 那一档现在是智能解压，
+    /// 少了这个开关，"开一扇新窗口"就变成"把包解压了"。</para>
+    /// <para>提权那一条走 <c>Verb = "runas"</c>：UAC 框由系统弹、由用户按，这一条命令本身就是
+    /// 用户点出来的，所以不算静默提权。用户按取消（<c>ERROR_CANCELLED</c>）与这台机器不让他提权
+    /// 是两件事，但界面上都只该说一句"没起来" —— 不重试，更不悄悄换成不提权的那一条。</para>
+    /// </summary>
+    private void NewWindow(bool elevated)
+    {
+        if (string.IsNullOrEmpty(Environment.ProcessPath))
+        {
+            return;
+        }
+
+        var arguments = _listing is { } listing
+            ? $"\"{listing.ArchivePath}\" {ShellTasks.Switch(ShellTask.Open)}"
+            : ShellTasks.Switch(ShellTask.Open);
+
+        var start = new ProcessStartInfo(Environment.ProcessPath)
+        {
+            Arguments = arguments,
+            // 只有 ShellExecute 那条路认 Verb；不提权时用 CreateProcess，别绕系统那一层。
+            UseShellExecute = elevated,
+        };
+
+        if (elevated)
+        {
+            start.Verb = "runas";
+        }
+
+        try
+        {
+            Process.Start(start);
+        }
+        catch (Exception ex)
+        {
+            // 1223 = 用户在 UAC 框上按了取消。这一种要说人话，其余把系统给的原因原样转达。
+            _ = ShowMessageAsync("TEXT_TITLE_NEW_WINDOW", ex is Win32Exception { NativeErrorCode: 1223 }
+                ? _lang.Get("TEXT_NEW_WINDOW_CANCELED")
+                : _lang.Format("TEXT_NEW_WINDOW_FAILED", ("reason", ex.Message)));
+        }
+    }
 
     // ---------- 文件 → 另存为 / 删除 / 永久删除 / 打开位置 ----------
 

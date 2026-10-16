@@ -162,6 +162,24 @@ TEXT_REPAIR_RECHECK_PASSED               = Re-check: the whole archive was read 
 TEXT_REPAIR_RECHECK_BROKEN               = Re-check: ${bad} of ${total} member(s) still fail verification -- do not treat this file as healthy.
 TEXT_REPAIR_RECHECK_SKIPPED              = Not re-checked: 
 
+; ---- Scan for malware (Ctrl+I): asks the local engine only, uploads nothing ----
+TEXT_STATUS_SCANNING                    = Scanning...
+TEXT_TITLE_SCAN                         = Scan archive for malware
+TEXT_SCAN_CLEAN                         = The antimalware engine on this machine looked at the file and reported nothing.
+TEXT_SCAN_NOTE                          = It saw this one archive file; whether it opens the container and checks each member is the engine's own decision, and Andzip does not vouch for it. Andzip ships no signature database and never uploads the file anywhere.
+TEXT_SCAN_DETECTED                      = The antimalware engine on this machine flagged the file as malicious and blocked it.
+TEXT_SCAN_HANDLING                      = What happens next (quarantine, delete, restore) is the engine's call -- look in its protection history. Andzip does not touch your file.
+TEXT_SCAN_NO_ENGINE                     = This machine has no usable antimalware engine, so nobody can answer the question.
+TEXT_SCAN_NO_ENGINE_HOW                 = Andzip ships no signature database and never sends files to an online scanning service. Turn on Windows Security -> Virus & threat protection, or install any engine that registers with the system scanning interface (AMSI), and this works.
+TEXT_SCAN_TOO_BIG                       = This file is over ${limit} MB -- that is the most the engine is handed at once, so nothing was scanned.
+TEXT_SCAN_TOO_BIG_NOTE                  = Andzip does not scan a truncated prefix: feeding half the file and reporting "clean" would be a forged result. Scan this file directly in your engine if you need it covered.
+TEXT_SCAN_FAILED                        = The engine gave no verdict (${code}). That is neither "clean" nor "bad" -- the question simply went unanswered.
+
+; ---- New program window (Ctrl+Shift+N / Ctrl+Alt+N) ----
+TEXT_TITLE_NEW_WINDOW                   = New program window
+TEXT_NEW_WINDOW_CANCELED                = No elevated window: the system confirmation was cancelled, or this account cannot elevate.
+TEXT_NEW_WINDOW_FAILED                  = The new window did not start: ${reason}
+
 ; ---- Duplicate file prompt (FR-3.7) / extract password (dialog #7) ----
 TEXT_TITLE_ASK_DUPEFILE                 = Duplicate file
 TEXT_MSG_FILE_EXISTS                    = A file with the same name already exists in the destination:
