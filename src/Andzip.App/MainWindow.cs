@@ -96,6 +96,9 @@ public sealed class MainWindow : Window
     /// <summary>「设置 → 查看」的当前值；设置对话框关掉之后会重新读一次并应用。</summary>
     private ViewDefaults _view;
 
+    /// <summary>「查看 → 深色模式」切回深色之前那一档时用的那一份记忆（没进过深色就是它当前的值）。</summary>
+    private ThemeMode _beforeDark = ThemeMode.System;
+
     /// <summary>「设置 → 高级 → 标题栏显示完整路径」。</summary>
     private bool _titleShowsFullPath;
 
@@ -139,6 +142,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandPermanentDeleteArchive] = PermanentlyDeleteArchive,
             [MainMenuModel.CommandOpenArchiveFolder] = OpenArchiveFolder,
             [MainMenuModel.CommandToggleStartScreen] = ToggleStartScreen,
+            [MainMenuModel.CommandToggleTheme] = ToggleTheme,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
             [MainMenuModel.CommandRenameEntry] = RenameEntryAsync,
@@ -1371,6 +1375,34 @@ public sealed class MainWindow : Window
     }
 
     // ---------- 命令 ----------
+
+    /// <summary>
+    /// 深色模式开关（「查看」菜单最后一条）。它写的就是「设置 → 查看 → 界面主题」那一个键，
+    /// 两边永远同一件事 —— 只是这一条<strong>看得见</strong>。
+    /// <para>切回的不是"浅色"而是"进深色之前那一档"（没进过深色就是跟随系统）：那一档有三个取值，
+    /// 做成三态循环的话，用户第二次点下去猜不到会到哪。再点一次深色也不覆盖这份记忆 ——
+    /// 深色 ↔ 原本那一档 是一个开关该有的样子。</para>
+    /// <para>落盘之后走 <see cref="ApplyViewDefaults"/>，而不是自己 <c>Design.Apply</c>：
+    /// 主题怎么生效只有一条路，两条路迟早长得不一样。</para>
+    /// </summary>
+    private void ToggleTheme()
+    {
+        if (Design.Mode == ThemeMode.Dark)
+        {
+            PersistTheme(_beforeDark);
+            return;
+        }
+
+        _beforeDark = Design.Mode;
+        PersistTheme(ThemeMode.Dark);
+    }
+
+    private void PersistTheme(ThemeMode mode)
+    {
+        _settings.SetString(SettingKeys.ViewTheme, mode.ToStorage());
+        _settings.Save(AppSettings.DefaultFilePath);
+        ApplyViewDefaults();
+    }
 
     /// <summary>
     /// 设置窗口（F5，FR-5）：模态，与参考软件一致。

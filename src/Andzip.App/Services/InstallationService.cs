@@ -290,10 +290,22 @@ internal sealed class InstallationService
         done++;
 
         Step("TEXT_SETUP_STEP_UNASSOC");
-        var settings = AppSettings.Load(AppSettings.DefaultFilePath);
-        new FileAssociationService(plan.Scope, _root).RemoveOwnedBy(
-            plan.ExecutablePath,
-            AssociationOriginals.Decode(settings.GetString(AssociationOriginals.SettingKey)));
+        var originals = AssociationOriginals.Decode(
+            AppSettings.Load(AppSettings.DefaultFilePath).GetString(AssociationOriginals.SettingKey));
+        var associations = new FileAssociationService(plan.Scope, _root);
+        var removed = associations.RemoveOwnedBy(plan.ExecutablePath, originals);
+
+        // 再把"指着已经不存在的 Andzip ProgID"的死指针扫掉 —— 那多半是<strong>老版本</strong>卸下的：
+        // 那时还原表传的是空表，扩展名默认值从来没跟着 ProgID 一起收回（机器级那一份卸完之后
+        // HKLM\Software\Classes\.zip 还写着 Andzip.zip，就是这一条）。
+        // <strong>只在刚才真的收掉过我们自己的登记时扫</strong>：这一条不像上一条按 exe 认人，
+        // 它认的是"哪个扩展名指着一棵死的 Andzip ProgID"，所以得把它的出手范围限定在
+        // "这一次卸载确实动过我们命名空间"上 —— 不然一次没勾关联的装/卸往返
+        // （测试里到处都是）就会去改这台机器真的关联表。
+        if (removed > 0)
+        {
+            associations.RemoveDangling(originals);
+        }
 
         done++;
 

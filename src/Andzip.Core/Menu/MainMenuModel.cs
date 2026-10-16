@@ -68,6 +68,14 @@ public static class MainMenuModel
     /// <summary>启动画面 / 压缩包视图切换（F6）。</summary>
     public const string CommandToggleStartScreen = "view.start";
 
+    /// <summary>
+    /// 深色模式开关。它做的事与「设置 → 查看 → 界面主题」里那一档是同一件，
+    /// 只是<strong>给一个看得见的位置</strong> —— 那个下拉住在九页设置的第五页里，
+    /// 用户找不到它，于是"夜间模式"这个已经做完的功能在界面上等于不存在
+    /// （与 1.9.2 那句「没有卸载 uninstall」同一族：缺的从来不是功能，是入口）。
+    /// </summary>
+    public const string CommandToggleTheme = "view.theme";
+
     /// <summary>设置窗口（F5）。</summary>
     public const string CommandSettings = "options.settings";
 
@@ -213,6 +221,7 @@ public static class MainMenuModel
             MenuItemModel.Separator(),
             new("view.ontop", "MENUSTR_VIEW_ALWAYS_ON_TOP"),
             new("view.color", "MENUSTR_VIEW_COLOR_SETTING"),
+            new("view.theme", "MENUSTR_VIEW_THEME", Enabled: true, CommandId: CommandToggleTheme),
         ]),
 
         new("tools", "MENUSTR_TOOLS",

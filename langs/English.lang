@@ -361,7 +361,7 @@ TEXT_SETTINGS_VIEW_THEME                = Interface theme
 TEXT_SETTINGS_VIEW_THEME_SYSTEM         = Follow the system
 TEXT_SETTINGS_VIEW_THEME_LIGHT          = Light
 TEXT_SETTINGS_VIEW_THEME_DARK           = Dark
-TEXT_SETTINGS_VIEW_THEME_HINT           = Takes effect immediately, no restart; an open archive is repainted with the new palette.
+TEXT_SETTINGS_VIEW_THEME_HINT           = Takes effect immediately, no restart; an open archive is repainted with the new palette. The "Dark mode" entry at the end of the View menu is the same switch, placed where it can be seen.
 TEXT_SETTINGS_VIEW_APPLY_HINT           = The toolbar applies at once; the rest apply the next time an archive is opened (or as soon as this dialog closes if one is already open).
 TEXT_ICON_TITLE                         = Icon colours
 TEXT_ICON_HINT                          = The preview redraws as you change one. Exported files carry the current colours; "Use as desktop icon" also updates the shortcuts, the taskbar and Explorer's file-type icons.
@@ -541,6 +541,7 @@ MENUSTR_VIEW_LISTVIEW                   = View style
 MENUSTR_VIEW_COLUMN                     = Columns
 MENUSTR_VIEW_ALWAYS_ON_TOP              = Always on top
 MENUSTR_VIEW_COLOR_SETTING              = Color settings...
+MENUSTR_VIEW_THEME                      = Dark mode
 
 MENUSTR_TOOLS_REPAIR                    = Repair archive...
 MENUSTR_TOOLS_RECOVERY                  = Password recovery...

@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Threading;
+using System.Runtime.CompilerServices;
 
 // 块式命名空间而不是 file-scoped：assembly 特性和 file-scoped namespace 放一起，
 // 编译器会把这行当成顶级语句（CS8956/CS8937），报的还不是真正的原因。
@@ -15,6 +16,24 @@ using Avalonia.Threading;
 
 namespace Andzip.App.UiTests
 {
+    /// <summary>
+    /// 整个测试程序集一上来就把"设置文件在哪"换到自己的临时目录。
+    /// <para>这不是整理，是止血：<c>MainWindow</c> 打开一个包就往 <c>recent_files</c> 记一笔并落盘到
+    /// <see cref="Andzip.Core.Settings.AppSettings.DefaultFilePath"/>，而那是这台机器真的
+    /// <c>%APPDATA%\Andzip\settings.ini</c> —— 2026-10-16 跑完整套门禁之后，用户那份文件里的
+    /// "最近的文件"变成了一个测试临时目录里的 <c>box.zip</c>。逐条用例传自己的路径要改二十处，
+    /// 漏一处就回到原样；换掉这一个口子，测试进程里没有任何一条路写得到用户的文件。</para>
+    /// <para>用模块初始化器而不是 fixture：fixture 要每条用例都挂上去，而"漏挂"正是这里的失败模式。
+    /// 换到固定名字（不是随机）的目录，为的是崩掉的上一轮留下的文件会被下一轮接着用，
+    /// 而不是每次跑完都在 %TEMP% 里多一个没人收的目录。</para>
+    /// </summary>
+    internal static class TestSettings
+    {
+        [ModuleInitializer]
+        internal static void Redirect() => global::Andzip.Core.Settings.AppSettings.RedirectForTests(
+            Path.Combine(Path.GetTempPath(), "andzip-ui-tests"));
+    }
+
     /// <summary>用被测应用自己的 Application 类型：主题、资源、控件样式全都按真实配置走。
     /// 测试专用近似物会让"布局正确"这个结论失去意义。</summary>
     public static class TestAppBuilder

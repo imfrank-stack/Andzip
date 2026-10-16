@@ -309,6 +309,134 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     }
 
     /// <summary>
+    /// 扫掉<strong>"扩展名默认值指着一棵已经不存在的 <c>Andzip.*</c> ProgID"</strong>的那些键，
+    /// 两个作用域各扫一遍。返回收回几处。
+    /// <para><strong>为什么 <see cref="RemoveOwnedBy"/> 之外还要这一条</strong>：那一条只在自己那一棵
+    /// 根里按 exe 收，而"死指针"可能是<strong>老版本</strong>留下的 —— 它们调的是
+    /// <c>Unregister(association, [])</c>，还原表传的是空表，于是"还原到接管前"那一步整个跳过。
+    /// 机器级那一份卸完之后，<c>HKLM\Software\Classes\.zip</c> 还写着 <c>Andzip.zip</c>，
+    /// 而那一棵 ProgID 已经没了（这台机器上 2.4.1 那次留下的就是这个样子）。
+    /// 这一条不依赖"谁写的"，只问"这个指针现在还有没有去处"，所以能把老账扫干净。</para>
+    /// <para>ProgID 在<strong>不在</strong>要两个根都问 —— 只问自己那一个会误删另一处安装的活指针。
+    /// 写不动的那个根（不提权的 HKLM）跳过：本程序从不悄悄提权，也从不假装收干净了。</para>
+    /// <para><strong>调用方必须先证明"这一次确实收掉过我们自己的登记"</strong>（见
+    /// <see cref="InstallationService.Uninstall"/> 里那个 <c>removed &gt; 0</c> 闸门）：这一条不按
+    /// exe 认人，无条件调用会让一次没勾关联的装/卸往返去改这台机器真的关联表 ——
+    /// 而测试里全是那样的往返（这一条第一版就是这么把 6 条卸载用例打红的）。</para>
+    /// </summary>
+    public int RemoveDangling(IReadOnlyList<AssociationOriginal> restoreDefaults)
+    {
+        var swept = 0;
+
+        foreach (var scope in new[] { InstallScope.CurrentUser, InstallScope.AllUsers })
+        {
+            try
+            {
+                swept += SweepOneRoot(scope, restoreDefaults);
+            }
+            catch (Exception)
+            {
+                // 这一棵根开不动或写不动（没有管理员权限的 HKLM、被策略挡住的键）—— 跳过它。
+                // 不是失败：机器级那一份的死指针本来就该由提权之后那一次卸载去收，
+                // 而本程序从不悄悄提权。
+            }
+        }
+
+        if (swept > 0)
+        {
+            _notifyShell();
+        }
+
+        return swept;
+    }
+
+    private int SweepOneRoot(InstallScope scope, IReadOnlyList<AssociationOriginal> restoreDefaults)
+    {
+        var swept = 0;
+        using var root = _root(scope);
+        using var classes = root.OpenSubKey(@"Software\Classes", writable: true);
+        if (classes is null)
+        {
+            return 0;
+        }
+
+        foreach (var extension in classes.GetSubKeyNames())
+        {
+            if (!extension.StartsWith('.'))
+            {
+                continue;
+            }
+
+            if (DefaultOf(classes.OpenSubKey(extension)) is not { } progId
+                || !progId.StartsWith(ProgIdPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (ProgIdExistsAnywhere(progId))
+            {
+                continue;
+            }
+
+            var original = restoreDefaults.FirstOrDefault(
+                item => string.Equals(item.Extension, extension, StringComparison.OrdinalIgnoreCase));
+
+            using var key = classes.OpenSubKey(extension, writable: true);
+            if (key is null)
+            {
+                continue;
+            }
+
+            if (original is { ProgId.Length: > 0 })
+            {
+                key.SetValue(string.Empty, original.ProgId, RegistryValueKind.String);
+            }
+            else
+            {
+                key.DeleteValue(string.Empty, throwOnMissingValue: false);
+            }
+
+            swept++;
+        }
+
+        return swept;
+    }
+
+    /// <summary>开一棵根，开不动就返回 null（HKLM 在没有管理员权限时抛 SecurityException）。</summary>
+    private RegistryKey? OpenQuietly(InstallScope scope)
+    {
+        try
+        {
+            return _root(scope);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>这棵 ProgID 在<strong>两个根里的任何一个</strong>还存在吗。只问自己那一个会误删另一处安装的活指针。</summary>
+    private bool ProgIdExistsAnywhere(string progId)
+    {
+        foreach (var scope in new[] { InstallScope.CurrentUser, InstallScope.AllUsers })
+        {
+            using var root = OpenQuietly(scope);
+            if (root is null)
+            {
+                continue;
+            }
+
+            using var found = root.OpenSubKey(ClassesRoot + progId);
+            if (found is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// 修复所有 <c>Andzip.*</c> ProgID 里的命令行，指向当前这个 exe；
 
     /// 返回<strong>真的改过</strong>几个，并在改过的时候让 shell 重读一次。

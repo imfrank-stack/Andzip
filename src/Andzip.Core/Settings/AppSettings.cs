@@ -29,19 +29,41 @@ public sealed class AppSettings
     /// <summary>被显式删掉（<c>SetString(key, null)</c>）的键 —— 合并写回时要真的从磁盘上抹掉。</summary>
     private readonly HashSet<string> _removed = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>设置文件的默认路径（%APPDATA%\Andzip\settings.ini）。拿不到用户目录时退回临时目录。</summary>
-    public static string DefaultFilePath
-    {
-        get
-        {
-            var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                root = Path.GetTempPath();
-            }
+    /// <summary>
+    /// 设置文件的默认路径（%APPDATA%\Andzip\settings.ini）。拿不到用户目录时退回临时目录。
+    /// <para><strong>整个程序问"设置在哪"只有这一个口子</strong>，所以它可以被整体换掉 ——
+    /// 见 <see cref="RedirectForTests"/>。主窗口那几处 <c>_settings.Save(DefaultFilePath)</c>
+    /// 都从这里取值，才使得"换掉它"是一件事而不是二十件事。</para>
+    /// </summary>
+    public static string DefaultFilePath => Redirected ?? Resolve();
 
-            return Path.Combine(root, DirectoryName, FileName);
+    /// <summary>被 <see cref="RedirectForTests"/> 换掉之后的路径；null 表示没换过。</summary>
+    private static string? Redirected;
+
+    /// <summary>
+    /// 把"设置文件在哪"整个换到 <paramref name="directory"/> 下面。<strong>只给测试与自检用。</strong>
+    /// <para>为什么要有这个东西：任何一条构造 <c>MainWindow</c> 并打开一个包的用例，都会顺手往
+    /// <c>recent_files</c> 记一笔并落盘 —— 落的是这台机器真的 <c>%APPDATA%\Andzip\settings.ini</c>。
+    /// 2026-10-16 一次门禁之后，用户那份文件里的"最近的文件"变成了一个临时目录里的 <c>box.zip</c>。
+    /// 逐个用例传自己的路径要改二十处、并且漏一个就回到原样；换掉这一个口子，测试进程里
+    /// 没有任何一条路能写到用户的文件上。</para>
+    /// </summary>
+    public static void RedirectForTests(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        Redirected = Path.Combine(directory, FileName);
+    }
+
+    private static string Resolve()
+    {
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            root = Path.GetTempPath();
         }
+
+        return Path.Combine(root, DirectoryName, FileName);
     }
 
     public static AppSettings Load(string path)

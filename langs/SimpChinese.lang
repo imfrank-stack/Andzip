@@ -358,7 +358,7 @@ TEXT_SETTINGS_VIEW_THEME                = 界面主题
 TEXT_SETTINGS_VIEW_THEME_SYSTEM         = 跟随系统
 TEXT_SETTINGS_VIEW_THEME_LIGHT          = 浅色
 TEXT_SETTINGS_VIEW_THEME_DARK           = 深色
-TEXT_SETTINGS_VIEW_THEME_HINT           = 换主题立即生效，不用重启；正开着的压缩包会按新配色重画一遍。
+TEXT_SETTINGS_VIEW_THEME_HINT           = 换主题立即生效，不用重启；正开着的压缩包会按新配色重画一遍。「查看」菜单最后一条「深色模式」是同一个开关，图的是看得见。
 TEXT_SETTINGS_VIEW_APPLY_HINT           = 工具栏立即生效；其余几项在下次打开压缩包时生效（正看着包的时候，关掉设置窗口就会重画）。
 TEXT_ICON_TITLE                         = 图标配色
 TEXT_ICON_HINT                          = 改一处立刻重画预览。导出的文件带上当前配色；「设为桌面图标」会把快捷方式、任务栏与资源管理器里的格式图标一起换掉。
@@ -538,6 +538,7 @@ MENUSTR_VIEW_LISTVIEW                   = 视图样式
 MENUSTR_VIEW_COLUMN                     = 列设置
 MENUSTR_VIEW_ALWAYS_ON_TOP              = 置顶
 MENUSTR_VIEW_COLOR_SETTING              = 颜色设置...
+MENUSTR_VIEW_THEME                      = 深色模式
 
 MENUSTR_TOOLS_REPAIR                    = 修复压缩包...
 MENUSTR_TOOLS_RECOVERY                  = 密码恢复...
