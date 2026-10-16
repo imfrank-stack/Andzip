@@ -90,7 +90,7 @@ public class SeamDragTests : IDisposable
             new ArchiveCreationSettings(archive, CompressionLevelOption.Store, Format: ArchiveFormatOption.FromId("ZIP")));
 
         return new ArchiveView(TestLang.Chinese(), ArchiveReader.Read(archive), new ViewDefaults(
-            ShowToolBar: true, ShowStatusBar: true, ShowTree: true,
+            ShowStatusBar: true, ShowTree: true,
             IconViewByDefault: false, AutoExpandTree: true)).Root;
     }
 

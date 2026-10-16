@@ -7,9 +7,14 @@ namespace Andzip.Core.Settings;
 /// 所以 <c>MainWindow</c> 在设置对话框关掉之后会重新应用一次（见 <c>ApplyViewDefaults</c>），
 /// 不必重启。语言页就没这么幸运，那是另一回事。
 /// </para>
+/// <para>
+/// <strong>这里没有工具栏那一档</strong>：4.4.0 起它归「视图 → 工具栏」那个二级菜单管
+/// （<c>SettingKeys.ViewToolBar</c>），与「视图 → 列设置」同一条理由 ——
+/// 一个键只归一处管，两边都能改的话两边就都会把对方的改动盖掉。
+/// 这一页原来那个「显示工具栏」开关因此整行删掉了。
+/// </para>
 /// </summary>
 public sealed record ViewDefaults(
-    bool ShowToolBar,
     bool ShowStatusBar,
     bool ShowTree,
     bool IconViewByDefault,
@@ -27,7 +32,6 @@ public sealed record ViewDefaults(
     /// 装上一个刺眼的浅色窗口不是保守，是没跟上。</para>
     /// </summary>
     public static ViewDefaults Fallback { get; } = new(
-        ShowToolBar: true,
         ShowStatusBar: true,
         ShowTree: true,
         IconViewByDefault: false,
@@ -39,7 +43,6 @@ public sealed record ViewDefaults(
         ArgumentNullException.ThrowIfNull(settings);
 
         return new ViewDefaults(
-            settings.GetBool(SettingKeys.ViewShowToolBar, fallback: true),
             settings.GetBool(SettingKeys.ViewShowStatusBar, fallback: true),
             settings.GetBool(SettingKeys.ViewShowTree, fallback: true),
             settings.GetBool(SettingKeys.ViewIconByDefault, fallback: false),
@@ -51,7 +54,6 @@ public sealed record ViewDefaults(
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        settings.SetBool(SettingKeys.ViewShowToolBar, ShowToolBar);
         settings.SetBool(SettingKeys.ViewShowStatusBar, ShowStatusBar);
         settings.SetBool(SettingKeys.ViewShowTree, ShowTree);
         settings.SetBool(SettingKeys.ViewIconByDefault, IconViewByDefault);

@@ -367,7 +367,6 @@ TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = 只作用于主窗口的「解压文�
 
 ; ---- 设置：查看页 / 语言页 ----
 TEXT_SETTINGS_VIEW_TITLE                = 查看设置
-TEXT_SETTINGS_VIEW_TOOLBAR              = 显示工具栏
 TEXT_SETTINGS_VIEW_STATUS               = 显示状态栏（底部那行汇总）
 TEXT_SETTINGS_VIEW_TREE                 = 显示树形目录
 TEXT_SETTINGS_VIEW_ICON_DEFAULT         = 打开压缩包时默认用图标视图
@@ -532,6 +531,9 @@ MENUSTR_SETTING_SUB                     = 设置(&S)
 MENUSTR_VIEW_TREECONTROL                = 树形目录
 MENUSTR_VIEW_COMMENT                    = 压缩文件注释
 MENUSTR_VIEW_PREVIEW                    = 图像预览
+MENUSTR_TOOLBAR_LARGE                    = 大
+MENUSTR_TOOLBAR_SMALL                     = 小
+MENUSTR_TOOLBAR_HIDDEN                    = 隐藏
 MENUSTR_VIEW_TOOLBAR                    = 工具栏
 MENUSTR_VIEW_LISTVIEW                   = 视图样式
 MENUSTR_VIEW_COLUMN                     = 列设置

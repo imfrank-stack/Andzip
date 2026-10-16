@@ -57,7 +57,6 @@ public class TreeExpansionTests
     /// <summary>造一个三层嵌套的包，按给定的开关装配出压缩包视图，返回宿主窗口与树里的全部节点。</summary>
     private static (Window Host, IReadOnlyList<TreeViewItem> Items) OpenTree(bool autoExpand)
         => OpenTree(new ViewDefaults(
-            ShowToolBar: true,
             ShowStatusBar: true,
             ShowTree: true,
             IconViewByDefault: false,

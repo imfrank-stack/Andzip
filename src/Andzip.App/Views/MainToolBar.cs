@@ -1,5 +1,6 @@
 using Andzip.Core.Lang;
 using Andzip.Core.Menu;
+using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -37,8 +38,16 @@ internal static class MainToolBar
     /// <summary>禁用态那枚双色图标整体降到的不透明度。文字走 <c>Ink.Disabled</c>，图标没有对应的"禁用第二档灰"，压透明度比换个颜色更贴近"这一整格都不通"。</summary>
     private const double DisabledOpacity = 0.4;
 
-    public static Control Create(LangCatalog lang, MainToolBarActions actions)
+    /// <summary>
+    /// 做一条工具栏。<paramref name="mode"/> 为 <see cref="ToolBarMode.Hidden"/> 时调用方直接把
+    /// 返回的那张卡片 <c>IsVisible = false</c> —— 这里照样按<strong>大档</strong>把它建出来，
+    /// 因为"隐藏"不该顺手把布局算成另一副样子：从隐藏切回大或小是一次赋值，
+    /// 而切回哪一档由设置里那个值说，不由这里猜。
+    /// </summary>
+    public static Control Create(LangCatalog lang, MainToolBarActions actions, ToolBarMode mode)
     {
+        var compact = mode == ToolBarMode.Small;
+
         // 九颗各自占一格、九格等宽铺满整张卡片（3.5.0，用户：「将首页的这9个按钮平均布局在整个软件宽度上」）。
         // 以前这里是一列 StackPanel：它只按每颗自己的内容宽度从左排，卡片明明拉满了整窗宽度，
         // 右边却空出一大截（真实窗口里量到的就是"九颗挤在左边、右侧一片白"）。
@@ -54,28 +63,28 @@ internal static class MainToolBar
             Columns = 9,
         };
 
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_OPEN", "open-archive",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_OPEN", "open-archive", compact,
             MainMenuModel.CommandOpenArchive, actions.OpenArchive));
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_EXTRACT", "extract",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_EXTRACT", "extract", compact,
             MainMenuModel.CommandExtractArchive, actions.ExtractArchive));
 
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_NEW", "new-archive",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_NEW", "new-archive", compact,
             MainMenuModel.CommandNewArchive, actions.NewArchive));
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_ADD", "add-file",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_ADD", "add-file", compact,
             MainMenuModel.CommandAddEntries, actions.AddFiles));
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_DELETE", "delete-file",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_DELETE", "delete-file", compact,
             MainMenuModel.CommandDeleteEntries, actions.DeleteFiles));
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_TEST", "test-archive",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_TEST", "test-archive", compact,
             MainMenuModel.CommandTestArchive, actions.TestArchive));
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_SCAN", "scan-file",
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_SCAN", "scan-file", compact,
             MainMenuModel.CommandScanArchive, actions.ScanArchive));
         // 「查看」= 参考软件的预览面板，功能本身还没做，所以这一格没有命令，也就没有 id：
         // 没有 id 就没人按命令去点亮它，它会一直灰着 —— 这正是想要的结果。
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_VIEW", "view", null, actions.ToggleViewStyle));
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_VIEW", "view", compact, null, actions.ToggleViewStyle));
 
         // 语言切换本身在「设置 → 语言」里（换完要重启才全面生效），
         // 所以这一颗做的是"跳到那一页"。以前它写着当前语言、点不动，如今它有地方可去。
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_LANGUAGE", "language", null, actions.SwitchLanguage));
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_LANGUAGE", "language", compact, null, actions.SwitchLanguage));
 
         // 整条是一张浮在面板上的卡片：底色与面板同白，分界全靠四周那一圈淡影与圆角。
         // 阴影用 Lift 那档（"浮在面板上的一块面"）而不是整窗那档 Floating ——
@@ -94,25 +103,36 @@ internal static class MainToolBar
     /// 一格。<paramref name="commandId"/> 写进 <c>Tag</c>，好让窗口按命令把它点亮 / 置灰
     /// （与菜单项同一个记号、同一个口子）；<paramref name="run"/> 为 null 表示这条命令压根没接，
     /// 那一格建出来就是灰的，而且此后没人会去点亮它。
+    /// <para><paramref name="compact"/>（小档）只画图标、不画文字，整张卡片从量的 90 DIP 降到 40 DIP
+    /// —— 就是"约一半"。文字不是丢了，是挪进悬停提示（九枚图标里没有一枚是"看一眼就知道是什么"
+    /// 的那种通用图形，少了名字这一排就变成一排猜谜）；读屏拿到的名字也一起补上
+    /// （<c>AutomationProperties.Name</c>），否则小档对读屏用户是整排空按钮。</para>
     /// </summary>
-    private static Control Cell(LangCatalog lang, string textKey, string glyph, string? commandId, Action? run)
+    private static Control Cell(LangCatalog lang, string textKey, string glyph, bool compact,
+        string? commandId, Action? run)
     {
-        var icon = SvgGlyph.Load(glyph, Design.IconSize.ToolBar);
-        var label = new TextBlock
-        {
-            Text = lang.Label(textKey),
-            FontSize = Design.Type.Body,
-            Foreground = Design.Ink.Primary,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, Design.Space.X2 - 1, 0, 0),
-            TextAlignment = TextAlignment.Center,
-        };
+        var label = lang.Label(textKey);
+        var icon = SvgGlyph.Load(glyph, compact ? Design.IconSize.ToolBarCompact : Design.IconSize.ToolBar);
 
         var content = new StackPanel
         {
             Orientation = Orientation.Vertical,
-            Children = { icon, label },
+            HorizontalAlignment = HorizontalAlignment.Center,
         };
+
+        content.Children.Add(icon);
+        if (!compact)
+        {
+            content.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = Design.Type.Body,
+                Foreground = Design.Ink.Primary,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, Design.Space.X2 - 1, 0, 0),
+                TextAlignment = TextAlignment.Center,
+            });
+        }
 
         // 宽度交给外面那九等分的格子：这里不再写 MinWidth，写死一个下限只会在窄窗口上跟格子顶牛。
         var button = new Button
@@ -120,11 +140,20 @@ internal static class MainToolBar
             Content = content,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(Design.Space.X3 + 2, Design.Space.X2, Design.Space.X3 + 2, Design.Space.X2),
+            // 小档把上下内距收到一档（8 → 4）：图标已经小了，留着 8 的话"一半高"就只是
+            // "图标小一点、条子还是那么高"，读起来不像换了档。
+            Padding = new Thickness(Design.Space.X3 + 2, compact ? Design.Space.X1 : Design.Space.X2,
+                Design.Space.X3 + 2, compact ? Design.Space.X1 : Design.Space.X2),
             FontFamily = Design.Font,
             Tag = commandId,
             IsEnabled = run is not null,
         };
+
+        if (compact)
+        {
+            ToolTip.SetTip(button, label);
+            Avalonia.Automation.AutomationProperties.SetName(button, label);
+        }
 
         if (run is { } action)
         {
@@ -139,10 +168,10 @@ internal static class MainToolBar
         {
             if (e.Property == InputElement.IsEnabledProperty)
             {
-                PaintFace(button, icon, label);
+                PaintFace(button, icon, content);
             }
         };
-        PaintFace(button, icon, label);
+        PaintFace(button, icon, content);
 
         // 悬停是一块平的淡色圆角方（3.3.0 参考图）：卡片自己已经浮起来了，格子不再各自带影。
         // 禁用时 Chrome 的事件根本不会触发（收不到指针事件），
@@ -150,10 +179,19 @@ internal static class MainToolBar
         return button.Tile();
     }
 
-    private static void PaintFace(Button button, Control icon, TextBlock label)
+    /// <summary>
+    /// 按 <c>IsEnabled</c> 重画这一格。文字那一段只在<strong>大档</strong>存在，
+    /// 所以这里按类型找而不是记着引用 —— 小档找不到文字块是设计，不是漏。
+    /// </summary>
+    private static void PaintFace(Button button, Control icon, StackPanel content)
     {
         icon.Opacity = button.IsEnabled ? 1 : DisabledOpacity;
-        label.Foreground = button.IsEnabled ? Design.Ink.Primary : Design.Ink.Disabled;
+
+        if (content.Children.FirstOrDefault(child => child is TextBlock) is TextBlock label)
+        {
+            label.Foreground = button.IsEnabled ? Design.Ink.Primary : Design.Ink.Disabled;
+        }
+
         button.Cursor = button.IsEnabled
             ? new Cursor(StandardCursorType.Hand)
             : new Cursor(StandardCursorType.Arrow);

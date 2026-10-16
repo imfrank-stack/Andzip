@@ -24,11 +24,20 @@ internal sealed record ColumnMenu(
     Func<IReadOnlyList<string>> LoadHidden,
     Action<string, bool> SetVisible);
 
+/// <summary>
+/// 「视图 → 工具栏」那三档要的两件事：现在是哪一档、换成哪一档。
+/// <para>三档的<strong>名字不在这里定义</strong>（<c>ToolBarMode</c> 是唯一那份），
+/// 这里只把它翻译成菜单上的一行。</para>
+/// </summary>
+internal sealed record ToolBarMenu(
+    Func<Andzip.Core.Settings.ToolBarMode> Current,
+    Action<Andzip.Core.Settings.ToolBarMode> SetMode);
+
 /// <summary>主菜单栏：由 <see cref="MainMenuModel"/>（需求文档附录 A 结构）渲染。</summary>
 internal static class MainMenuBar
 {
     public static Menu Create(LangCatalog lang, IReadOnlyDictionary<string, Action> commands,
-        RecentFilesMenu? recent = null, ColumnMenu? columns = null)
+        RecentFilesMenu? recent = null, ColumnMenu? columns = null, ToolBarMenu? toolBar = null)
     {
         var menu = new Menu
         {
@@ -75,6 +84,11 @@ internal static class MainMenuBar
                 if (item.CommandId == MainMenuModel.CommandColumns && columns is not null)
                 {
                     AttachColumns(menuItem, lang, columns);
+                }
+
+                if (item.CommandId == MainMenuModel.CommandToolBar && toolBar is not null)
+                {
+                    AttachToolBar(menuItem, lang, toolBar);
                 }
 
                 topItem.Items.Add(menuItem);
@@ -160,12 +174,57 @@ internal static class MainMenuBar
                 host.Items.Add(item);
             }
         }
-
-        static Control Check() => new TextBlock
-        {
-            Text = "✓",
-            FontSize = Design.Type.Body,
-            Foreground = Design.Ink.Primary,
-        };
     }
+
+    /// <summary>
+    /// 「视图 → 工具栏」：大 / 小 / 隐藏 三档，勾在当前那一档上。
+    /// <para>三行是<strong>多选一</strong>而不是三个开关，所以这一排永远只会有一个勾 ——
+    /// 与参考软件那一排（大 / ✓小 / 旧样式 / 隐藏 / 工具栏按钮设置）同一种形状。
+    /// 「旧样式」与「工具栏按钮设置」没做：前者是另一套界面语言的历史版本，
+    /// 后者要先把"哪几颗按钮"变成一份可编辑的数据，而现在这九颗是代码里的一张表。</para>
+    /// <para>每次展开重建，与「列设置」同一条理由：换完一档再看这一排，勾必须已经挪过去了。</para>
+    /// </summary>
+    private static void AttachToolBar(MenuItem host, LangCatalog lang, ToolBarMenu toolBar)
+    {
+        host.RoundOnOpen();
+        Rebuild();
+        host.SubmenuOpened += (_, _) => Rebuild();
+
+        void Rebuild()
+        {
+            host.Items.Clear();
+            var current = toolBar.Current();
+
+            foreach (var (mode, textKey) in new[]
+                     {
+                         (Andzip.Core.Settings.ToolBarMode.Large, "MENUSTR_TOOLBAR_LARGE"),
+                         (Andzip.Core.Settings.ToolBarMode.Small, "MENUSTR_TOOLBAR_SMALL"),
+                         (Andzip.Core.Settings.ToolBarMode.Hidden, "MENUSTR_TOOLBAR_HIDDEN"),
+                     })
+            {
+                var item = new MenuItem
+                {
+                    Header = lang.Label(textKey),
+                    Icon = mode == current ? Check() : null,
+                }.MenuGrayHover();
+
+                item.Click += (_, _) => toolBar.SetMode(mode);
+                host.Items.Add(item);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 那一枚勾。<strong>「列设置」与「工具栏」两排共用</strong> —— 两处各写一个同名的本地函数，
+    /// 早晚一边是 <c>✓</c> 一边是 <c>✔</c>。
+    /// <para>用 <c>MenuItem.Icon</c> 而不是 <c>CheckBox</c>：SimpleTheme 的模板真的托管这一格
+    /// （4.1.0 量的：把「列设置」整条展开、抓渲染帧，十行里数到九个勾），
+    /// 而勾画在文字左边那一格，不勾的那一行位置照旧对齐。</para>
+    /// </summary>
+    private static Control Check() => new TextBlock
+    {
+        Text = "✓",
+        FontSize = Design.Type.Body,
+        Foreground = Design.Ink.Primary,
+    };
 }

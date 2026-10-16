@@ -370,7 +370,6 @@ TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = Applies to "Extract files" in the mai
 
 ; ---- Settings: view page / language page ----
 TEXT_SETTINGS_VIEW_TITLE                = View settings
-TEXT_SETTINGS_VIEW_TOOLBAR              = Show the toolbar
 TEXT_SETTINGS_VIEW_STATUS               = Show the status bar (summary line at the bottom)
 TEXT_SETTINGS_VIEW_TREE                 = Show the folder tree
 TEXT_SETTINGS_VIEW_ICON_DEFAULT         = Open archives in icon view
@@ -535,6 +534,9 @@ MENUSTR_SETTING_SUB                     = &Settings
 MENUSTR_VIEW_TREECONTROL                = Folder tree
 MENUSTR_VIEW_COMMENT                    = Archive comment
 MENUSTR_VIEW_PREVIEW                    = Image preview
+MENUSTR_TOOLBAR_LARGE                     = Large
+MENUSTR_TOOLBAR_SMALL                     = Small
+MENUSTR_TOOLBAR_HIDDEN                    = Hide
 MENUSTR_VIEW_TOOLBAR                    = Toolbar
 MENUSTR_VIEW_LISTVIEW                   = View style
 MENUSTR_VIEW_COLUMN                     = Columns

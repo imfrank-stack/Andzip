@@ -192,7 +192,6 @@ public class SettingsDefaultsTests
         var loaded = ViewDefaults.Load(new AppSettings());
 
         Assert.Equal(ViewDefaults.Fallback, loaded);
-        Assert.True(loaded.ShowToolBar);
         Assert.True(loaded.ShowStatusBar);
         Assert.True(loaded.ShowTree);
         Assert.False(loaded.IconViewByDefault);
@@ -206,7 +205,7 @@ public class SettingsDefaultsTests
     public void ViewDefaults_RoundTripsIncludingTheOffCases()
     {
         var wanted = new ViewDefaults(
-            ShowToolBar: false, ShowStatusBar: false, ShowTree: false,
+            ShowStatusBar: false, ShowTree: false,
             IconViewByDefault: true, AutoExpandTree: false);
 
         var settings = new AppSettings();
@@ -216,15 +215,32 @@ public class SettingsDefaultsTests
     }
 
     [Fact]
-    public void ViewDefaults_TurningTheToolBarOffSurvivesAReLoad()
+    public void ToolBarMode_SurvivesAReLoadIncludingTheOffCases()
     {
-        // "关掉的项"是最容易写错的一类：存储用 "0"，而 GetBool 的缺省是 true，
-        // 一旦键被误删就会变成"关不掉"。
-        var settings = new AppSettings();
-        (ViewDefaults.Fallback with { ShowToolBar = false }).Save(settings);
+        // 4.4.0 之前这一项是 ViewDefaults 上的一个布尔（「设置 → 查看」那个「显示工具栏」开关），
+        // 那时"关掉的项最容易写错"这条就是冲它说的：存储用 "0" 而 GetBool 的缺省是 true，
+        // 键被误删就会变成"关不掉"。现在它换成三档、归「视图 → 工具栏」管，
+        // 同一件事仍然要有人钉：小档与隐藏这两档存进去再读回来必须还是它自己。
+        var path = Path.Combine(Path.GetTempPath(), $"andzip-toolbar-{Guid.NewGuid():N}.ini");
+        try
+        {
+            foreach (var mode in new[] { ToolBarMode.Large, ToolBarMode.Small, ToolBarMode.Hidden })
+            {
+                var settings = new AppSettings();
+                settings.SetString(SettingKeys.ViewToolBar, mode.ToStorage());
+                settings.Save(path);
 
-        Assert.True(settings.Has(SettingKeys.ViewShowToolBar));
-        Assert.False(ViewDefaults.Load(settings).ShowToolBar);
+                Assert.Equal(mode, SettingKeys.ParseToolBarMode(AppSettings.Load(path).GetString(SettingKeys.ViewToolBar)));
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        // 认不出来的取值（手改坏了、或来自更新的版本）回到大档，而不是回到"隐藏"。
+        Assert.Equal(ToolBarMode.Large, SettingKeys.ParseToolBarMode("banana"));
+        Assert.Equal(ToolBarMode.Large, SettingKeys.ParseToolBarMode(null));
     }
 
     [Fact]

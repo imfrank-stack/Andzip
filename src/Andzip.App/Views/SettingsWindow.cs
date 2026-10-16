@@ -1124,7 +1124,6 @@ public sealed class SettingsWindow : Window
     private sealed class ViewPage : ISettingsPage
     {
         private readonly string _settingsPath;
-        private readonly SettingToggle _toolBar;
         private readonly SettingToggle _statusBar;
         private readonly SettingToggle _tree;
         private readonly SettingToggle _iconDefault;
@@ -1142,7 +1141,9 @@ public sealed class SettingsWindow : Window
             NavKey = "TEXT_SETTINGS_VIEW";
             _settingsPath = settingsPath;
 
-            _toolBar = Check(lang.Label("TEXT_SETTINGS_VIEW_TOOLBAR"), UpdateApplyState);
+            // 「显示工具栏」那一行 4.4.0 挪走了：它现在是「视图 → 工具栏」里的三档之一
+            // （大 / 小 / 隐藏），键也归那个菜单管。一个键两个主人是 1.6.0 立规矩时
+            // 专门要防的那种形状 —— 两边都会把对方的改动盖掉。
             _statusBar = Check(lang.Label("TEXT_SETTINGS_VIEW_STATUS"), UpdateApplyState);
             _tree = Check(lang.Label("TEXT_SETTINGS_VIEW_TREE"), UpdateApplyState);
             _iconDefault = Check(lang.Label("TEXT_SETTINGS_VIEW_ICON_DEFAULT"), UpdateApplyState);
@@ -1174,7 +1175,6 @@ public sealed class SettingsWindow : Window
 
             var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_VIEW_TITLE")));
-            panel.Children.Add(_toolBar);
             panel.Children.Add(_statusBar);
             panel.Children.Add(_tree);
             panel.Children.Add(_iconDefault);
@@ -1215,7 +1215,6 @@ public sealed class SettingsWindow : Window
         public void Reload()
         {
             _live = ViewDefaults.Load(AppSettings.Load(_settingsPath));
-            _toolBar.IsChecked = _live.ShowToolBar;
             _statusBar.IsChecked = _live.ShowStatusBar;
             _tree.IsChecked = _live.ShowTree;
             _iconDefault.IsChecked = _live.IconViewByDefault;
@@ -1240,7 +1239,6 @@ public sealed class SettingsWindow : Window
         }
 
         private ViewDefaults Selection() => new(
-            _toolBar.IsChecked == true,
             _statusBar.IsChecked == true,
             _tree.IsChecked == true,
             _iconDefault.IsChecked == true,

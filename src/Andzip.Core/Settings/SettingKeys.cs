@@ -25,6 +25,23 @@ public enum ThemeMode
 }
 
 /// <summary>
+/// 首页那条工具栏露成什么样。三档而不是"显示/隐藏 + 大/小"两个开关：
+/// 这三样是同一件事的三种取值，摆成两个开关就会出现"隐藏着的工具栏是大的还是小的"
+/// 那种没人会问的问题。
+/// </summary>
+public enum ToolBarMode
+{
+    /// <summary>图标 + 文字（这一项首次出现时的样子，也是默认）。</summary>
+    Large,
+
+    /// <summary>只有图标，高度约一半；文字挪到悬停提示里，一个都不丢。</summary>
+    Small,
+
+    /// <summary>整条不显示。</summary>
+    Hidden,
+}
+
+/// <summary>
 /// 设置键名与取值解析。集中一处，免得键名在各处拼字符串拼歪。
 /// </summary>
 public static class SettingKeys
@@ -115,7 +132,18 @@ public static class SettingKeys
     // 这一组影响的是"界面骨架露哪几块"，MainWindow 在设置对话框关掉后会重新应用一次，
     // 所以改完立刻见效，不用重启。
 
-    public const string ViewShowToolBar = "view_show_toolbar";
+    /// <summary>
+    /// 工具栏的三档长相（<see cref="ToolBarMode"/>）。<strong>它不在 <c>ViewDefaults</c> 里，
+    /// 也不在「设置 → 查看」那一页上</strong> —— 这一项的主人是「视图 → 工具栏」那个二级菜单，
+    /// 与 <see cref="HiddenColumns"/> 同一条理由：一个键只归一处管，两边都能改的话
+    /// 两边就都会把对方的改动盖掉（1.6.0 立的规矩）。
+    /// <para>4.4.0 之前这里是一个布尔键 <c>view_show_toolbar</c>（设置页上的「显示工具栏」开关）。
+    /// 三档取代它之后那个布尔没人读了：老设置文件里如果还留着那一行，它会被原样带着走
+    /// 但不再影响任何行为 —— 也就是"以前隐藏过工具栏的人，装上这一版会看到它回来一次"，
+    /// 再选一次「隐藏」就固定在新键上了。</para>
+    /// </summary>
+    public const string ViewToolBar = "view_toolbar";
+
     public const string ViewShowStatusBar = "view_show_status_bar";
     public const string ViewShowTree = "view_show_tree";
 
@@ -255,6 +283,27 @@ public static class SettingKeys
             ThemeMode.Light => "light",
             ThemeMode.Dark => "dark",
             _ => "system",
+        };
+
+    /// <summary>
+    /// 认不出来回落到 <see cref="ToolBarMode.Large"/>：那是这一项首次出现时的默认，
+    /// 也是"手改坏了设置文件"时最不该丢的那一档（另外两档都是"少显示点东西"）。
+    /// </summary>
+    public static ToolBarMode ParseToolBarMode(string? stored)
+        => stored?.Trim().ToLowerInvariant() switch
+        {
+            "small" => ToolBarMode.Small,
+            "hidden" => ToolBarMode.Hidden,
+            _ => ToolBarMode.Large,
+        };
+
+    /// <summary>枚举存成稳定的小写标识，理由同 <see cref="ToStorage(ThemeMode)"/>。</summary>
+    public static string ToStorage(this ToolBarMode mode)
+        => mode switch
+        {
+            ToolBarMode.Small => "small",
+            ToolBarMode.Hidden => "hidden",
+            _ => "large",
         };
 
     /// <summary>

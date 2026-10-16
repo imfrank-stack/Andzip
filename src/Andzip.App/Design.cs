@@ -392,7 +392,18 @@ internal static class Design
         public const double Row = 14;
         public const double Inline = 16;
         public const double Dialog = 20;
+
+        /// <summary>首页工具栏大档那枚（图标 + 文字那一排）。</summary>
         public const double ToolBar = 40;
+
+        /// <summary>
+        /// 首页工具栏<strong>小档</strong>那枚：只有图标、没有文字。
+        /// <para>24 不是随手挑的。无头里量的（4.4.0）：大档那枚 40、整张卡片高 <strong>90 DIP</strong>；
+        /// 换成 24 并把按钮上下内距从 8 收到 4 之后，卡片高 <strong>40 DIP</strong> ——
+        /// 就是用户说的"只有原来一半高"（44%）。再小就不是砍文字省下来的高度，而是图标看不清了。</para>
+        /// </summary>
+        public const double ToolBarCompact = 24;
+
         public const double Tile = 72;
     }
 }

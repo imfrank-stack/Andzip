@@ -91,6 +91,13 @@ public static class MainMenuModel
     public const string CommandColumns = "view.columns";
 
     /// <summary>
+    /// 「视图 → 工具栏」：大 / 小 / 隐藏 三档。与 <see cref="CommandColumns"/> 同一种形状 ——
+    /// <strong>不是一条命令，而是一个子菜单的挂载点</strong>，所以也要登记进主窗口那份
+    /// "命令在别处接走"的名单里，不然构造时就抛。
+    /// </summary>
+    public const string CommandToolBar = "view.toolbar";
+
+    /// <summary>
     /// 深色模式开关。它做的事与「设置 → 查看 → 界面主题」里那一档是同一件，
     /// 只是<strong>给一个看得见的位置</strong> —— 那个下拉住在九页设置的第五页里，
     /// 用户找不到它，于是"夜间模式"这个已经做完的功能在界面上等于不存在
@@ -240,7 +247,7 @@ public static class MainMenuModel
             new("view.comment", "MENUSTR_VIEW_COMMENT", "F8"),
             MenuItemModel.Separator(),
             new("view.preview", "MENUSTR_VIEW_PREVIEW"),
-            new("view.toolbar", "MENUSTR_VIEW_TOOLBAR"),
+            new("view.toolbar", "MENUSTR_VIEW_TOOLBAR", Enabled: true, CommandId: CommandToolBar),
             new("view.style", "MENUSTR_VIEW_LISTVIEW"),
             new("view.columns", "MENUSTR_VIEW_COLUMN", Enabled: true, CommandId: CommandColumns),
             MenuItemModel.Separator(),

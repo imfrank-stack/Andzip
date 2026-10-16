@@ -94,7 +94,7 @@ public sealed class MainWindow : Window
     /// （见 <c>MainMenuBar</c>），它没有"点一下这条菜单"这个动作。
     /// </summary>
     private static readonly IReadOnlyList<string> HandledElsewhere =
-        [MainMenuModel.CommandRecentFiles, MainMenuModel.CommandColumns];
+        [MainMenuModel.CommandRecentFiles, MainMenuModel.CommandColumns, MainMenuModel.CommandToolBar];
 
     private FindWindow? _find;
     private AboutWindow? _about;
@@ -121,12 +121,22 @@ public sealed class MainWindow : Window
     /// </summary>
     private readonly List<string> _hiddenColumns;
 
+    /// <summary>
+    /// 工具栏现在是哪一档（大 / 小 / 隐藏）。<strong>它不在 <see cref="_view"/> 里</strong>：
+    /// 那一份是「设置 → 查看」那一页的数据形状，而这一档归「视图 → 工具栏」那个二级菜单管 ——
+    /// 一个键只归一处管（1.6.0 的规矩，4.1.0 的 <c>hidden_columns</c> 是同一条的应用）。
+    /// <para>这一页原来那个「显示工具栏」开关因此整行删掉了：三档里已经有"隐藏"，
+    /// 留两个入口管同一件事，就是留一对会互相盖掉的写方。</para>
+    /// </summary>
+    private ToolBarMode _toolBarMode;
+
     public MainWindow(LangCatalog lang, AppSettings settings)
     {
         _lang = lang;
         _settings = settings;
         _view = ViewDefaults.Load(settings);
         _hiddenColumns = [.. settings.GetStringList(SettingKeys.HiddenColumns)];
+        _toolBarMode = SettingKeys.ParseToolBarMode(settings.GetString(SettingKeys.ViewToolBar));
 
         Title = EngineTitle;
         Width = 1040;
@@ -184,7 +194,8 @@ public sealed class MainWindow : Window
 
         _menuBar = MainMenuBar.Create(_lang, _commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles),
-            new ColumnMenu(() => _hiddenColumns, SetColumnVisible));
+            new ColumnMenu(() => _hiddenColumns, SetColumnVisible),
+            new ToolBarMenu(() => _toolBarMode, SetToolBarMode));
 
         // 模型里 Enabled: true 的语义是"这条实装过了"。自称实装了却没接到命令，界面上就是
         // 一条黑字、能点、点下去什么都不发生 —— 那比灰着危险得多（文件菜单那四条置灰的同一条判断）。
@@ -313,8 +324,8 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// 按当前调色板做一条新工具栏。「查看 → 显示工具栏」的开关状态在这里一并带上，
-    /// 否则换完主题工具栏会悄悄跑回来（<see cref="ApplyViewDefaults"/> 那次已经过去了）。
+    /// 按当前调色板与当前那一档做一条新工具栏。「视图 → 工具栏」选的是哪一档在这里一并带上，
+    /// 否则换完主题工具栏会悄悄跑回大档（<see cref="ApplyViewDefaults"/> 那次已经过去了）。
     /// <para>每一颗都从 <see cref="_commands"/> 里取，不在这里另写一遍"它做什么"。
     /// 「查看」与「切换语言」两颗<strong>不带命令 id</strong>：前者是预览面板，功能本身还没做，
     /// 没有命令可给，于是它建出来就是灰的而且谁也不会去点亮它；后者的动作是"跳到设置那一页"，
@@ -330,11 +341,11 @@ public sealed class MainWindow : Window
             DeleteFiles: _commands[MainMenuModel.CommandDeleteEntries],
             TestArchive: _commands[MainMenuModel.CommandTestArchive],
             ScanArchive: _commands[MainMenuModel.CommandScanArchive],
-            SwitchLanguage: () => OpenSettingsDialogOn("TEXT_SETTINGS_LANGUAGE")));
+            SwitchLanguage: () => OpenSettingsDialogOn("TEXT_SETTINGS_LANGUAGE")),
+            _toolBarMode);
 
-        // 「查看 → 显示工具栏」要跟着带上，否则换完主题工具栏会悄悄跑回来
-        // （ApplyViewDefaults 那一次已经过去了）。
-        bar.IsVisible = _view.ShowToolBar;
+        // 「隐藏」要跟着带上，否则换完主题那条被藏起来的工具栏会悄悄跑回来。
+        bar.IsVisible = _toolBarMode != ToolBarMode.Hidden;
         return bar;
     }
 
@@ -407,7 +418,7 @@ public sealed class MainWindow : Window
 
         // 主题也在这一组里：换了偏好就翻调色板，Design 的事件会带回 ApplyTheme 重画外壳与内容。
         Design.Apply(_view.Theme);
-        _toolBar.IsVisible = _view.ShowToolBar;
+        _toolBar.IsVisible = _toolBarMode != ToolBarMode.Hidden;
         _titleShowsFullPath = _settings.GetBool(SettingKeys.TitleBarFullPath, fallback: false);
 
         // 标题是"当前状态"的一部分，改了设置得立刻反映出来，而不是等下次打开包。
@@ -1559,6 +1570,30 @@ public sealed class MainWindow : Window
         _settings.Save(AppSettings.DefaultFilePath);
 
         _browser?.SetHiddenColumns(_hiddenColumns);
+    }
+
+    /// <summary>
+    /// 「视图 → 工具栏」换一档：落盘，然后<strong>重做一条</strong>工具栏。
+    /// <para>不是只改 <c>IsVisible</c>：大与小差的不是显不显示，是每一格里画不画文字、
+    /// 图标多大、上下内距多少 —— 那些都在构造时定下了。改档走的是与换主题同一条路
+    /// （<see cref="BuildToolBar"/> 换掉 <c>_headerHost.Child</c>），所以两处只会有一处知道
+    /// "一条工具栏怎么造出来"。</para>
+    /// <para>同值直接返回：菜单每次展开都会重建那三行，点在当前那一档上是可能发生的事，
+    /// 而重做一条工具栏会把它上面的悬停态与焦点一起丢掉 —— 没人要求却先动了一下。</para>
+    /// </summary>
+    private void SetToolBarMode(ToolBarMode mode)
+    {
+        if (mode == _toolBarMode)
+        {
+            return;
+        }
+
+        _toolBarMode = mode;
+        _settings.SetString(SettingKeys.ViewToolBar, mode.ToStorage());
+        _settings.Save(AppSettings.DefaultFilePath);
+
+        _toolBar = BuildToolBar();
+        _headerHost.Child = _toolBar;
     }
 
     /// <summary>
