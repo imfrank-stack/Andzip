@@ -76,11 +76,8 @@ internal static class DirectExtract
             password = prompt.Password;
         }
 
-        var destination = task == ShellTask.ExtractInPlace
-            // 就地铺开：内容原样落在压缩包旁边，不套袋子 —— 所以连清单都不用先读一遍。
-            ? ShellTasks.ParentFolder(archivePath)
-            : await ExtractDestinationAsync(
-                archivePath, password, ExtractionDefaults.Load(appSettings).SingleFileToFolder);
+        var destination = await ExtractDestinationAsync(
+            archivePath, password, ExtractionDefaults.Load(appSettings).SingleFileToFolder);
 
         var settings = new ExtractionSettings(
             archivePath,

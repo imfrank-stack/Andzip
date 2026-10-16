@@ -532,7 +532,8 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// 0.10.0 给它加过，理由很正当：菜单上不想出现两行「用 Andzip 打开」。代价是这条藏起来之后
     /// <strong>它就不当双击的默认动词了</strong> —— 资源管理器往下找第一条看得见的动词，找到的是
     /// <c>shell\andzip-open</c>，而那一条命令行里写死了 <c>/task=open</c>。于是从 0.10.0 起
-    /// 「双击 = 直接解压到当前文件夹」在真机上永远不生效，改设置、改注册表默认动词都没用。
+    /// 「双击 = 解压那一档」（当时界面上叫「直接解压到当前文件夹」）在真机上永远不生效，
+    /// 改设置、改注册表默认动词都没用。
     /// 这一层只有真的走 shell 的动词表才看得见：本机实测过，藏起来时
     /// <c>Shell.Application</c> 的 <c>InvokeVerb()</c>（双击那一下）落到 <c>/task=open</c>，
     /// 把值去掉之后同一次调用就地铺开；而 <c>Invoke-Item</c> 与 <c>Process.Start</c> 这类

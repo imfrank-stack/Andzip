@@ -12,9 +12,23 @@ namespace Andzip.App;
 /// 就出过 <c>0.13.0</c> 那种事。</para>
 /// <para>为什么是 C# 常量而不是资源字典：本工程没有 XAML，控件全在代码里 new，
 /// 资源字典只会变成第二套没人同步的真相。</para>
-/// <para><strong>颜色为什么是属性而不是字段</strong>：浅色/深色两套调色板要能整体切换
-/// （<see cref="Use"/>），字段会在类型初始化时就固化成浅色的那一份。
-/// 圆角、间距、字号与主题无关，所以它们仍是常量。</para>
+/// <para><strong>颜色为什么是属性而不是字段，而且画刷为什么全进程只有一份</strong>：
+/// 没有 XAML 就意味着每个控件的颜色都是在构造那一刻从这里的属性<em>抄一份引用</em>到自己身上
+/// （<c>button.Background = Design.Surface.Base;</c>）。抄来的引用要能跟着主题走，
+/// 被引用的那一份就<strong>不能换</strong> —— 只能改它自己的颜色。
+/// 所以浅深两套调色板<strong>共用同一批 <see cref="SolidColorBrush"/> 实例</strong>，
+/// <see cref="Use"/> 换档时逐个改写它们的 <c>Color</c>；<see cref="Active"/> 换的是
+/// <em>颜色表</em>，不是画刷。</para>
+/// <para>这条是 1.4.0 那条「不许把 Design 的画刷抄进静态字段」（<c>DesignTokenTests</c>）的续集：
+/// 那条只挡住了「字段里再存一份」，挡不住「控件实例在构造时抓一次」。
+/// 用户 2026-10-16 的话是「每当我切换模式的时候，颜色都会不正常，但是重新打开还是正常的」——
+/// 重新打开正常、切换后不正常，说的就是<strong>有一批颜色停在建窗口那一次的调色板上</strong>：
+/// 深色下白底浅字的菜单弹窗（<c>Chrome.RoundPopups</c> 第一次展开写下的浅色局部值）、
+/// 以及任何没被 <c>MainWindow.ApplyTheme</c> 重做一遍的窗口。画刷做成活的那一秒，
+/// 这两类一起消失：抓一次与抓每次是同一件事。</para>
+/// <para><strong>仍然跟着构造走的是 <see cref="Shadow"/></strong>：<c>BoxShadows</c> 是结构体，
+/// 没有"活的实例"可以改，所以换档后已建好的控件留着旧的那档影子（差别只有不透明度，
+/// 深色下更不明显）。位图画出来的图标同理 —— 那一路靠 <c>ApplyTheme</c> 重做。</para>
 /// </summary>
 internal static class Design
 {
@@ -63,34 +77,85 @@ internal static class Design
         }
 
         Active = next;
+
+        // 先改色再广播：听到事件的一方（MainWindow.ApplyTheme）会现读这些画刷，
+        // 顺序反过来它读到的是上一档。
+        Brand.Use(next);
+        Ink.Use(next);
+        Surface.Use(next);
+        Line.Use(next);
+        Toggle.Use(next);
+        Semantic.Use(next);
+        Icon.Use(next);
+
         ActiveChanged?.Invoke();
     }
 
     /// <summary>品牌蓝。工具栏带、主按钮、选中态、链接。</summary>
     internal static class Brand
     {
-        public static IBrush Tint => Active.BrandTint;
-        public static IBrush Soft => Active.BrandSoft;
-        public static IBrush Line => Active.BrandLine;
-        public static IBrush Bright => Active.BrandBright;
-        public static IBrush Base => Active.BrandBase;
-        public static IBrush Deep => Active.BrandDeep;
-        public static IBrush Hover => Active.BrandHover;
+        static readonly SolidColorBrush
+            _tint = new(Palette.Light.BrandTint),
+            _soft = new(Palette.Light.BrandSoft),
+            _line = new(Palette.Light.BrandLine),
+            _bright = new(Palette.Light.BrandBright),
+            _base = new(Palette.Light.BrandBase),
+            _deep = new(Palette.Light.BrandDeep),
+            _hover = new(Palette.Light.BrandHover),
+            _onHover = new(Palette.Light.OnBrandHover),
+            _onPressed = new(Palette.Light.OnBrandPressed);
+
+        public static IBrush Tint => _tint;
+        public static IBrush Soft => _soft;
+        public static IBrush Line => _line;
+        public static IBrush Bright => _bright;
+        public static IBrush Base => _base;
+        public static IBrush Deep => _deep;
+        public static IBrush Hover => _hover;
 
         /// <summary>叠在品牌蓝带上的半透明白：悬停 12%、按下 20%。两套主题下都用白叠加。</summary>
-        public static IBrush OnBrandHover => Active.OnBrandHover;
+        public static IBrush OnBrandHover => _onHover;
 
-        public static IBrush OnBrandPressed => Active.OnBrandPressed;
+        public static IBrush OnBrandPressed => _onPressed;
+
+        internal static void Use(Palette p)
+        {
+            _tint.Color = p.BrandTint;
+            _soft.Color = p.BrandSoft;
+            _line.Color = p.BrandLine;
+            _bright.Color = p.BrandBright;
+            _base.Color = p.BrandBase;
+            _deep.Color = p.BrandDeep;
+            _hover.Color = p.BrandHover;
+            _onHover.Color = p.OnBrandHover;
+            _onPressed.Color = p.OnBrandPressed;
+        }
     }
 
     /// <summary>文字与描边的中性色。</summary>
     internal static class Ink
     {
-        public static IBrush Primary => Active.InkPrimary;
-        public static IBrush Secondary => Active.InkSecondary;
-        public static IBrush Disabled => Active.InkDisabled;
-        public static IBrush OnBrand => Active.InkOnBrand;
-        public static IBrush OnBrandDisabled => Active.InkOnBrandDisabled;
+        static readonly SolidColorBrush
+            _primary = new(Palette.Light.InkPrimary),
+            _secondary = new(Palette.Light.InkSecondary),
+            _disabled = new(Palette.Light.InkDisabled),
+            _onBrand = new(Palette.Light.InkOnBrand),
+            _onBrandDisabled = new(Palette.Light.InkOnBrandDisabled);
+
+        public static IBrush Primary => _primary;
+        public static IBrush Secondary => _secondary;
+        public static IBrush Disabled => _disabled;
+        public static IBrush OnBrand => _onBrand;
+        public static IBrush OnBrandDisabled => _onBrandDisabled;
+
+        internal static void Use(Palette p)
+        {
+            _primary.Color = p.InkPrimary;
+            _secondary.Color = p.InkSecondary;
+            _disabled.Color = p.InkDisabled;
+            _onBrand.Color = p.InkOnBrand;
+            _onBrandDisabled.Color = p.InkOnBrandDisabled;
+        }
     }
 
     /// <summary>
@@ -102,22 +167,48 @@ internal static class Design
     /// </summary>
     internal static class Surface
     {
-        public static IBrush Base => Active.SurfaceBase;
-        public static IBrush Muted => Active.SurfaceMuted;
-        public static IBrush Sunken => Active.SurfaceSunken;
+        static readonly SolidColorBrush
+            _base = new(Palette.Light.SurfaceBase),
+            _muted = new(Palette.Light.SurfaceMuted),
+            _sunken = new(Palette.Light.SurfaceSunken),
+            _pressed = new(Palette.Light.SurfacePressed);
+
+        public static IBrush Base => _base;
+        public static IBrush Muted => _muted;
+        public static IBrush Sunken => _sunken;
 
         /// <summary>按下那一档（比悬停再沉一点）。只给"自己画状态"的控件用，
         /// 别让 SimpleTheme 的 <c>:pressed</c> 替我们决定 —— 它给的是深灰块。</summary>
-        public static IBrush Pressed => Active.SurfacePressed;
+        public static IBrush Pressed => _pressed;
+
+        internal static void Use(Palette p)
+        {
+            _base.Color = p.SurfaceBase;
+            _muted.Color = p.SurfaceMuted;
+            _sunken.Color = p.SurfaceSunken;
+            _pressed.Color = p.SurfacePressed;
+        }
     }
 
     internal static class Line
     {
-        /// <summary>最淡的一档：面板内部分区用的发丝线（树与列表之间、内容区与底栏之间）。</summary>
-        public static IBrush Hair => Active.LineHair;
+        static readonly SolidColorBrush
+            _hair = new(Palette.Light.LineHair),
+            _subtle = new(Palette.Light.LineSubtle),
+            _strong = new(Palette.Light.LineStrong);
 
-        public static IBrush Subtle => Active.LineSubtle;
-        public static IBrush Strong => Active.LineStrong;
+        /// <summary>最淡的一档：面板内部分区用的发丝线（树与列表之间、内容区与底栏之间）。</summary>
+        public static IBrush Hair => _hair;
+
+        public static IBrush Subtle => _subtle;
+        public static IBrush Strong => _strong;
+
+        internal static void Use(Palette p)
+        {
+            _hair.Color = p.LineHair;
+            _subtle.Color = p.LineSubtle;
+            _strong.Color = p.LineStrong;
+        }
     }
 
     /// <summary>
@@ -126,9 +217,21 @@ internal static class Design
     /// </summary>
     internal static class Toggle
     {
-        public static IBrush TrackOff => Active.ToggleTrackOff;
-        public static IBrush TrackOn => Active.ToggleTrackOn;
-        public static IBrush Knob => Active.ToggleKnob;
+        static readonly SolidColorBrush
+            _trackOff = new(Palette.Light.ToggleTrackOff),
+            _trackOn = new(Palette.Light.ToggleTrackOn),
+            _knob = new(Palette.Light.ToggleKnob);
+
+        public static IBrush TrackOff => _trackOff;
+        public static IBrush TrackOn => _trackOn;
+        public static IBrush Knob => _knob;
+
+        internal static void Use(Palette p)
+        {
+            _trackOff.Color = p.ToggleTrackOff;
+            _trackOn.Color = p.ToggleTrackOn;
+            _knob.Color = p.ToggleKnob;
+        }
     }
 
     /// <summary>
@@ -137,6 +240,11 @@ internal static class Design
     /// 两层才有"浮起来"而不是"变暗了"的感觉。
     /// <para>深色下阴影几乎不可见（底本来就黑），所以那一份只把不透明度提高一档，
     /// 真正管用的是 <c>Line.Subtle</c> 那圈发丝边。</para>
+    /// <para><strong>这一档不跟着换档走</strong>：<c>BoxShadows</c> 是结构体，控件身上存的是值不是引用，
+    /// 没有"活的实例"可以改写颜色。所以换主题后已经建好的控件留着旧的那档影子，
+    /// 要一起换只能重做控件（<c>MainWindow.ApplyTheme</c> 对工具栏与图标就是这么办的）。
+    /// 两档影子几何完全相同、只差一点不透明度，深色下几乎看不出，所以这一处留白是量过的取舍，
+    /// 不是漏的。</para>
     /// </summary>
     internal static class Shadow
     {
@@ -157,20 +265,44 @@ internal static class Design
     /// <summary>语义色。规范里写着"不许当装饰"：红只用于错误/危险，绿只用于成功。</summary>
     internal static class Semantic
     {
-        public static IBrush Danger => Active.Danger;
-        public static IBrush DangerTint => Active.DangerTint;
-        public static IBrush Success => Active.Success;
-        public static IBrush WarningText => Active.WarningText;
-        public static IBrush WarningTint => Active.WarningTint;
-        public static IBrush WarningIcon => Active.WarningIcon;
+        static readonly SolidColorBrush
+            _danger = new(Palette.Light.Danger),
+            _dangerTint = new(Palette.Light.DangerTint),
+            _success = new(Palette.Light.Success),
+            _warningText = new(Palette.Light.WarningText),
+            _warningTint = new(Palette.Light.WarningTint),
+            _warningIcon = new(Palette.Light.WarningIcon);
+
+        public static IBrush Danger => _danger;
+        public static IBrush DangerTint => _dangerTint;
+        public static IBrush Success => _success;
+        public static IBrush WarningText => _warningText;
+        public static IBrush WarningTint => _warningTint;
+        public static IBrush WarningIcon => _warningIcon;
+
+        internal static void Use(Palette p)
+        {
+            _danger.Color = p.Danger;
+            _dangerTint.Color = p.DangerTint;
+            _success.Color = p.Success;
+            _warningText.Color = p.WarningText;
+            _warningTint.Color = p.WarningTint;
+            _warningIcon.Color = p.WarningIcon;
+        }
     }
 
     /// <summary>图标的面与边。内容区唯一允许填充的图标是文件夹；工具栏那九枚双色图形见 <c>Icon.Accent</c>。</summary>
     internal static class Icon
     {
-        public static IBrush Face => Active.FolderFace;
-        public static IBrush Edge => Active.FolderEdge;
-        public static IBrush Glyph => Active.IconGlyph;
+        static readonly SolidColorBrush
+            _face = new(Palette.Light.FolderFace),
+            _edge = new(Palette.Light.FolderEdge),
+            _glyph = new(Palette.Light.IconGlyph),
+            _accent = new(Palette.Light.IconAccent);
+
+        public static IBrush Face => _face;
+        public static IBrush Edge => _edge;
+        public static IBrush Glyph => _glyph;
 
         /// <summary>
         /// 双色图标的第二档：同一枚图形里"次要的那一层"（盒盖、折角）。
@@ -178,7 +310,15 @@ internal static class Design
         /// 两档灰。深色下面 <c>#414B5A</c> 会直接融进卡片，所以这里不是照抄两个色，
         /// 而是把"亮一档 / 暗一档"的关系按调色板各算一遍 —— 关系保住，绝对值让给主题。</para>
         /// </summary>
-        public static IBrush Accent => Active.IconAccent;
+        public static IBrush Accent => _accent;
+
+        internal static void Use(Palette p)
+        {
+            _face.Color = p.FolderFace;
+            _edge.Color = p.FolderEdge;
+            _glyph.Color = p.IconGlyph;
+            _accent.Color = p.IconAccent;
+        }
     }
 
     /// <summary>圆角只有这 6 档（规范 4.1）。与主题无关，所以是常量。</summary>
@@ -258,7 +398,7 @@ internal static class Design
 }
 
 /// <summary>
-/// 一套完整的调色板：29 个画刷 + 3 档阴影，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
+/// 一套完整的颜色表：34 个颜色 + 3 档阴影，一个都不能少 —— 少一个就是深色模式下漏出一块浅色。
 /// <para>深色那一份刻意<strong>不用纯黑</strong>：画布停在 <c>#14171A</c>、卡片 <c>#1F2328</c>，
 /// 纯黑配高对比文字会在暗环境里产生"光晕"，眼睛要不停重新对焦。
 /// 品牌蓝在深色下反而要<strong>压深</strong>（<c>#1B5E9E</c>）而不是提亮：
@@ -272,87 +412,87 @@ internal sealed class Palette
 
     public string Name { get; }
 
-    public required IBrush BrandTint { get; init; }
-    public required IBrush BrandSoft { get; init; }
-    public required IBrush BrandLine { get; init; }
-    public required IBrush BrandBright { get; init; }
-    public required IBrush BrandBase { get; init; }
-    public required IBrush BrandDeep { get; init; }
-    public required IBrush BrandHover { get; init; }
-    public required IBrush OnBrandHover { get; init; }
-    public required IBrush OnBrandPressed { get; init; }
+    public required Color BrandTint { get; init; }
+    public required Color BrandSoft { get; init; }
+    public required Color BrandLine { get; init; }
+    public required Color BrandBright { get; init; }
+    public required Color BrandBase { get; init; }
+    public required Color BrandDeep { get; init; }
+    public required Color BrandHover { get; init; }
+    public required Color OnBrandHover { get; init; }
+    public required Color OnBrandPressed { get; init; }
 
-    public required IBrush InkPrimary { get; init; }
-    public required IBrush InkSecondary { get; init; }
-    public required IBrush InkDisabled { get; init; }
-    public required IBrush InkOnBrand { get; init; }
-    public required IBrush InkOnBrandDisabled { get; init; }
+    public required Color InkPrimary { get; init; }
+    public required Color InkSecondary { get; init; }
+    public required Color InkDisabled { get; init; }
+    public required Color InkOnBrand { get; init; }
+    public required Color InkOnBrandDisabled { get; init; }
 
-    public required IBrush SurfaceBase { get; init; }
-    public required IBrush SurfaceMuted { get; init; }
-    public required IBrush SurfaceSunken { get; init; }
+    public required Color SurfaceBase { get; init; }
+    public required Color SurfaceMuted { get; init; }
+    public required Color SurfaceSunken { get; init; }
 
     /// <summary>按下去那一档：比 <see cref="SurfaceMuted"/> 再沉一点。
     /// 设置页导航项用它 —— 那一处不能让 SimpleTheme 自己画 <c>:pressed</c>，
     /// 它给的是 <c>#686868</c> 那种深灰块，压在浅底上像按坏了（1.8.7，用户截图）。</summary>
-    public required IBrush SurfacePressed { get; init; }
+    public required Color SurfacePressed { get; init; }
 
-    public required IBrush LineHair { get; init; }
-    public required IBrush LineSubtle { get; init; }
-    public required IBrush LineStrong { get; init; }
+    public required Color LineHair { get; init; }
+    public required Color LineSubtle { get; init; }
+    public required Color LineStrong { get; init; }
 
-    public required IBrush ToggleTrackOff { get; init; }
-    public required IBrush ToggleTrackOn { get; init; }
-    public required IBrush ToggleKnob { get; init; }
+    public required Color ToggleTrackOff { get; init; }
+    public required Color ToggleTrackOn { get; init; }
+    public required Color ToggleKnob { get; init; }
 
     public required BoxShadows ShadowFloating { get; init; }
     public required BoxShadows ShadowLift { get; init; }
     public required BoxShadows ShadowPill { get; init; }
 
-    public required IBrush Danger { get; init; }
-    public required IBrush DangerTint { get; init; }
-    public required IBrush Success { get; init; }
-    public required IBrush WarningText { get; init; }
-    public required IBrush WarningTint { get; init; }
-    public required IBrush WarningIcon { get; init; }
+    public required Color Danger { get; init; }
+    public required Color DangerTint { get; init; }
+    public required Color Success { get; init; }
+    public required Color WarningText { get; init; }
+    public required Color WarningTint { get; init; }
+    public required Color WarningIcon { get; init; }
 
-    public required IBrush FolderFace { get; init; }
-    public required IBrush FolderEdge { get; init; }
-    public required IBrush IconGlyph { get; init; }
+    public required Color FolderFace { get; init; }
+    public required Color FolderEdge { get; init; }
+    public required Color IconGlyph { get; init; }
 
     /// <summary>双色图标的第二档（盒盖 / 折角），永远与 <see cref="IconGlyph"/> 差一档明度。</summary>
-    public required IBrush IconAccent { get; init; }
+    public required Color IconAccent { get; init; }
 
     public static Palette Light { get; } = new("light")
     {
-        BrandTint = Brush(0xF2, 0xF7, 0xFD),
-        BrandSoft = Brush(0xE1, 0xEE, 0xFB),
-        BrandLine = Brush(0xBF, 0xD9, 0xF4),
-        BrandBright = Brush(0x2E, 0x86, 0xD6),
-        BrandBase = Brush(0x0F, 0x6C, 0xBD),
-        BrandDeep = Brush(0x0C, 0x5A, 0xA0),
-        BrandHover = Brush(0x4A, 0x9B, 0xE8),
-        OnBrandHover = Brush(0x1F, 0xFF, 0xFF, 0xFF),
-        OnBrandPressed = Brush(0x33, 0xFF, 0xFF, 0xFF),
+        BrandTint = Rgb(0xF2, 0xF7, 0xFD),
+        BrandSoft = Rgb(0xE1, 0xEE, 0xFB),
+        BrandLine = Rgb(0xBF, 0xD9, 0xF4),
+        BrandBright = Rgb(0x2E, 0x86, 0xD6),
+        BrandBase = Rgb(0x0F, 0x6C, 0xBD),
+        BrandDeep = Rgb(0x0C, 0x5A, 0xA0),
+        BrandHover = Rgb(0x4A, 0x9B, 0xE8),
+        OnBrandHover = Argb(0x1F, 0xFF, 0xFF, 0xFF),
+        OnBrandPressed = Argb(0x33, 0xFF, 0xFF, 0xFF),
 
-        InkPrimary = Brush(0x1F, 0x23, 0x28),
-        InkSecondary = Brush(0x5B, 0x64, 0x70),
-        InkDisabled = Brush(0x9A, 0xA3, 0xAE),
-        InkOnBrand = Brush(0xFF, 0xFF, 0xFF),
-        InkOnBrandDisabled = Brush(0x99, 0xFF, 0xFF, 0xFF),
+        InkPrimary = Rgb(0x1F, 0x23, 0x28),
+        InkSecondary = Rgb(0x5B, 0x64, 0x70),
+        InkDisabled = Rgb(0x9A, 0xA3, 0xAE),
+        InkOnBrand = Rgb(0xFF, 0xFF, 0xFF),
+        InkOnBrandDisabled = Argb(0x99, 0xFF, 0xFF, 0xFF),
 
-        SurfaceBase = Brush(0xFF, 0xFF, 0xFF),
-        SurfaceMuted = Brush(0xF6, 0xF8, 0xFA),
-        SurfaceSunken = Brush(0xFA, 0xFB, 0xFC),
-        SurfacePressed = Brush(0xE9, 0xED, 0xF1),
+        SurfaceBase = Rgb(0xFF, 0xFF, 0xFF),
+        SurfaceMuted = Rgb(0xF6, 0xF8, 0xFA),
+        SurfaceSunken = Rgb(0xFA, 0xFB, 0xFC),
+        SurfacePressed = Rgb(0xE9, 0xED, 0xF1),
 
-        LineHair = Brush(0xF0, 0xF2, 0xF5),
-        LineSubtle = Brush(0xE6, 0xE9, 0xEC),
-        LineStrong = Brush(0xC9, 0xCE, 0xD6),
+        LineHair = Rgb(0xF0, 0xF2, 0xF5),
+        LineSubtle = Rgb(0xE6, 0xE9, 0xEC),
+        LineStrong = Rgb(0xC9, 0xCE, 0xD6),
 
-        ToggleTrackOff = Brush(0xD6, 0xDC, 0xE4),
-        ToggleTrackOn = Brush(0x0F, 0x6C, 0xBD),
-        ToggleKnob = Brush(0xFF, 0xFF, 0xFF),
+        ToggleTrackOff = Rgb(0xD6, 0xDC, 0xE4),
+        ToggleTrackOn = Rgb(0x0F, 0x6C, 0xBD),
+        ToggleKnob = Rgb(0xFF, 0xFF, 0xFF),
 
         // 影子的颜色不是黑的，是品牌深墨蓝：灰黑影子在白底上发脏，带一点冷的墨色才干净。
         // 参考图（用户给的那张）量出来是"边缘外 2-4px 约 9% 暗，13px 内衰减干净"，
@@ -369,76 +509,74 @@ internal sealed class Palette
         ShadowLift = Shadows("0 2 10 0 #240B1E33, 0 0 3 1 #1F0B1E33"),
         ShadowPill = Shadows("0 1 2 0 #1A0B1E33"),
 
-        Danger = Brush(0xC4, 0x2B, 0x1C),
-        DangerTint = Brush(0xFD, 0xEC, 0xEA),
-        Success = Brush(0x1A, 0x7F, 0x37),
-        WarningText = Brush(0x8A, 0x61, 0x00),
-        WarningTint = Brush(0xFF, 0xF6, 0xDE),
-        WarningIcon = Brush(0xD9, 0xA6, 0x1F),
+        Danger = Rgb(0xC4, 0x2B, 0x1C),
+        DangerTint = Rgb(0xFD, 0xEC, 0xEA),
+        Success = Rgb(0x1A, 0x7F, 0x37),
+        WarningText = Rgb(0x8A, 0x61, 0x00),
+        WarningTint = Rgb(0xFF, 0xF6, 0xDE),
+        WarningIcon = Rgb(0xD9, 0xA6, 0x1F),
 
-        FolderFace = Brush(0xF7, 0xC9, 0x48),
-        FolderEdge = Brush(0xD9, 0xA6, 0x1F),
-        IconGlyph = Brush(0x5B, 0x64, 0x70),
-        IconAccent = Brush(0xA7, 0xB1, 0xBF),
+        FolderFace = Rgb(0xF7, 0xC9, 0x48),
+        FolderEdge = Rgb(0xD9, 0xA6, 0x1F),
+        IconGlyph = Rgb(0x5B, 0x64, 0x70),
+        IconAccent = Rgb(0xA7, 0xB1, 0xBF),
     };
 
     public static Palette Dark { get; } = new("dark")
     {
         // 选中/信息类的蓝色要能压住深底，所以比浅色那份更亮一点；
         // 而"带子/主按钮"那种白字底反而要更深 —— 两者不是一回事。
-        BrandTint = Brush(0x17, 0x29, 0x3B),
-        BrandSoft = Brush(0x1E, 0x3A, 0x52),
-        BrandLine = Brush(0x2F, 0x5C, 0x86),
-        BrandBright = Brush(0x5C, 0xA8, 0xE8),
-        BrandBase = Brush(0x1B, 0x5E, 0x9E),
-        BrandDeep = Brush(0x14, 0x4A, 0x80),
-        BrandHover = Brush(0x3D, 0x86, 0xC8),
-        OnBrandHover = Brush(0x26, 0xFF, 0xFF, 0xFF),
-        OnBrandPressed = Brush(0x3D, 0xFF, 0xFF, 0xFF),
+        BrandTint = Rgb(0x17, 0x29, 0x3B),
+        BrandSoft = Rgb(0x1E, 0x3A, 0x52),
+        BrandLine = Rgb(0x2F, 0x5C, 0x86),
+        BrandBright = Rgb(0x5C, 0xA8, 0xE8),
+        BrandBase = Rgb(0x1B, 0x5E, 0x9E),
+        BrandDeep = Rgb(0x14, 0x4A, 0x80),
+        BrandHover = Rgb(0x3D, 0x86, 0xC8),
+        OnBrandHover = Argb(0x26, 0xFF, 0xFF, 0xFF),
+        OnBrandPressed = Argb(0x3D, 0xFF, 0xFF, 0xFF),
 
-        InkPrimary = Brush(0xE7, 0xEB, 0xF0),
-        InkSecondary = Brush(0xA7, 0xB0, 0xBA),
-        InkDisabled = Brush(0x6B, 0x74, 0x80),
-        InkOnBrand = Brush(0xFF, 0xFF, 0xFF),
-        InkOnBrandDisabled = Brush(0x8C, 0xFF, 0xFF, 0xFF),
+        InkPrimary = Rgb(0xE7, 0xEB, 0xF0),
+        InkSecondary = Rgb(0xA7, 0xB0, 0xBA),
+        InkDisabled = Rgb(0x6B, 0x74, 0x80),
+        InkOnBrand = Rgb(0xFF, 0xFF, 0xFF),
+        InkOnBrandDisabled = Argb(0x8C, 0xFF, 0xFF, 0xFF),
 
-        SurfaceBase = Brush(0x1F, 0x23, 0x28),
-        SurfaceMuted = Brush(0x26, 0x2B, 0x31),
-        SurfaceSunken = Brush(0x1A, 0x1E, 0x22),
-        SurfacePressed = Brush(0x30, 0x37, 0x3F),
+        SurfaceBase = Rgb(0x1F, 0x23, 0x28),
+        SurfaceMuted = Rgb(0x26, 0x2B, 0x31),
+        SurfaceSunken = Rgb(0x1A, 0x1E, 0x22),
+        SurfacePressed = Rgb(0x30, 0x37, 0x3F),
 
-        LineHair = Brush(0x27, 0x2C, 0x32),
-        LineSubtle = Brush(0x2E, 0x34, 0x3A),
-        LineStrong = Brush(0x45, 0x4D, 0x56),
+        LineHair = Rgb(0x27, 0x2C, 0x32),
+        LineSubtle = Rgb(0x2E, 0x34, 0x3A),
+        LineStrong = Rgb(0x45, 0x4D, 0x56),
 
         // 关着的轨道要压得够暗，否则与开着的蓝分不出两态（PaletteContrastTests 卡 3:1）。
-        ToggleTrackOff = Brush(0x2E, 0x35, 0x3D),
-        ToggleTrackOn = Brush(0x3D, 0x86, 0xC8),
-        ToggleKnob = Brush(0xE7, 0xEB, 0xF0),
+        ToggleTrackOff = Rgb(0x2E, 0x35, 0x3D),
+        ToggleTrackOn = Rgb(0x3D, 0x86, 0xC8),
+        ToggleKnob = Rgb(0xE7, 0xEB, 0xF0),
 
         // 同一套几何，不透明度提高一档：纯黑上的黑影子只有加深边缘这一种作用，太淡等于没有。
         ShadowFloating = Shadows("0 1 3 0 #33000000, 0 6 14 0 #59000000"),
         ShadowLift = Shadows("0 2 10 0 #73000000, 0 0 3 1 #59000000"),
         ShadowPill = Shadows("0 1 2 0 #66000000"),
 
-        Danger = Brush(0xF2, 0x8B, 0x82),
-        DangerTint = Brush(0x3A, 0x1F, 0x1D),
-        Success = Brush(0x7F, 0xDC, 0xA4),
-        WarningText = Brush(0xF5, 0xD2, 0x7A),
-        WarningTint = Brush(0x3A, 0x31, 0x17),
-        WarningIcon = Brush(0xE8, 0xB9, 0x3C),
+        Danger = Rgb(0xF2, 0x8B, 0x82),
+        DangerTint = Rgb(0x3A, 0x1F, 0x1D),
+        Success = Rgb(0x7F, 0xDC, 0xA4),
+        WarningText = Rgb(0xF5, 0xD2, 0x7A),
+        WarningTint = Rgb(0x3A, 0x31, 0x17),
+        WarningIcon = Rgb(0xE8, 0xB9, 0x3C),
 
-        FolderFace = Brush(0xD9, 0xA6, 0x1F),
-        FolderEdge = Brush(0x8A, 0x61, 0x00),
-        IconGlyph = Brush(0xA7, 0xB0, 0xBA),
-        IconAccent = Brush(0x6E, 0x76, 0x81),
+        FolderFace = Rgb(0xD9, 0xA6, 0x1F),
+        FolderEdge = Rgb(0x8A, 0x61, 0x00),
+        IconGlyph = Rgb(0xA7, 0xB0, 0xBA),
+        IconAccent = Rgb(0x6E, 0x76, 0x81),
     };
 
-    private static IBrush Brush(int gray) => new SolidColorBrush(Color.FromRgb((byte)gray, (byte)gray, (byte)gray));
+    private static Color Rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
 
-    private static IBrush Brush(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
-
-    private static IBrush Brush(byte a, byte r, byte g, byte b) => new SolidColorBrush(Color.FromArgb(a, r, g, b));
+    private static Color Argb(int a, int r, int g, int b) => Color.FromArgb((byte)a, (byte)r, (byte)g, (byte)b);
 
     /// <summary>阴影只允许在这里写死：CSS 那串"偏移 模糊 扩散 颜色"散到视图代码里就没法统一调档了。</summary>
     private static BoxShadows Shadows(string spec) => BoxShadows.Parse(spec);

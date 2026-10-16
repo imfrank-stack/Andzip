@@ -8,6 +8,8 @@ namespace Andzip.App.UiTests;
 /// 颜色是会在改配色时悄悄跌破门槛的东西，写进文档的数字迟早会变成假的。</para>
 /// <para>深色那一份特别值得算：同一个"看起来挺亮"的灰，压在深底上的对比度常常比压在白底上的
 /// 同名灰低一截，而人眼在暗环境里对低对比更不敏感，于是"看着还行"的文字实际读不清。</para>
+/// <para><strong>读的是 <see cref="Palette"/> 那张颜色表，不是 <c>Design</c> 的画刷</strong>：
+/// 3.9.0 起画刷全进程只有一份，读它只能读到"当前这一档"，两套调色板就分不出你我了。</para>
 /// </summary>
 public class PaletteContrastTests
 {
@@ -19,7 +21,7 @@ public class PaletteContrastTests
         var board = which == "dark" ? Palette.Dark : Palette.Light;
         var failures = new List<string>();
 
-        void Check(string label, IBrush foreground, IBrush background, double floor)
+        void Check(string label, Color foreground, Color background, double floor)
         {
             var ratio = Contrast(foreground, background);
             if (ratio < floor)
@@ -48,20 +50,12 @@ public class PaletteContrastTests
         Assert.True(failures.Count == 0, $"{board.Name} 调色板对比度不达标：\n    " + string.Join("\n    ", failures));
     }
 
-    private static Color Of(IBrush brush) => brush is ISolidColorBrush solid
-        ? solid.Color
-        : throw new InvalidOperationException($"这个令牌不是纯色画刷（{brush.GetType().Name}），对比度没法算。");
+    private static string Name(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
-    private static string Name(IBrush brush)
+    private static double Contrast(Color foreground, Color background)
     {
-        var c = Of(brush);
-        return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
-    }
-
-    private static double Contrast(IBrush foreground, IBrush background)
-    {
-        var a = Luminance(Of(foreground));
-        var b = Luminance(Of(background));
+        var a = Luminance(foreground);
+        var b = Luminance(background);
         return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
     }
 

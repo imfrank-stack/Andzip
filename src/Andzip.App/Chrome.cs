@@ -386,6 +386,14 @@ internal static class Chrome
     /// 影子才有地方落；再把 <c>Popup</c> 的偏移收回同样的距离，面板就还贴在锚点上。</para>
     /// <para>只能在"已经打开"之后调：弹窗的 Child 是打开时才建出来的，所以调用点是
     /// <c>SubmenuOpened</c> / <c>DropDownOpened</c>，不是构造时。</para>
+    /// <para><strong>每一次展开都要把这一套重抄一遍，不许留"处理过了就跳过"的记号</strong>
+    /// （3.9.0，用户截图：深色窗口上开着一块白菜单）：这一层写的是<strong>局部值</strong>，
+    /// 谁写过就归谁管，主题换档不会把它换掉。旧实现用 <c>Margin.Right == 0</c> 当"没处理过"的判据，
+    /// 于是浅色下第一次展开留下的那一套值一直挂到进程结束 —— 屏幕上就是用户截的那块白面板
+    /// （<c>#FFFFFF</c> 底 + <c>#E6E9EC</c> 边，正是浅色调色板那两档）。
+    /// 底色与描边现在虽然跟着活画刷自己会走（见 <see cref="Design"/> 那段），
+    /// <c>BoxShadow</c> 是结构体、不会走，所以这里一律重抄：赋值本身就是幂等的，
+    /// margin 写的是绝对值而不是累加。</para>
     /// <para><strong>留白只给右下，不给左上，也不再收 <c>Popup</c> 的偏移</strong>
     /// （1.8.3 修的就是这两件事）。实测：Avalonia 是按<strong>含 margin 的外框</strong>定位弹窗的，
     /// 所以"四周都留 12 再把偏移收回 12"会把整块面板推到锚点身上 ——
@@ -398,9 +406,9 @@ internal static class Chrome
     {
         foreach (var popup in owner.GetVisualDescendants().OfType<Popup>())
         {
-            // 留白本身就是"处理过了"的记号：Name 之类不能写（控件已经 styled），
-            // 而这一层每次展开都会再调一次，不能累加。
-            if (popup is not { IsOpen: true } || popup.Child is not Border { Margin: { Right: 0 } } root)
+            // 弹窗的 Child 只有打开之后才在树里；没打开的那一项留着上一次的旧值，
+            // 等它下次展开时再抄（上面那段说的就是这件事）。
+            if (popup is not { IsOpen: true } || popup.Child is not Border root)
             {
                 continue;
             }

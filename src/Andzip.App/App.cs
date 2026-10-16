@@ -153,10 +153,11 @@ public sealed class App : Application
 
         if (SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)))
         {
-            // 双击走解压，落点是**就地铺开**（内容直接出现在压缩包旁边）。
-            // 与右键那条 <c>/task=extract</c> 的差别就在落点上：那条按包里的形状决定要不要套一层
-            // 同名袋子（0.10.0 三条并一条时用户要的），而这一项的名字承诺的是"当前文件夹"。
-            task = ShellTask.ExtractInPlace;
+            // 双击那一档与右键那条动词<strong>就是同一件事</strong>：同一条 <see cref="ShellTask.Extract"/>，
+            // 落点都由包里的形状决定（<c>ExtractionLayout</c>：整棵单子树直接得到那个目录，
+            // 零散一堆套一层同名袋子）。3.6.0 到 3.8.0 这里走的是另一条"就地铺开"，
+            // 用户 2026-10-16 的话把那一档叫回来了：「双击解压的方式为智能解压」。
+            task = ShellTask.Extract;
             return true;
         }
 
