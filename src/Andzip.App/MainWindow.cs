@@ -223,7 +223,7 @@ public sealed class MainWindow : Window
                 $"这些菜单项在模型里是启用态，却没有接到命令：{string.Join("、", unwired)}");
         }
 
-        // 「查看」= 参考软件的预览面板，尚未实现，所以这里不给命令（按钮呈禁用态）。
+        // 九颗全部接上了：「查看」是 4.6.0 补上的最后一颗（图像预览），它以前是 2.6.0 留下的死占位。
         _toolBar = BuildToolBar();
 
         // 一行装完：图标 + 菜单 ………… 最小化 / 最大化 / 关闭。
@@ -666,12 +666,44 @@ public sealed class MainWindow : Window
         {
             AntimalwareScanner.Verdict.Clean => Two(_lang.Get("TEXT_SCAN_CLEAN"), "TEXT_SCAN_NOTE"),
             AntimalwareScanner.Verdict.Detected => Two(_lang.Get("TEXT_SCAN_DETECTED"), "TEXT_SCAN_HANDLING"),
-            AntimalwareScanner.Verdict.NoEngine => Two(_lang.Get("TEXT_SCAN_NO_ENGINE"), "TEXT_SCAN_NO_ENGINE_HOW"),
+            AntimalwareScanner.Verdict.NoEngine => NoEngineText(report.Engine),
             AntimalwareScanner.Verdict.TooBig => Two(
                 _lang.Format("TEXT_SCAN_TOO_BIG", ("limit", (AntimalwareScanner.LimitBytes / 1024 / 1024).ToString())),
                 "TEXT_SCAN_TOO_BIG_NOTE"),
             _ => _lang.Format("TEXT_SCAN_FAILED", ("code", report.Code ?? "?")),
         };
+    }
+
+    /// <summary>
+    /// 「没人能答」那一屏：断言 + <strong>凭什么</strong> + 下一步。
+    /// <para>三段各挡一种错法。只给第一段，用户看着自己绿色的防护图标只能回一句"为什么说没开"；
+    /// 加上第二段（AMSI 返回码、登记的提供程序数、自带组件在不在盘上），这一屏就从
+    /// "软件这么说"变成"这三处你自己也能查"。第三段按查到的结果分岔 ——
+    /// 自带引擎被整个移除过的机器上，"去 Windows 安全中心打开实时防护"是一句照着模板念的假话，
+    /// 那里没有可以打开的东西。</para>
+    /// </summary>
+    private string NoEngineText(AntimalwareScanner.EngineState? engine)
+    {
+        // `T?`（值类型的可空）不会自动把成员访问抬到里面那一层，所以这里用模式取出实值，
+        // 而不是写完 null 判断后直接 engine.InitializeCode —— 那样编译不过，
+        // 而"看起来已经判过空了"正是这类写法最容易误以为没问题的地方。
+        if (engine is not { } state)
+        {
+            return string.Join(Environment.NewLine,
+                _lang.Get("TEXT_SCAN_NO_ENGINE"), _lang.Get("TEXT_SCAN_NO_ENGINE_HOW"));
+        }
+
+        var check = _lang.Format("TEXT_SCAN_ENGINE_CHECK",
+            ("code", $"0x{state.InitializeCode:X8}"),
+            ("providers", state.ProviderCount < 0 ? "?" : state.ProviderCount.ToString()),
+            ("oav", _lang.Get(state.DefenderProviderOnDisk ? "TEXT_SCAN_OAV_PRESENT" : "TEXT_SCAN_OAV_ABSENT")));
+
+        // 提供程序一个都没有、自带那个组件又不在盘上 —— 这台机器缺的不是"开关没打开"，是那一层本身。
+        var next = state.ProviderCount <= 0 && !state.DefenderProviderOnDisk
+            ? _lang.Get("TEXT_SCAN_NO_ENGINE_WAY_REMOVED")
+            : _lang.Get("TEXT_SCAN_NO_ENGINE_HOW");
+
+        return string.Join(Environment.NewLine, _lang.Get("TEXT_SCAN_NO_ENGINE"), check, next);
     }
 
     /// <summary>
