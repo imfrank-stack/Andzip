@@ -330,16 +330,41 @@ internal static class Chrome
     private static Visual? Bar(MenuItem item)
         => item.GetVisualAncestors().OfType<MenuBase>().FirstOrDefault();
 
-    /// <summary>这一项<strong>开着</strong>的那些下拉的根（<see cref="Popup.Child"/>）。</summary>
+    /// <summary>
+    /// 这一项<strong>开着</strong>的那些弹窗的根（<see cref="Popup.Child"/>）——
+    /// <strong>二级、三级一起算，一层层收齐</strong>。
+    /// <para>为什么要传递地走：弹窗的内容挂在弹窗宿主上（<c>OverlayLayer</c> 那一支），
+    /// <strong>不是</strong>这一项的视觉子树。所以从这一项往下数一次，只数得到<strong>第一层</strong>那一块。
+    /// 4.1.0 给「视图 → 列设置」加了子菜单、4.4.0 给「工具栏」也加了，于是判据里出现了一个洞：
+    /// 指针走进第二层那一块，离"这一项 + 整条菜单栏 + 第一层那一块"全都超过
+    /// <see cref="LeaveDistance"/>，整条菜单当场收掉 —— 而那正是用户要去点的地方
+    /// （用户的话：「导致视图-列设置的二级菜单无法被点击」）。
+    /// 3.2.0 写这条的时候菜单只有两层，这个前提后来被悄悄打破了，而 headless 的用例从不移动指针，
+    /// 所以它一直没被看见。</para>
+    /// <para>每收一块就再往它<strong>里面</strong>找开着的弹窗，直到没有新的；<c>found</c> 里查一下
+    /// 是为了防环（宿主树与逻辑树不是同一棵，理论上能绕回来）。</para>
+    /// </summary>
     private static IEnumerable<Visual> OpenPopups(MenuItem item)
     {
-        foreach (var popup in item.GetVisualDescendants().OfType<Popup>())
+        var found = new List<Visual>();
+        var pending = new Queue<Visual>();
+        pending.Enqueue(item);
+
+        while (pending.Count > 0)
         {
-            if (popup is { IsOpen: true, Child: Visual child })
+            foreach (var popup in pending.Dequeue().GetVisualDescendants().OfType<Popup>())
             {
-                yield return child;
+                if (popup is not { IsOpen: true, Child: Visual child } || found.Contains(child))
+                {
+                    continue;
+                }
+
+                found.Add(child);
+                pending.Enqueue(child);
             }
         }
+
+        return found;
     }
 
     /// <summary>
