@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using Andzip.Core.Archive;
 using Andzip.Core.Installation;
 using Andzip.Core.Lang;
+using Andzip.Core.Settings;
 using Microsoft.Win32;
 
 namespace Andzip.App.Services;
@@ -182,7 +183,7 @@ internal sealed class InstallationService
         done++;
 
         Step("TEXT_SETUP_STEP_REGISTRY");
-        WriteUninstallEntry(plan, associate, contextMenu);
+        WriteUninstallEntry(plan);
 
         done++;
 
@@ -190,8 +191,18 @@ internal sealed class InstallationService
         if (associate)
         {
             Step("TEXT_SETUP_STEP_ASSOC");
-            var associations = new FileAssociationService(plan.Scope);
-            var labels = ShellVerbLabels.Extraction(_lang);
+
+            // 这两个服务都接 _root：不接的话"作用域 → 注册表根"这条缝只到本类的键为止，
+            // 装/卸往返的测试与 /selftest 就会去动这台机器上真的 Andzip.* 关联
+            // （机器级那一份还会在没有管理员权限时直接抛 UnauthorizedAccessException）。
+            var associations = new FileAssociationService(plan.Scope, _root);
+
+            // 动词表按这台机器当下的设置算：双击那一行在菜单上叫什么，得跟「解压 → 双击压缩包文件时」
+            // 说的是同一件事。提权那一份读到的是它自己那个用户的设置（可能是空的），
+            // 那种情况下名字先按"打开"写，第一次通过关联被拉起来时 RepairCommands 会校正过来。
+            var labels = ShellVerbLabels.Extraction(_lang, AppSettings.Load(AppSettings.DefaultFilePath));
+            var captured = new List<AssociationOriginal>();
+
             foreach (var id in FileAssociationCatalog.InstallerDefaults)
             {
                 if (FileAssociationCatalog.Find(id) is not { } association)
@@ -199,7 +210,30 @@ internal sealed class InstallationService
                     continue;
                 }
 
-                blocked.AddRange(associations.Register(association, plan.ExecutablePath, labels).BlockedExtensions);
+                var change = associations.Register(association, plan.ExecutablePath, labels);
+                blocked.AddRange(change.BlockedExtensions);
+                captured.AddRange(change.CapturedDefaults);
+            }
+
+            // 接管前的默认值必须落盘，否则卸载时不知道还原成什么 —— 只删值会把用户原来的
+            // 「.zip 用 WinRAR 打开」一起带走。已经记过的不覆盖：重复登记时服务对
+            // "本来就是我们"的扩展名返回空串，拿它盖掉第一次记下的真实原值就写坏了撤销路径。
+            if (captured.Count > 0)
+            {
+                var fresh = AppSettings.Load(AppSettings.DefaultFilePath);
+                var known = AssociationOriginals
+                    .Decode(fresh.GetString(AssociationOriginals.SettingKey))
+                    .ToDictionary(item => item.Extension, item => item.ProgId, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var item in captured.Where(item => !known.ContainsKey(item.Extension)))
+                {
+                    known[item.Extension] = item.ProgId;
+                }
+
+                fresh.SetString(
+                    AssociationOriginals.SettingKey,
+                    AssociationOriginals.Encode(known.Select(pair => new AssociationOriginal(pair.Key, pair.Value)).ToList()));
+                fresh.Save(AppSettings.DefaultFilePath);
             }
 
             associations.NotifyChanged();
@@ -209,7 +243,7 @@ internal sealed class InstallationService
         if (contextMenu)
         {
             Step("TEXT_SETUP_STEP_MENU");
-            var menu = new ContextMenuService(plan.Scope);
+            var menu = new ContextMenuService(plan.Scope, _root);
             menu.Install(ShellVerbLabels.Compression(_lang), plan.ExecutablePath, forFiles: true, forFolders: true);
             menu.NotifyChanged();
         }
@@ -219,15 +253,17 @@ internal sealed class InstallationService
 
     /// <summary>
     /// 卸载：把 <see cref="Install"/> 做过的一件件收回来，最后删程序文件。
-    /// <para><strong>关联与右键菜单按安装时记下的那两条决定</strong>：没记着当初勾过，
-    /// 就不去动用户后来自己在「设置」里登记的东西 —— 卸载程序不该顺手删掉它没做过的事。
-    /// 这也让这一条可以在测试里真跑一遍而不碰开发机上的配置。</para>
+    /// <para><strong>关联与右键菜单不再按"当初是不是我装的"决定收不收</strong>：判据换成
+    /// "这条登记指着的是不是正在被卸掉的那一个 exe"。按开关收会漏 —— 用户在
+    /// 「设置 → 文件关联」里自己勾上的那几项，安装器记的开关仍然是关的，
+    /// 于是卸完盘上没东西了，右键菜单与双击却还认得 Andzip（指向一个已经不存在的 exe）。
+    /// 新判据也不会多删：别的软件的登记、另一份 Andzip 的登记，命令行里都不是这个路径。</para>
     /// </summary>
     public bool Uninstall(InstallPlan plan, IProgress<ProgressStep>? progress = null)
     {
-        var (associated, contextMenu, uninstallShortcut) = ReadUninstallEntry(plan);
+        var uninstallShortcut = ReadUninstallShortcut(plan);
 
-        var total = 3 + (associated ? 1 : 0) + (contextMenu ? 1 : 0);
+        var total = 5;
         var done = 0;
         void Step(string key) => progress?.Report(new ProgressStep(key, done * 100 / total));
 
@@ -253,29 +289,22 @@ internal sealed class InstallationService
 
         done++;
 
-        var associations = new FileAssociationService(plan.Scope);
-        if (associated)
-        {
-            Step("TEXT_SETUP_STEP_UNASSOC");
-            foreach (var id in FileAssociationCatalog.InstallerDefaults)
-            {
-                if (FileAssociationCatalog.Find(id) is { } association && associations.IsRegistered(association))
-                {
-                    associations.Unregister(association, []);
-                }
-            }
+        Step("TEXT_SETUP_STEP_UNASSOC");
+        var settings = AppSettings.Load(AppSettings.DefaultFilePath);
+        new FileAssociationService(plan.Scope, _root).RemoveOwnedBy(
+            plan.ExecutablePath,
+            AssociationOriginals.Decode(settings.GetString(AssociationOriginals.SettingKey)));
 
-            associations.NotifyChanged();
-            done++;
-        }
+        done++;
 
-        var menu = new ContextMenuService(plan.Scope);
-        if (contextMenu)
+        Step("TEXT_SETUP_STEP_UNMENU");
+        var menu = new ContextMenuService(plan.Scope, _root);
+        if (menu.Remove(plan.ExecutablePath) > 0)
         {
-            Step("TEXT_SETUP_STEP_UNMENU");
-            menu.Remove();
             menu.NotifyChanged();
         }
+
+        done++;
 
         Step("TEXT_SETUP_STEP_UNFILES");
         return TryRemoveProgramFiles(plan);
@@ -357,16 +386,27 @@ internal sealed class InstallationService
     /// <c>/c</c>（那是上一条 <c>cmd.exe</c> 写法剩下的），PowerShell 于是把 <c>/c</c> 当成要执行的
     /// 命令名，报一句"无法将/c项识别为cmdlet"就退了 —— 目录照样留在盘上，而界面上那句
     /// "已安排在退出后删除"说得毫无问题。所以断言要能看见开头。</para>
+    /// <para><strong>删要重试，一次不够</strong>（3.7.0）：<c>Wait-Process</c> 回来之后进程是退了，
+    /// 那个 exe 的镜像却可能还 mapped 一小会儿（杀软与索引器也会多拿一会儿）。原先这里只
+    /// <c>Remove-Item -Recurse -Force -ErrorAction SilentlyContinue</c> 一次，而它按字母序先撞
+    /// <c>Andzip.exe</c> —— 那一下失败被 SilentlyContinue 咽掉，后面的 <c>uninstall.bat</c> 却删掉了，
+    /// 于是用户看到的就是"卸载不干净，exe 文件没被删掉"（真机量的：卸完之后目录里只剩
+    /// <c>Andzip.exe</c> 一个文件，卸载表、快捷方式都没了）。现在最多试 200 次、每次隔 150 毫秒，
+    /// 并且先点名下掉 exe 再收目录。</para>
     /// </summary>
     internal static string DeleteArguments(int processId, string directory)
     {
         var literal = directory.Replace("'", "''");
+        var exe = Path.Combine(directory, InstallLayout.ExeName).Replace("'", "''");
 
         return $"-NoProfile -NonInteractive -Command \"Wait-Process -Id {processId} -Timeout 120 -ErrorAction SilentlyContinue; "
-            + $"Remove-Item -LiteralPath '{literal}' -Recurse -Force -ErrorAction SilentlyContinue\"";
+            + $"for ($i = 0; $i -lt 200; $i++) {{ if (-not (Test-Path -LiteralPath '{literal}')) {{ break }}; "
+            + $"Remove-Item -LiteralPath '{exe}' -Force -ErrorAction SilentlyContinue; "
+            + $"Remove-Item -LiteralPath '{literal}' -Recurse -Force -ErrorAction SilentlyContinue; "
+            + $"Start-Sleep -Milliseconds 150 }}\"";
     }
 
-    private void WriteUninstallEntry(InstallPlan plan, bool associate, bool contextMenu)
+    private void WriteUninstallEntry(InstallPlan plan)
     {
         using var root = Root(plan);
         using var key = root.CreateSubKey(plan.UninstallKey);
@@ -386,17 +426,16 @@ internal sealed class InstallationService
         key.SetValue("NoModify", 1, RegistryValueKind.DWord);
         key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
 
-        // 当初做过哪两件事，卸载时才好照着收回来
-        key.SetValue(ValueAssociate, associate ? 1 : 0, RegistryValueKind.DWord);
-        key.SetValue(ValueContextMenu, contextMenu ? 1 : 0, RegistryValueKind.DWord);
+        // 只记"卸载快捷方式叫什么"这一件卸载时找不回来的事。当初勾没勾关联与右键菜单
+        // 以前记在这里、卸载时照着收 —— 那是"卸载不该顺手删掉它没做过的事"的凭据，
+        // 3.7.0 把它换成了更强的判据（这条登记指着的是不是正在被卸掉的那个 exe），
+        // 于是那两条记号成了没人读的值：留着就是让下一个读注册表的人猜它是干什么的。
         key.SetValue(ValueUninstallShortcut, plan.StartMenuUninstallShortcut);
 
         var sizeKb = (long)new FileInfo(plan.ExecutablePath).Length / 1024;
         key.SetValue("EstimatedSize", (int)Math.Min(sizeKb, int.MaxValue), RegistryValueKind.DWord);
     }
 
-    private const string ValueAssociate = "AndzipAssociate";
-    private const string ValueContextMenu = "AndzipContextMenu";
     private const string ValueUninstallShortcut = "AndzipUninstallShortcut";
 
     /// <summary>卸载入口那一条命令行参数。开始菜单的快捷方式与注册表的卸载命令共用。</summary>
@@ -423,16 +462,12 @@ internal sealed class InstallationService
             : clean;
     }
 
-    private (bool Associate, bool ContextMenu, string? UninstallShortcut) ReadUninstallEntry(InstallPlan plan)
+    /// <summary>卸载表里记着的只有这一件：卸载快捷方式叫什么。名字来自语言包，换过界面语言就按当下的算不回来了。</summary>
+    private string? ReadUninstallShortcut(InstallPlan plan)
     {
         using var root = Root(plan);
         using var key = root.OpenSubKey(plan.UninstallKey);
-        return (
-            AsBool(key?.GetValue(ValueAssociate)),
-            AsBool(key?.GetValue(ValueContextMenu)),
-            key?.GetValue(ValueUninstallShortcut) as string);
-
-        static bool AsBool(object? value) => value is int number && number != 0;
+        return key?.GetValue(ValueUninstallShortcut) as string;
     }
 
     // ------------------------------------------------------ 桌面目录

@@ -141,7 +141,176 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     }
 
     /// <summary>
+    /// 注册表里我们那一 namespace 的命令行，指着的<strong>是不是这正在跑着的这一个 exe</strong>。
+    /// <para>改设置时先问这一句，是因为 <c>RepairCommands</c> 写的是"当前这个 exe 的路径"：
+    /// 装好的那一份、桌面上双击的那一份绿色版、开发目录里那一份、headless 用例的 testhost，
+    /// 都是同一个类的不同文件。谁跑一下就把关联抢过去，用户看到的正是"我明明装好了，
+    /// 双击却去开另一个文件"，而界面测试会在开发机上留下一个指向 testhost 的关联。</para>
+    /// </summary>
+    public bool CommandsPointAt(string executablePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+
+        using var root = Root();
+        using var classes = root.OpenSubKey(@"Software\Classes");
+        if (classes is null)
+        {
+            return false;
+        }
+
+        foreach (var name in classes.GetSubKeyNames())
+        {
+            if (!name.StartsWith(ProgIdPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            using var command = classes.OpenSubKey(name + @"\shell\open\command");
+            if (command?.GetValue(string.Empty) is string written
+                && written.Contains(executablePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 收掉<strong>命令行里写着这个 exe</strong> 的那些 <c>Andzip.*</c> 登记：ProgID 子树、扩展名上的
+    /// 「打开方式」条目，以及指过来的扩展名默认值。返回收掉几棵 ProgID。
+    /// <para><strong>卸载走这一条，而不是"照卸载表里那个勾决定要不要收关联"</strong>：关联也可能是
+    /// 用户后来自己在「设置 → 文件关联」里勾上的，那时安装器一个开关都没记，卸载照"当初没勾"
+    /// 就什么都不收，
+    /// 于是卸完之后 <c>HKCU\Software\Classes\.zip</c> 还指着一棵已经没有 exe 的 ProgID ——
+    /// 右键菜单里 Andzip 还在，双击一个压缩包却什么都不会发生（用户 2026-10-16 报的「卸载不干净」）。</para>
+    /// <para>判据是命令行里那个 exe 的路径，所以<strong>碰不到别的软件</strong>的登记，
+    /// 也碰不到另一份 Andzip（另一处的 exe 在别的目录里）。</para>
+    /// <para>扩展名默认值优先按记录还原（<paramref name="restoreDefaults"/>），没记录就直接删掉那个值：
+    /// 留一个指向死 ProgID 的默认值比没有默认值更糟 —— 没有时系统会问"用什么打开"，
+    /// 指着死的则是双击之后毫无反应。</para>
+    /// </summary>
+    public int RemoveOwnedBy(string executablePath, IReadOnlyList<AssociationOriginal> restoreDefaults)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+
+        using var root = Root();
+        using var classes = root.OpenSubKey(@"Software\Classes", writable: true);
+        if (classes is null)
+        {
+            return 0;
+        }
+
+        // 第一趟：哪些 Andzip.* 是我们这一次要收的那一个 exe 的。
+        var owned = new List<string>();
+        foreach (var name in classes.GetSubKeyNames())
+        {
+            if (name.StartsWith(ProgIdPrefix, StringComparison.OrdinalIgnoreCase)
+                && PointsAt(classes.OpenSubKey(name), executablePath))
+            {
+                owned.Add(name);
+            }
+        }
+
+        if (owned.Count == 0)
+        {
+            return 0;
+        }
+
+        // 第二趟：把挂在这几棵上的扩展名摘下来。整棵 ProgID 删掉之后，
+        // 一个还指着它的默认值就是一个双击没有反应的死指针。
+        foreach (var extension in classes.GetSubKeyNames())
+        {
+            if (!extension.StartsWith('.'))
+            {
+                continue;
+            }
+
+            var progId = DefaultOf(classes.OpenSubKey(extension));
+
+            using (var openWith = classes.OpenSubKey(extension + @"\OpenWithProgids", writable: true))
+            {
+                if (openWith is not null)
+                {
+                    foreach (var listed in owned.Where(
+                        id => Array.IndexOf(openWith.GetValueNames(), id) >= 0))
+                    {
+                        openWith.DeleteValue(listed, throwOnMissingValue: false);
+                    }
+                }
+            }
+
+            if (progId is null || !owned.Contains(progId, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var original = restoreDefaults.FirstOrDefault(
+                item => string.Equals(item.Extension, extension, StringComparison.OrdinalIgnoreCase));
+
+            var extensionKey = classes.OpenSubKey(extension, writable: true);
+            if (original is { ProgId.Length: > 0 })
+            {
+                extensionKey?.SetValue(string.Empty, original.ProgId, RegistryValueKind.String);
+            }
+            else
+            {
+                extensionKey?.DeleteValue(string.Empty, throwOnMissingValue: false);
+            }
+
+            extensionKey?.Dispose();
+        }
+
+        foreach (var name in owned)
+        {
+            classes.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
+        }
+
+        _notifyShell();
+        return owned.Count;
+    }
+
+    /// <summary>
+    /// 这棵 ProgID 里有没有任何一条动词的命令行写着这个 exe。
+    /// <para>看所有动词而不只是 <c>open</c>：老版本写过 <c>shell\extract\command</c>，
+    /// 只认一条会漏掉"键还在、命令行指着我们"的那些。</para>
+    /// </summary>
+    private static bool PointsAt(RegistryKey? progId, string executablePath)
+    {
+        using (progId)
+        {
+            if (progId?.OpenSubKey("shell") is not { } shell)
+            {
+                return false;
+            }
+
+            using (shell)
+            {
+                foreach (var verb in shell.GetSubKeyNames())
+                {
+                    if (DefaultOf(shell.OpenSubKey(verb + @"\command")) is { } command
+                        && command.Contains(executablePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string? DefaultOf(RegistryKey? key)
+    {
+        using (key)
+        {
+            return key?.GetValue(string.Empty) as string;
+        }
+    }
+
+    /// <summary>
     /// 修复所有 <c>Andzip.*</c> ProgID 里的命令行，指向当前这个 exe；
+
     /// 返回<strong>真的改过</strong>几个，并在改过的时候让 shell 重读一次。
     /// <para>
     /// 为什么需要它：绿色版的文件名带版本号（<c>Andzip-v0.9.2-win-x64.exe</c>），升级之后注册表里
@@ -203,11 +372,23 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// <summary>
     /// 右键解压菜单的文字与开关（由界面从语言包取好传进来，服务层不认识语言包）。
     /// <para><see cref="ShowExtractVerbs"/> 对应「设置 → 上下文菜单 → 解压菜单项」：
-    /// 关掉之后 ProgID 里只留 open 动词，双击仍然按「解压 → 双击」设置走，不受影响。</para>
+    /// 关掉之后 ProgID 里只剩双击那一条动词。</para>
+    /// <para><see cref="ExtractOnDoubleClick"/> 对应「设置 → 解压 → 双击压缩包文件时」，
+    /// 它决定 <c>shell\open</c> 这一行在菜单上叫什么：<strong>菜单写的必须就是双击真的做的事</strong>
+    /// （0.9.12 用户报过反过来的那次：行写着「用 Andzip 打开」，点下去却去解压）。</para>
     /// </summary>
     internal sealed record ExtractionVerbLabels(string Open, string Extract, string ExtractDelete)
     {
         public bool ShowExtractVerbs { get; init; } = true;
+
+        public bool ExtractOnDoubleClick { get; init; }
+
+        /// <summary>双击=直接解压时，<c>shell\open</c> 那一行改叫这个名字（来自语言包）。</summary>
+        public string ExtractDirectly { get; init; } = string.Empty;
+
+        /// <summary><c>shell\open</c> 在菜单上的文字。没给"直接解压"那句时退回「用 Andzip 打开」。</summary>
+        public string DoubleClickLabel =>
+            ExtractOnDoubleClick && ExtractDirectly.Length > 0 ? ExtractDirectly : Open;
     }
 
     /// <summary>
@@ -215,14 +396,24 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// <para>
     /// 命令行统一带 <c>/task=…</c>（见 <see cref="Core.Archive.ShellTasks"/>）：注册表只负责
     /// 「把这个文件交给 Andzip 做某件事」，怎么做由参数说清楚，不靠某个动词键是否存在。
+    /// 唯一的例外是双击那条 <c>shell\open</c> —— 它不带开关，做什么由「解压 → 双击压缩包文件时」
+    /// 决定，改设置因此不用重写所有 ProgID。
     /// </para>
     /// <para>
-    /// <strong>双击与右键「打开」是两条键，这是刻意的</strong>。<c>shell\open</c> 是双击要执行的
-    /// 那条（<c>shell</c> 的默认值就是它），它<strong>不</strong>带开关，于是"双击干什么"仍然由
-    /// 「解压 → 双击压缩包文件时」决定，改设置不用重写所有 ProgID；它带
-    /// <c>ProgrammaticAccessOnly</c>，所以不出现在菜单上。菜单里那条「用 Andzip 打开」是
-    /// <c>shell\andzip-open</c>，命令行写死 <c>/task=open</c> —— 名字承诺什么就干什么，
-    /// 不受双击设置影响（0.9.12 之前两者是同一条，勾了"直接解压"的用户点「打开」得到的是解压）。
+    /// <strong><c>shell\open</c> 一律可见，谁都不许给它加 <c>ProgrammaticAccessOnly</c></strong>。
+    /// 0.10.0 给它加过，理由很正当：菜单上不想出现两行「用 Andzip 打开」。代价是这条藏起来之后
+    /// <strong>它就不当双击的默认动词了</strong> —— 资源管理器往下找第一条看得见的动词，找到的是
+    /// <c>shell\andzip-open</c>，而那一条命令行里写死了 <c>/task=open</c>。于是从 0.10.0 起
+    /// 「双击 = 直接解压到当前文件夹」在真机上永远不生效，改设置、改注册表默认动词都没用。
+    /// 这一层只有真的走 shell 的动词表才看得见：本机实测过，藏起来时
+    /// <c>Shell.Application</c> 的 <c>InvokeVerb()</c>（双击那一下）落到 <c>/task=open</c>，
+    /// 把值去掉之后同一次调用就地铺开；而 <c>Invoke-Item</c> 与 <c>Process.Start</c> 这类
+    /// 直接读 <c>shell</c> 默认值的走法两种情况下都对 —— 之前三次"修好了"都是被它骗过去的。
+    /// </para>
+    /// <para>
+    /// 重复的那一行改由「用 Andzip 打开」<strong>自己</strong>让位：双击本来就是打开时，
+    /// <c>shell\open</c> 已经叫这个名字，<c>andzip-open</c> 藏起来；双击是直接解压时两行名字不同，
+    /// 都留着，那条"永远在软件里打开"的承诺还在菜单上。
     /// </para>
     /// </summary>
     /// <returns>有没有真的改过（值全都一样时一笔都不写）。</returns>
@@ -233,9 +424,11 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
         using var shell = progId.CreateSubKey("shell")!;
         changed |= RegistryWrite.SetIfDifferent(shell, string.Empty, "open");
 
-        changed |= WriteVerb(shell, "open", labels.Open, executablePath, Quote(executablePath) + " \"%1\"", hidden: true);
+        changed |= WriteVerb(shell, "open", labels.DoubleClickLabel, executablePath,
+            Quote(executablePath) + " \"%1\"");
         changed |= WriteVerb(shell, "andzip-open", labels.Open, executablePath,
-            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Open));
+            Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Open),
+            hidden: !labels.ExtractOnDoubleClick);
         changed |= WriteVerb(shell, "extract", labels.Extract, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Extract),
             enabled: labels.ShowExtractVerbs);

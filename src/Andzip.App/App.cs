@@ -190,10 +190,8 @@ public sealed class App : Application
 
         try
         {
-            var showExtractVerbs = settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true);
             var service = new FileAssociationService();
-            var labels = ShellVerbLabels.Extraction(lang, showExtractVerbs);
-            service.RepairCommands(executable, labels);
+            service.RepairCommands(executable, ShellVerbLabels.Extraction(lang, settings));
         }
         catch (Exception)
         {

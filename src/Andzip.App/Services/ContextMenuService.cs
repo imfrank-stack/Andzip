@@ -167,9 +167,19 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
         return changed;
     }
 
-    /// <summary>撤销：删掉两个范围里属于我们的动词子树。</summary>
-    public void Remove()
+    /// <summary>
+    /// 撤销：删掉两个范围里属于我们的动词子树。
+    /// <para><paramref name="ownedBy"/> 给了就只删命令行写着那一个 exe 的。卸载走的是这一条：
+    /// 它收回的是自己这一份，另一处安装的菜单项不该跟着消失。这一层过滤也是 <c>/selftest</c>
+    /// 与单元测试敢在真机的 <c>HKCU\Software\Classes</c> 上跑一次装/卸往返的前提 —— 没有它，
+    /// 跑一次打包门禁就把开发机上的右键菜单清空了。</para>
+    /// <para>不给则是"关掉这个功能"：用户在「设置 → 上下文菜单」里两个范围都不勾时走这一条，
+    /// 那时该清的是我们写过的全部。</para>
+    /// </summary>
+    /// <returns>删掉了几条 —— 调用方据此决定要不要让 shell 重读（一声都不该白广播，3.2.1）。</returns>
+    public int Remove(string? ownedBy = null)
     {
+        var removed = 0;
         using var root = Root();
         foreach (var (target, _) in Scopes(forFiles: true, forFolders: true))
         {
@@ -181,11 +191,30 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
 
             foreach (var name in shell.GetSubKeyNames())
             {
-                if (name.StartsWith(VerbPrefix, StringComparison.OrdinalIgnoreCase))
+                if (!name.StartsWith(VerbPrefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    shell.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
+                    continue;
                 }
+
+                if (ownedBy is not null && !PointsAt(shell.OpenSubKey(name + @"\command"), ownedBy))
+                {
+                    continue;
+                }
+
+                shell.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
+                removed++;
             }
+        }
+
+        return removed;
+    }
+
+    private static bool PointsAt(RegistryKey? commandKey, string executablePath)
+    {
+        using (commandKey)
+        {
+            return commandKey?.GetValue(string.Empty) is string command
+                && command.Contains(executablePath, StringComparison.OrdinalIgnoreCase);
         }
     }
 

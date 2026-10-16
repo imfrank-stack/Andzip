@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Andzip.Core.Archive;
 using Andzip.Core.Lang;
+using Andzip.Core.Settings;
 
 namespace Andzip.App.Services;
 
@@ -12,13 +13,22 @@ namespace Andzip.App.Services;
 [SupportedOSPlatform("windows")]
 internal static class ShellVerbLabels
 {
-    /// <param name="showExtractVerbs">「设置 → 上下文菜单 → 解压菜单项」。关掉时 ProgID 里只留 open。</param>
-    public static FileAssociationService.ExtractionVerbLabels Extraction(LangCatalog lang, bool showExtractVerbs = true) => new(
+    /// <summary>
+    /// 一整套解压动词，两个开关都从设置里读。
+    /// <para><strong>为什么把设置整个传进来，而不是让调用方各传两个 bool</strong>：这一份决定的是
+    /// 菜单上每一行写什么、哪一行露不露，而"双击干什么"与"要不要解压那两行"本来就住在设置里。
+    /// 让四个调用点各自记得把当下取值传对，迟早有一个传漏 —— 3.6.0 之前那条
+    /// 「设了直接解压没用」就是这么留下的。</para>
+    /// </summary>
+    public static FileAssociationService.ExtractionVerbLabels Extraction(LangCatalog lang, AppSettings settings) => new(
         lang.Get("TEXT_MENU_OPEN_WITH"),
         lang.Get("TEXT_MENU_EXTRACT"),
         lang.Get("TEXT_MENU_EXTRACT_DELETE"))
     {
-        ShowExtractVerbs = showExtractVerbs,
+        // 「设置 → 上下文菜单 → 解压菜单项」。关掉之后 ProgID 里只留双击那一条。
+        ShowExtractVerbs = settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true),
+        ExtractOnDoubleClick = SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)),
+        ExtractDirectly = lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT"),
     };
 
     /// <summary>

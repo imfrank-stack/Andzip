@@ -684,10 +684,9 @@ public sealed class SettingsWindow : Window
             {
                 var service = new FileAssociationService();
 
-                // 新登记的格式要跟「设置 → 上下文菜单」里的解压开关保持一致，否则菜单会"一半有一半没有"。
-                var labels = ShellVerbLabels.Extraction(
-                    _lang,
-                    _settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true));
+                // 新登记的格式要跟「设置 → 上下文菜单」与「设置 → 解压」里那两个开关保持一致，
+                // 否则菜单会"一半有一半没有"，而双击那一行的名字会跟它真的做的事不是一件事。
+                var labels = ShellVerbLabels.Extraction(_lang, _settings);
 
                 foreach (var id in desired.Except(_live))
                 {
@@ -957,8 +956,9 @@ public sealed class SettingsWindow : Window
 
                     // 解压动词住在每个 Andzip.* ProgID 里，所以"改开关"就是把自己命名空间下的
                     // 动词全部重写一遍 —— 关掉的那几项是真删掉，不是留着键改文字。
+                    // 上一步的 Persist 会把 _settings 重读一遍，所以这里拿到的已经是刚设的值。
                     var associations = new FileAssociationService();
-                    associations.RepairCommands(executable, ShellVerbLabels.Extraction(_lang, desired.Extract));
+                    associations.RepairCommands(executable, ShellVerbLabels.Extraction(_lang, _settings));
                     associations.NotifyChanged();
                 }
             }
@@ -988,6 +988,7 @@ public sealed class SettingsWindow : Window
     /// </summary>
     private sealed class ExtractionPage : ISettingsPage
     {
+        private readonly LangCatalog _lang;
         private readonly string _settingsPath;
         private readonly ComboBox _doubleClick;
         private readonly SettingToggle _singleFileToFolder;
@@ -1000,6 +1001,7 @@ public sealed class SettingsWindow : Window
         public ExtractionPage(LangCatalog lang, string settingsPath)
         {
             NavKey = "TEXT_SETTINGS_EXTRACT";
+            _lang = lang;
             _settingsPath = settingsPath;
 
             _doubleClick = new ComboBox
@@ -1079,14 +1081,35 @@ public sealed class SettingsWindow : Window
                 return;
             }
 
+            var doubleClickChanged = desired.DoubleClick != _live.DoubleClick;
+
             var settings = AppSettings.Load(_settingsPath);
             desired.Save(settings);
             settings.Save(_settingsPath);
             Reload();
 
-            // 刻意不碰注册表：双击走哪条路由启动时读设置决定，不是由哪个动词被调用决定 ——
+            // 注册表里那条动词的**命令行**不用改：双击干什么由启动时读设置决定，
             // 早先把默认动词改成 extract 会留下「动词名写了、命令键不存在」的半截状态，
             // Windows 找不到动词就退回 open，用户看到的就是"设了没反应"。
+            //
+            // 但那一行的**名字**必须跟着改：菜单上写着「用 Andzip 打开」、双击却去解压，
+            // 是 0.9.12 用户报过的同一件事。RepairCommands 顺手把 0.10.0 加在 shell\open 上的
+            // ProgrammaticAccessOnly 去掉 —— 那一条被藏起来之后双击就不再走它了，
+            // 这才是"设了直接解压一直没用"的真因。值真变了它才写、才广播。
+            if (doubleClickChanged && OperatingSystem.IsWindows()
+                && Environment.ProcessPath is { Length: > 0 } executable)
+            {
+                var associations = new FileAssociationService();
+
+                // 只校正"这一份 exe 的"动词：改设置不该把关联重新指到手上正跑着的这个文件上 ——
+                // 装好的那一份、桌面上双击的那一份绿色版、开发目录里那一份同名不同路径，
+                // 谁跑一下就抢走关联，用户在开发机上看到的就是一个指向 testhost 的命令。
+                if (associations.CommandsPointAt(executable))
+                {
+                    associations.RepairCommands(
+                        executable, ShellVerbLabels.Extraction(_lang, AppSettings.Load(_settingsPath)));
+                }
+            }
         }
     }
 

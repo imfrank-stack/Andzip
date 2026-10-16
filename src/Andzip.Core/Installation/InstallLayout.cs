@@ -71,11 +71,19 @@ public static class InstallLayout
     /// </summary>
     public const string UninstallScriptName = "uninstall.bat";
 
-    /// <summary>批处理的内容。<see cref="ExeName"/> 拼进去，两边不会各自漂移。</summary>
+    /// <summary>
+    /// 批处理的内容。<see cref="ExeName"/> 拼进去，两边不会各自漂移。
+    /// <para><strong>那一句 <c>cd</c> 不是排版</strong>：双击 .bat 时 cmd 的当前目录就是这个 .bat
+    /// 所在的目录，而"进程把当前目录占着"在 Windows 上等于"这个目录删不掉" —— 卸载收尾那一步
+    /// 收的是整个安装目录。先跳到 %TEMP% 再拉起卸载程序，目录上就没有人拿着句柄了。</para>
+    /// </summary>
     public static string UninstallScriptText => string.Join("\r\n",
         "@echo off",
         "rem Andzip -- double-click to uninstall. The real uninstaller lives inside Andzip.exe;",
         "rem this file only exists so the install folder has an obvious way out.",
+        "rem Leave the install folder as cmd's current directory: holding it open is what keeps",
+        "rem the folder on disk after the uninstall finishes.",
+        "cd /d \"%TEMP%\"",
         $"\"%~dp0{ExeName}\" /uninstall",
         string.Empty);
 

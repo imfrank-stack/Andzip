@@ -182,22 +182,6 @@ public class InstallerTests : IDisposable
     }
 
     /// <summary>
-    /// 没勾关联与右键菜单时，卸载表里那两条记号必须是 0。
-    /// <para>这条看着小，实际是"卸载不该顺手删掉它没做过的事"的唯一凭据 ——
-    /// 没有它，用户自己从「设置」里登记的关联会在卸载时被连根拔掉。</para>
-    /// </summary>
-    [Fact]
-    [SupportedOSPlatform("windows")]
-    public void InstallRecordsWhichExtrasItActuallyDid()
-    {
-        Service().Install(_plan, SourceExe(), associate: false, contextMenu: false);
-
-        using var key = Registry.CurrentUser.OpenSubKey(_plan.UninstallKey);
-        Assert.Equal(0, key?.GetValue("AndzipAssociate"));
-        Assert.Equal(0, key?.GetValue("AndzipContextMenu"));
-    }
-
-    /// <summary>
     /// 卸载表里的版本号不能带 SourceLink 那段提交号。
     /// <para>1.9.2 真机核对：系统的「设置 → 应用」里显示的是
     /// <c>1.9.2+45.718056ece53be97a34004652df38b3af68954316</c>。标题栏那一处 1.9.1 已经修过，
@@ -343,8 +327,13 @@ public class InstallerTests : IDisposable
 
         Assert.Contains(@"'D:\it''s a 目录\Andzip'", script, StringComparison.Ordinal);
 
-        // 整条命令里只该有那两对定界用的单引号：路径自己没漏出任何一撇
-        Assert.Equal(4, script.Count(c => c == '\''));
+        // 3.7.0 起这一串里那个路径出现三次（等退出、Test-Path、删目录），exe 还另算一次，
+        // 所以"只该有四个单引号"这种数法量不到任何事了。要紧的两件事换个说法量：
+        // 那一撇从来没有原样漏出去（漏出去就是能闭合字面量再拼一条命令），
+        // 而且定界符成对 —— 奇数个引号意味着有一处没关上。
+        Assert.DoesNotContain(@"D:\it's", script, StringComparison.Ordinal);
+        var quotes = script.Count(c => c == '\'');
+        Assert.True(quotes % 2 == 0, $"单引号数是奇数（{quotes}）：有一处字面量没闭合，那条命令就能被改写。");
     }
 
     // ------------------------------------------------------- 界面：向导走法
@@ -736,33 +725,37 @@ public class InstallerTests : IDisposable
     }
 
     /// <summary>
-    /// 换页时<strong>窗口的内容区只长不缩</strong>（2.4.0 立的那条规矩，3.6.0 换了实现）。
+    /// 换页时窗口的内容区只长不缩 —— <strong>最后一页除外</strong>（2.4.0 立的规矩，3.7.0 给完成页开了口子）。
     /// <para>真机核对里抓到的形状：点完「安装」，完成页一闪就没，向导自己关了，还顺手把 Andzip 启动了。
     /// 因由是这扇窗按内容自适应高度，进度页比位置页矮两百多像素 —— 页面一换窗口就缩，
     /// 用户那一下<strong>松手</strong>落在了窗口外面，Avalonia 于是以为左键还按着；
     /// 等完成页把窗口撑回来，「完成」正好长在静止不动的指针底下，那一次积压的按下就在它身上结了账。</para>
-    /// <para>2.4.0 的修法是"让页脚待在同一格"；3.6.0 按用户那句「这些按钮太靠下了」把多余的高度
-    /// 改到页脚<strong>下面</strong>，页脚因此不再固定在那一格 —— 所以这条改成量那条规矩本身：
-    /// 换到完成页之后，内容区的下限（<c>MinHeight</c>）不许比「选定安装位置」那一页的正文更矮。
-    /// headless 的窗口不会真的跟着内容改尺寸，只能按这条规矩自己的读数来量（与 2.4.0 那版同理）；
-    /// 另一半由"进行中那一页没有任何按钮"那条守着 —— 松手那一带当时碰不到按钮。</para>
+    /// <para>这条规矩要撑住的是<strong>「进行中」那一页</strong>：松手那一下落在它身上，而它一颗按钮都没有
+    /// （见 <c>TheWorkingPageShowsTheStepAndNoButtons</c>），空出来的那一格碰不到任何能按的东西。
+    /// 完成页是唯一的例外，也是唯一需要这个例外的一页 —— 走到它之前那一下早结完账了，
+    /// 继续撑着的代价就是用户 2026-10-16 指着完成页说的「有的留白太大」：四行字下面白着两百多像素。</para>
+    /// <para>headless 的窗口不真的跟着内容改尺寸，所以两半都只能按这条规矩自己的读数来量：
+    /// 走完前三页时那个读数必须已经攒起来了，落到完成页必须归零。</para>
     /// </summary>
     [AvaloniaFact]
-    public void TheContentAreaNeverGetsShorterBetweenPages()
+    public void TheContentAreaHoldsItsHeightUntilTheFinishPage()
     {
         var lang = TestLang.Chinese();
         var window = new InstallerWindow(lang, _plan).Shown();
 
         ToLocationPage(window, lang);
         UncheckExtras(window);
-        var installTop = TopOf(window, lang, "TEXT_BTN_INSTALL");
+        var held = window.HeldContentHeight;
+        Assert.True(held > 0,
+            $"走到「选定安装位置」之后内容区的下限是 {held:0.#} —— 一路没攒过高度，"
+            + "这条用例剩下的半句（完成页归零）就什么都没量");
 
         Click(window, lang, "TEXT_BTN_INSTALL");
         WaitUntil(window, lang, "TEXT_SETUP_DONE_TITLE");
 
-        Assert.True(window.HeldContentHeight >= installTop - 1,
-            $"「安装」那一格在 y={installTop:0.#}，而换到完成页之后内容区的下限只有 "
-            + $"{window.HeldContentHeight:0.#} —— 窗口缩了，用户点「安装」那一下松手就会落到窗口外面");
+        Assert.True(window.HeldContentHeight <= 0,
+            $"完成页的内容区下限还是 {window.HeldContentHeight:0.#} —— 它还撑着前面那一页的高度，"
+            + "「完成」下面会空出一大截（用户报的「留白太大」）");
     }
 
     private static double TopOf(InstallerWindow window, LangCatalog lang, string labelKey)

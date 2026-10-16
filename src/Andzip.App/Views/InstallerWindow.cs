@@ -64,17 +64,23 @@ public sealed class InstallerWindow : Window
     private bool _uninstaller;
     private bool _busy;
 
-    /// <summary>页与页之间不至于跳得太厉害；也不写死高度 —— 1.9.2 那次写死过，把内容切掉了一半。</summary>
-    private readonly ContentControl _host = new() { MinHeight = 200 };
+    /// <summary>
+    /// 正文那一格。<strong>不给下限高度</strong>：页与页之间不缩由 <see cref="_root"/> 的
+    /// <c>MinHeight</c> 管（<see cref="HoldHeight"/>），这里再垫一个 200 只会变成"正文很短的
+    /// 那一页上，页脚与正文之间凭空一道空"—— 用户 2026-10-16 指着安装完成页说的
+    /// 「有的留白太大」量的就是那 80 像素。
+    /// </summary>
+    private readonly ContentControl _host = new();
 
     private readonly StackPanel _footer = new()
     {
         Orientation = Orientation.Horizontal,
         Spacing = Design.Space.X3,
         HorizontalAlignment = HorizontalAlignment.Right,
-        // 下边距与正文那一圈（<see cref="Stack"/> 的 24）同档：页脚不该贴着自己那张卡片的底沿
-        // ——用户 2026-10-16 的话是「这些按钮太靠下了」。
-        Margin = new Thickness(0, Design.Space.X4, 0, Design.Space.X6),
+        // 右边距与正文那一圈（<see cref="Stack"/> 的 24）同档：按钮的右沿与正文的右沿在一条线上。
+        // 以前这里是 0，页脚整颗贴在卡片右沿上，而正文左右各让出 24 —— 用户的话是
+        // 「按钮的位置太靠边缘」。下边距同档，不让它贴着卡片底沿。
+        Margin = new Thickness(0, 0, Design.Space.X6, Design.Space.X6),
     };
 
     /// <summary>
@@ -253,6 +259,16 @@ public sealed class InstallerWindow : Window
     private void GoTo(WizardPage page)
     {
         HoldHeight();
+
+        // 完成页是"只长不缩"唯一的例外，而且是它唯一需要缩的一页：走到这里之前那一页是
+        // 「进行中」，而那一页上一颗按钮都没有（见 Buttons），用户那一下按下与松手早就结完了账，
+        // 缩窗口缩不到任何人手底下。不缩的代价就是用户 2026-10-16 指着的另一件事 ——
+        // 正文四行字，「完成」下面还空着两百多像素。
+        if (page == WizardPage.Done)
+        {
+            _root.MinHeight = 0;
+        }
+
         Title = _uninstaller ? _lang.Label("TEXT_TITLE_UNINSTALLER") : _lang.Label("TEXT_TITLE_INSTALLER");
 
         if (!_pages.TryGetValue(page, out var control))
