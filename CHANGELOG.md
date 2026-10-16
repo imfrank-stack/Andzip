@@ -2,6 +2,55 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [4.0.1] - 2026-10-17（修复：查找窗口一改动输入框就整个进程退出）
+
+> 版本号 4.0.0 → **4.0.1**（崩溃修复，动第三位）。
+
+用户的话是「查找文件的逻辑似乎有问题， 当输入框变化时程序就会崩溃」。
+
+### 一、原文在 Windows 事件日志里，不用猜
+
+程序自己不留日志，但 .NET 的未处理异常会写进**系统**的"应用程序"日志
+（`Get-WinEvent` 找 ProviderName = `.NET Runtime`，事件 ID 1026）：
+
+```
+System.NullReferenceException
+   at Andzip.App.Views.FindWindow.Row(LangCatalog, ArchiveEntryInfo)
+   at Avalonia.Controls.Templates.FuncTemplate`2.BuildWithNameScope(TParam)
+   at Avalonia.Controls.Presenters.ContentPresenter.UpdateChild(Object)
+   at Avalonia.Controls.ItemsControl.ClearContainerForItemOverride(Control)
+   at Avalonia.Controls.VirtualizingStackPanel.RecycleElementOnItemRemoved(Control)
+   at Andzip.App.Views.FindWindow.Filter()
+   at FindWindow.<>c.<.ctor>b__0(...)          ← TextBox.TextChanged
+```
+
+**Avalonia 回收容器时会拿 `null` 再走一遍行模板**：换 `ItemsSource` 时掉出可视区的那些行要被回收，
+而回收那一步会把行内容清空 → `ContentPresenter` 用 `null` 建一次模板。所以行模板函数
+**注定**会被 null 调一次，与数据里有没有 null 无关。查找窗口每敲一个字就换一次结果表，
+于是 `Row(lang, null)` 抛 `NullReferenceException`，而这一下是从 `TextChanged` 里冒出去的 ——
+输入事件的路上没人接，进程就没了。
+
+### 二、为什么 9 条查找用例一条都没红
+
+`FindWindowTests` 的样例清单只有 **6 行**，窗口 860×560，**一行都掉不出可视区** →
+永远不触发回收 → 永远不走 null 那一次。拿 400 行的清单 + 同样的窗口重跑一遍，
+无头里当场复现，堆栈与真机一字不差（`FindWindow.Row` 那一帧）。
+这是"无头量不到"的又一种形状：**不是断言写错了，是数据量不够把那条代码路径踩出来。**
+
+### 三、修在入口那一层，不是三个调用点各补一句
+
+新增 `Views/RowTemplate.cs`：列表行模板的**唯一入口**，`Of<T>(build, recycle)` 在里面挡住 null
+（给一块空面板占位，等有真数据时再画行）。三处调用点全部改过去 ——
+**主列表**（`ArchiveView`）与**「新建压缩文件」的输入表**（`NewArchiveWindow`）是同一个形状、
+同样直接解引用，只是它们换源的次数少所以一直没撞上，这一并挡住了。
+
+### 四、测试
+
+本轮不新增用例（用户 2026-10-16 起的要求），验证走的是"先用 400 行清单把崩溃在无头里复现，
+修完再跑一遍看它不抛"这一对测量，探针跑完即删。
+门禁：`build.ps1` 全跑 —— 543 Core + 238 UI 全绿、产物 `/selftest` 25 项 PASS、
+产物 21,872,341 字节（20.86 MB）。
+
 ## [4.0.0] - 2026-10-16（新增：文件菜单那三条灰着的接线 —— 扫描恶意软件、新建程序窗口、管理员新窗口）
 
 > 版本号 3.9.0 → **4.0.0**（新增功能动第二位，而第二位已经是 9 —— 十进制进位，不是 3.10.0）。

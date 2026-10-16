@@ -3,7 +3,6 @@ using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -421,7 +420,7 @@ internal sealed class ArchiveView : IDisposable
         {
             ItemsSource = CurrentRows(),
             SelectionMode = SelectionMode.Multiple,
-            ItemTemplate = new FuncDataTemplate<ArchiveEntryInfo>((entry, _) => BuildRow(entry!), supportsRecycling: true),
+            ItemTemplate = RowTemplate.Of<ArchiveEntryInfo>(BuildRow, recycle: true),
             Background = Design.Surface.Base,
             BorderThickness = new Thickness(0),
         };

@@ -5,7 +5,6 @@ using Andzip.Core.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -114,7 +113,7 @@ public sealed class NewArchiveWindow : Window
         {
             ItemsSource = _inputs,
             SelectionMode = SelectionMode.Multiple,
-            ItemTemplate = new FuncDataTemplate<ArchiveInputItem>((item, _) => BuildRow(item!), supportsRecycling: true),
+            ItemTemplate = RowTemplate.Of<ArchiveInputItem>(BuildRow, recycle: true),
             BorderThickness = new Thickness(1),
             BorderBrush = Design.Line.Strong,
             CornerRadius = Design.Radius.Sm,

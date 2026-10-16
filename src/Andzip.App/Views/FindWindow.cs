@@ -4,7 +4,6 @@ using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -77,7 +76,7 @@ public sealed class FindWindow : Window
             SelectionMode = SelectionMode.Multiple,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            ItemTemplate = new FuncDataTemplate<ArchiveEntryInfo>((entry, _) => Row(lang, entry!)),
+            ItemTemplate = RowTemplate.Of<ArchiveEntryInfo>(entry => Row(lang, entry)),
         };
         _results.SelectionChanged += (_, _) => UpdateRevealState();
         _results.DoubleTapped += (_, _) => RevealSelected();
