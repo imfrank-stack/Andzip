@@ -438,7 +438,20 @@ public sealed class MainWindow : Window
         CloseFindWindow();
         _contentHost.Content = _homeContent;
         Title = EngineTitle;
-        SetArchiveOnlyCommandsEnabled(false);
+        RefreshCommandStates();
+    }
+
+    /// <summary>
+    /// 重算所有"要看当前视图与选择才定得下来"的命令的灰与亮。
+    /// <para>三个调用点：换视图（首页 ↔ 压缩包）、选择变了、<strong>换掉一条工具栏</strong>。
+    /// 第三个是 4.4.0 引入的洞：换档会重做整条工具栏，而新那一条上每一颗的 <c>IsEnabled</c>
+    /// 都是构造时那个"命令接上了就是亮"的初值 —— 不重算，在首页上刚切完档就会得到两颗
+    /// 亮着的「添加」「删除」，点下去 <c>_listing is null</c> 静默返回。
+    /// "能点、点了什么也不发生"正是这条规矩从 0.9.x 就在挡的形状。</para>
+    /// </summary>
+    private void RefreshCommandStates()
+    {
+        SetArchiveOnlyCommandsEnabled(_listing is not null);
         UpdateEditCommandStates();
     }
 
@@ -450,13 +463,12 @@ public sealed class MainWindow : Window
         CloseFindWindow();
         _contentHost.Content = _browser.Root;
         Title = ArchiveTitle(listing.ArchivePath);
-        SetArchiveOnlyCommandsEnabled(true);
 
         // 「编辑」那几项里，有三项要"选中了东西"才亮，而选择是视图内部的状态。
         // 订阅它而不是每次改完自己再算一遍：选择会变的地方有四处（点行、点树、导航、定位），
         // 逐个去补必然漏掉一两处。
         _browser.SelectionChanged += UpdateEditCommandStates;
-        UpdateEditCommandStates();
+        RefreshCommandStates();
     }
 
     // ---------- 查找 → 文件查找 ----------
@@ -1594,6 +1606,9 @@ public sealed class MainWindow : Window
 
         _toolBar = BuildToolBar();
         _headerHost.Child = _toolBar;
+
+        // 新那一条上每颗的 IsEnabled 都是构造初值，必须立刻按当前视图与选择重算一遍。
+        RefreshCommandStates();
     }
 
     /// <summary>
