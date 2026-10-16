@@ -144,6 +144,18 @@ public static class SettingKeys
     /// </summary>
     public const string ViewToolBar = "view_toolbar";
 
+    /// <summary>
+    /// 「视图 → 图像预览」那一格开不开。<strong>与 <see cref="ViewToolBar"/> 同一个待遇</strong>：
+    /// 不在 <c>ViewDefaults</c> 里，也不在「设置 → 查看」那一页上 —— 这一项的主人是「视图」菜单，
+    /// 两边都能改的话两边就都会把对方的改动盖掉（1.6.0 立的规矩）。
+    /// <para>缺省是<strong>开</strong> —— 但这一句要连着读一句坑：<c>GetBool</c> 的缺省是
+    /// <c>false</c>，所以读它必须写 <c>fallback: true</c>。少写那一个参数不会报错，
+    /// 只会让"默认开着"变成"默认关着"，而这一格看不见的时候没人会去查代码。</para>
+    /// <para>这一格只在"恰好选中一个能解码的图片"时才占位置，所以默认开着
+    /// 不会改变任何一格已有的版面。</para>
+    /// </summary>
+    public const string ViewPreview = "view_preview";
+
     public const string ViewShowStatusBar = "view_show_status_bar";
     public const string ViewShowTree = "view_show_tree";
 

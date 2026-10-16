@@ -33,6 +33,12 @@ internal sealed class ArchiveView : IDisposable
     /// <summary>列间分隔条的宽度，同时也是鼠标命中区。</summary>
     private const double SplitterWidth = 5;
 
+    /// <summary>左栏（目录树 / 预览那一列）的默认宽度。分栏线可以拖走它，但初始值在这里。</summary>
+    private const double TreePaneWidth = 300;
+
+    /// <summary>分栏线那一列占的宽度（比 <see cref="SplitterWidth"/> 宽一点，左右各留一点呼吸）。</summary>
+    private const double SeamColumnWidth = 8;
+
     /// <summary>拖拽时的列宽下限，防止把某一列拖没。</summary>
     private const double MinimumColumnWidth = 48;
 
@@ -41,6 +47,26 @@ internal sealed class ArchiveView : IDisposable
 
     /// <summary>单张缩略图的解压上限；超过就按普通文件处理。</summary>
     private const long ThumbnailSourceLimit = 32L * 1024 * 1024;
+
+    /// <summary>
+    /// 左栏底下那一格预览的<strong>高度</strong>（逻辑像素）。宽是左栏的 300，
+    /// 所以 200 那一格读起来是一"块"，不是一条压扁的横幅。
+    /// </summary>
+    private const double PreviewHeight = 200;
+
+    /// <summary>
+    /// 预览回读的解压上限。缩略图那一档（32 MB）对单张图太小 —— 一张 6000×4000 的 JPEG
+    /// 很常见，而这里一次只解<strong>一张</strong>，不是几百张，所以放宽到 128 MB。
+    /// </summary>
+    private const long PreviewSourceLimit = 128L * 1024 * 1024;
+
+    /// <summary>
+    /// 预览解码的目标宽度（<strong>物理</strong>像素）。左栏 300 DIP 在 150% 缩放下是 450 物理像素，
+    /// 512 是"够填满那一格、又不必解出原图几千万像素"的那一档。
+    /// 按宽度解而不是整张解：`DecodeToWidth` 让 Skia 在解码时就降采样，一张 24 MB 的 JPEG
+    /// 解成 512 宽只要几毫秒与几 MB，整张解则要先吃掉一百多 MB。
+    /// </summary>
+    private const int PreviewDecodeWidth = 512;
 
     private static readonly string[] ImageExtensions =
         [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff"];
@@ -64,6 +90,43 @@ internal sealed class ArchiveView : IDisposable
     private readonly ViewDefaults _view;
 
     private readonly TreeView _tree = new();
+
+    /// <summary>
+    /// 左栏底下那一格图像预览。常驻在树上而不是弹在选中行旁边：预览要读的是"我现在选中的是谁"，
+    /// 每换一次选中就跳一扇窗，用户找不到刚才那张图在哪。
+    /// </summary>
+    private readonly Border _previewFrame = new()
+    {
+        Height = PreviewHeight,
+        Margin = new Thickness(0, Design.Space.X2, Design.Space.X2, Design.Space.X2),
+        Padding = Design.Space.All(Design.Space.X1),
+        Background = Design.Surface.Sunken,
+        CornerRadius = Design.Radius.Sm,
+        ClipToBounds = true,
+    };
+
+    private readonly Image _previewImage = new()
+    {
+        Stretch = Stretch.Uniform,
+        IsVisible = false,
+    };
+
+    /// <summary>预览那一格里的"为什么没有图"。只在解不出图时出现，见 <see cref="UpdatePreview"/>。</summary>
+    private readonly TextBlock _previewNote = new()
+    {
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextAlignment = TextAlignment.Center,
+        FontSize = Design.Type.Caption,
+        Foreground = Design.Ink.Secondary,
+        TextWrapping = TextWrapping.Wrap,
+        IsVisible = false,
+    };
+
+    private bool _showPreview;
+    private Bitmap? _previewBitmap;
+    private CancellationTokenSource? _previewCts;
+    private Grid _body = new();
 
     // 树与内容区之间只有一根可拖的发丝线（1.7.0）：整块窗口是一张面板，
     // 两栏各自成卡片会把一屏切成四块白板，用户的评价是"割裂"。
@@ -95,12 +158,16 @@ internal sealed class ArchiveView : IDisposable
     /// </summary>
     /// <param name="view">「设置 → 查看」带来的界面骨架选择：树要不要、状态栏要不要、
     /// 开出来是列表还是图标。默认全开、默认列表 —— 与引入这一页之前完全一致。</param>
+    /// <param name="showPreview">「视图 → 图像预览」那一档。默认开着 —— 这一格是<strong>新加的功能</strong>，
+    /// 关掉它当默认等于没人知道有这件事；但它只在"恰好选中一个能解码的图片"时才占位置，
+    /// 所以默认开着不会改变任何一格已有的版面（没选中图的时候这里什么都没有）。</param>
     public ArchiveView(LangCatalog lang, ArchiveListing listing, ViewDefaults? view = null,
-        IEnumerable<string>? hiddenColumns = null)
+        IEnumerable<string>? hiddenColumns = null, bool showPreview = true)
     {
         _lang = lang;
         _listing = listing;
         _view = view ?? ViewDefaults.Fallback;
+        _showPreview = showPreview;
         _root = ArchiveHierarchy.Build(listing);
         _current = _root;
         _columns = BuildColumns(lang);
@@ -133,6 +200,22 @@ internal sealed class ArchiveView : IDisposable
         Render();
     }
 
+    /// <summary>
+    /// 「视图 → 图像预览」当场勾上 / 取消。与 <see cref="SetHiddenColumns"/> 同一条规矩：
+    /// 就地改，不重建 —— 勾一格预览不该把用户当前所在的文件夹与选中项一起丢掉。
+    /// </summary>
+    public void SetPreviewVisible(bool visible)
+    {
+        if (_showPreview == visible)
+        {
+            return;
+        }
+
+        _showPreview = visible;
+        ApplyLeftPane();
+        UpdatePreview();
+    }
+
     // ---------- 布局 ----------
 
     private Control BuildLayout()
@@ -142,26 +225,29 @@ internal sealed class ArchiveView : IDisposable
         // 所以整圈去掉 —— 1.8.0 那次"左栏线太粗"只改淡了分栏线，这一圈漏掉了。
         _tree.Background = Brushes.Transparent;
         _tree.BorderThickness = new Thickness(0);
-        _treePane.Child = _tree;
+
+        // 预览钉在左栏底下（用户给的参考图就是那一格：树在上、图在下）。
+        // DockPanel 里钉住的那一头要<strong>先加</strong>，吃剩余的那一个最后加 —— 顺序反了
+        // 树会把预览挤出可视区，而不是预览把树压短。
+        var preview = BuildPreviewPane();
+        DockPanel.SetDock(preview, Dock.Bottom);
+        _treePane.Child = new DockPanel { Children = { preview, _tree } };
 
         var detailPane = new Border { Child = _detailHost };
 
-        // 关掉树的时候把两列宽度一起归零，只藏控件不够 —— Grid 仍会给 300px 与 8px 留位置，
-        // 结果是一条拖不动也点不到的空白。
-        var body = new Grid
+        _body = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions(_view.ShowTree ? "300,8,*" : "0,0,*"),
+            ColumnDefinitions = new ColumnDefinitions($"{TreePaneWidth},{SeamColumnWidth},*"),
             Margin = new Thickness(0, Design.Space.X1, 0, 0),
         };
-        _treePane.IsVisible = _view.ShowTree;
-        _splitter.IsVisible = _view.ShowTree;
+        ApplyLeftPane();
 
         Grid.SetColumn(_treePane, 0);
         Grid.SetColumn(_splitter, 1);
         Grid.SetColumn(detailPane, 2);
-        body.Children.Add(_treePane);
-        body.Children.Add(_splitter);
-        body.Children.Add(detailPane);
+        _body.Children.Add(_treePane);
+        _body.Children.Add(_splitter);
+        _body.Children.Add(detailPane);
 
         _status.IsVisible = _view.ShowStatusBar;
 
@@ -169,8 +255,151 @@ internal sealed class ArchiveView : IDisposable
         var bar = ViewBar.Create(_listToggle, _iconToggle, _locateButton, _status);
         DockPanel.SetDock(bar, Dock.Bottom);
         panel.Children.Add(bar);
-        panel.Children.Add(body);
+        panel.Children.Add(_body);
         return panel;
+    }
+
+    /// <summary>
+    /// 左栏那一列到底占不占位置：<strong>树或预览，只要有一个要显示就占</strong>。
+    /// <para>归零的是<strong>列宽</strong>，不只是 <c>IsVisible</c> —— 只藏控件的话 Grid 仍会给
+    /// 300px 与那一列留位置，结果是一条拖不动也点不到的空白（1.7.0 那条老教训）。</para>
+    /// <para>为什么预览要参与这个判断：「设置 → 查看」里把树关掉的人如果同时勾着图像预览，
+    /// 那一格不该跟着树一起消失 —— 否则「视图 → 图像预览」在他那里就成了一颗点了没反应的开关。
+    /// 树自己那一层的 <c>IsVisible</c> 仍然只跟着"要不要树"，所以这一列此时只有预览一块。</para>
+    /// </summary>
+    private void ApplyLeftPane()
+    {
+        var left = _view.ShowTree || _showPreview;
+        _body.ColumnDefinitions[0].Width = new GridLength(left ? TreePaneWidth : 0);
+        _body.ColumnDefinitions[1].Width = new GridLength(left ? SeamColumnWidth : 0);
+        _treePane.IsVisible = left;
+        _splitter.IsVisible = left;
+        _tree.IsVisible = _view.ShowTree;
+    }
+
+    /// <summary>
+    /// 预览那一格。它<strong>平时不占位置</strong>（<c>IsVisible = false</c>）：
+    /// 没选中图片时那一块是一片空白，而"左栏底下有一块永远空着"会被读成界面坏了一块。
+    /// </summary>
+    private Control BuildPreviewPane()
+    {
+        _previewFrame.Child = new Panel { Children = { _previewImage, _previewNote } };
+        _previewFrame.IsVisible = false;
+        return _previewFrame;
+    }
+
+    // ---------- 图像预览 ----------
+
+    /// <summary>
+    /// 按"现在选中的是谁"重画预览那一格。
+    /// <para>只在<strong>恰好选中一个、且它的扩展名在图片表里</strong>时出现。多选不猜要看哪一张 ——
+    /// 猜错的那一次，用户看到的是"另一张图"，而界面不会告诉他为什么。</para>
+    /// <para>在途的请求一律作废：连着往下按方向键翻一屏照片时，前一张的解码还在后台跑，
+    /// 晚到的那张会盖掉当前这张（画面停在刚路过的那一格上）。作废之后位图照样释放，
+    /// 否则每一张被路过的图都留在内存里。</para>
+    /// </summary>
+    private void UpdatePreview()
+    {
+        _previewCts?.Cancel();
+        _previewCts = null;
+
+        var target = _showPreview ? PreviewTarget() : null;
+        if (target is null)
+        {
+            ClearPreview();
+            return;
+        }
+
+        _previewFrame.IsVisible = true;
+        _previewImage.IsVisible = false;
+        _previewNote.IsVisible = false;
+        LoadPreview(target);
+    }
+
+    /// <summary>这一格该画谁：恰好选中一个、不是目录、扩展名在图片表里。否则 null。</summary>
+    private ArchiveEntryInfo? PreviewTarget()
+    {
+        var rows = SelectedRows;
+        return rows.Count == 1 && !rows[0].IsDirectory && IsImage(rows[0]) ? rows[0] : null;
+    }
+
+    private void ClearPreview()
+    {
+        _previewFrame.IsVisible = false;
+        _previewImage.IsVisible = false;
+        _previewImage.Source = null;
+        _previewNote.IsVisible = false;
+        _previewBitmap?.Dispose();
+        _previewBitmap = null;
+    }
+
+    private void LoadPreview(ArchiveEntryInfo entry)
+    {
+        var token = (_previewCts = new CancellationTokenSource()).Token;
+        var sessionTask = OpenSession();
+        var index = entry.Index;
+
+        _ = Task.Run(async () =>
+        {
+            Bitmap? bitmap = null;
+            string note = string.Empty;
+            try
+            {
+                var session = await sessionTask;
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (session is null)
+                {
+                    note = _lang.Label("TEXT_PREVIEW_UNREADABLE");
+                }
+                else
+                {
+                    var bytes = session.ReadEntry(index, PreviewSourceLimit);
+                    if (bytes is not { Length: > 0 })
+                    {
+                        // 引擎按"解压出来多大"拒的，所以这句说的是解压后的体积，不是包里那一格的压缩尺寸。
+                        note = _lang.Label("TEXT_PREVIEW_TOO_BIG");
+                    }
+                    else
+                    {
+                        using var stream = new MemoryStream(bytes);
+                        bitmap = Bitmap.DecodeToWidth(stream, PreviewDecodeWidth, BitmapInterpolationMode.MediumQuality);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                bitmap?.Dispose();
+                bitmap = null;
+                note = _lang.Label("TEXT_PREVIEW_FAILED");
+            }
+
+            if (bitmap is null && note.Length == 0)
+            {
+                return;
+            }
+
+            var decoded = bitmap;
+            var caption = note;
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (token.IsCancellationRequested)
+                {
+                    decoded?.Dispose();
+                    return;
+                }
+
+                _previewBitmap?.Dispose();
+                _previewBitmap = decoded;
+                _previewImage.Source = decoded;
+                _previewImage.IsVisible = decoded is not null;
+                _previewNote.Text = caption;
+                _previewNote.IsVisible = decoded is null && caption.Length > 0;
+            });
+        });
     }
 
     private void BuildTree()
@@ -362,6 +591,10 @@ internal sealed class ArchiveView : IDisposable
         _detailHost.Content = _iconView ? BuildIconView() : BuildListView();
         ViewBar.Highlight(_listToggle, !_iconView);
         ViewBar.Highlight(_iconToggle, _iconView);
+
+        // 换层（或换列表/图标视图）之后选中是空的，预览要跟着收起来：留着上一张，
+        // 用户看到的是"我已经在另一个文件夹里了，图还是刚才那张"，读起来像界面卡住。
+        UpdatePreview();
     }
 
     private void SetIconView(bool icon)
@@ -760,11 +993,14 @@ internal sealed class ArchiveView : IDisposable
     private static bool IsImage(ArchiveEntryInfo entry)
         => ImageExtensions.Contains(Path.GetExtension(entry.Name), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>后台回读条目字节并解码缩略图。任何失败都只留下通用图标，不打扰用户。</summary>
-    private void LoadThumbnail(Control placeholder, Image target, ArchiveEntryInfo entry)
-    {
-        var token = (_navigateCts ??= new CancellationTokenSource()).Token;
-        _session ??= Task.Run(() =>
+    /// <summary>
+    /// 那份长驻的读取会话，<strong>惰建且只建一次</strong>：缩略图与图像预览共用一个句柄 ——
+    /// 一个句柄同一时刻只能被一个线程碰，多开一个只是多排队一份，而清单已经在盘上了。
+    /// <para>建失败记成 <c>null</c> 而不是抛：这一层在后台线程上，抛出去的异常没人接，
+    /// 而"预览不出来"该在界面上是一句话，不是一根红条（<see cref="LoadPreview"/> 读这个 null）。</para>
+    /// </summary>
+    private Task<ArchiveContentSession?> OpenSession()
+        => _session ??= Task.Run(() =>
         {
             try
             {
@@ -776,7 +1012,11 @@ internal sealed class ArchiveView : IDisposable
             }
         });
 
-        var sessionTask = _session;
+    /// <summary>后台回读条目字节并解码缩略图。任何失败都只留下通用图标，不打扰用户。</summary>
+    private void LoadThumbnail(Control placeholder, Image target, ArchiveEntryInfo entry)
+    {
+        var token = (_navigateCts ??= new CancellationTokenSource()).Token;
+        var sessionTask = OpenSession();
         _ = Task.Run(async () =>
         {
             Bitmap? bitmap = null;
@@ -837,6 +1077,10 @@ internal sealed class ArchiveView : IDisposable
         // 「编辑」那几项是按选择起落的（2 项改名、1 项以上才谈得上删/复制），
         // 所以选择一变就得让窗口重算一次菜单 —— 这是视图往外说的唯一一句话。
         SelectionChanged?.Invoke();
+
+        // 预览读的也是"现在选中的是谁"，所以挂在同一个地方：选择会变的地方有四处
+        // （点行、点树、导航、定位），逐个去补必然漏掉一两处。
+        UpdatePreview();
 
         var selected = list.SelectedItems?.OfType<ArchiveEntryInfo>().Where(e => !e.IsDirectory).ToList() ?? [];
         if (selected.Count == 0)
@@ -970,6 +1214,11 @@ internal sealed class ArchiveView : IDisposable
     {
         _navigateCts?.Cancel();
         _navigateCts?.Dispose();
+
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _previewBitmap?.Dispose();
+        _previewBitmap = null;
 
         // 会话可能还在建立中；等它落地再释放，避免留下未关闭的归档句柄。
         _session?.ContinueWith(

@@ -130,6 +130,15 @@ public sealed class MainWindow : Window
     /// </summary>
     private ToolBarMode _toolBarMode;
 
+    /// <summary>
+    /// 「视图 → 图像预览」开不开（左栏底下那一格）。与 <see cref="_toolBarMode"/>、
+    /// <see cref="_hiddenColumns"/> 同一个待遇：<strong>不在 <see cref="_view"/> 里</strong> ——
+    /// 那一份是「设置 → 查看」那一页的数据形状，而这一项的主人是「视图」菜单。
+    /// <para>缺省开着的理由写在 <see cref="SettingKeys.ViewPreview"/> 那条注释里；
+    /// 与「置顶」相反，这一项<strong>落盘</strong>：版面是设置，姿势不是。</para>
+    /// </summary>
+    private bool _showPreview;
+
     public MainWindow(LangCatalog lang, AppSettings settings)
     {
         _lang = lang;
@@ -137,6 +146,7 @@ public sealed class MainWindow : Window
         _view = ViewDefaults.Load(settings);
         _hiddenColumns = [.. settings.GetStringList(SettingKeys.HiddenColumns)];
         _toolBarMode = SettingKeys.ParseToolBarMode(settings.GetString(SettingKeys.ViewToolBar));
+        _showPreview = settings.GetBool(SettingKeys.ViewPreview, fallback: true);
 
         Title = EngineTitle;
         Width = 1040;
@@ -176,6 +186,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandOpenArchiveFolder] = OpenArchiveFolder,
             [MainMenuModel.CommandToggleTheme] = ToggleTheme,
             [MainMenuModel.CommandToggleOnTop] = ToggleTopMost,
+            [MainMenuModel.CommandPreview] = TogglePreview,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
             [MainMenuModel.CommandRenameEntry] = RenameEntryAsync,
@@ -342,6 +353,7 @@ public sealed class MainWindow : Window
             DeleteFiles: _commands[MainMenuModel.CommandDeleteEntries],
             TestArchive: _commands[MainMenuModel.CommandTestArchive],
             ScanArchive: _commands[MainMenuModel.CommandScanArchive],
+            TogglePreview: _commands[MainMenuModel.CommandPreview],
             SwitchLanguage: () => OpenSettingsDialogOn("TEXT_SETTINGS_LANGUAGE")),
             _toolBarMode);
 
@@ -455,12 +467,13 @@ public sealed class MainWindow : Window
         SetArchiveOnlyCommandsEnabled(_listing is not null);
         UpdateEditCommandStates();
         SetCommandChecked(MainMenuModel.CommandToggleOnTop, Topmost);
+        SetCommandChecked(MainMenuModel.CommandPreview, _showPreview);
     }
 
     private void ShowArchiveView(ArchiveListing listing)
     {
         _browser?.Dispose();
-        _browser = new ArchiveView(_lang, listing, _view, _hiddenColumns);
+        _browser = new ArchiveView(_lang, listing, _view, _hiddenColumns, _showPreview);
         _listing = listing;
         CloseFindWindow();
         _contentHost.Content = _browser.Root;
@@ -1649,6 +1662,23 @@ public sealed class MainWindow : Window
         _headerHost.Child = _toolBar;
 
         // 新那一条上每颗的 IsEnabled 都是构造初值，必须立刻按当前视图与选择重算一遍。
+        RefreshCommandStates();
+    }
+
+    /// <summary>
+    /// 「视图 → 图像预览」勾上 / 取消：落盘，然后<strong>就地</strong>改那一格。
+    /// <para>不重建视图 —— 与「列设置」同一条理由：勾一格版面开关不该把用户当前所在的文件夹、
+    /// 展开状态与选中项一起丢掉。而且这里更明显：重建会把选中清空，于是"勾上预览"这一步
+    /// 恰好把唯一能触发预览的那样东西（选中的那一张图）取消了，用户会看到"点了没反应"。</para>
+    /// <para>这一项与「置顶」相反，是<strong>要落盘的</strong>：那一格是版面，版面是设置。</para>
+    /// </summary>
+    private void TogglePreview()
+    {
+        _showPreview = !_showPreview;
+        _settings.SetBool(SettingKeys.ViewPreview, _showPreview);
+        _settings.Save(AppSettings.DefaultFilePath);
+
+        _browser?.SetPreviewVisible(_showPreview);
         RefreshCommandStates();
     }
 

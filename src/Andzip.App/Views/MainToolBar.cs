@@ -78,9 +78,11 @@ internal static class MainToolBar
             MainMenuModel.CommandTestArchive, actions.TestArchive));
         items.Children.Add(Cell(lang, "TEXT_TOOLBAR_SCAN", "scan-file", compact,
             MainMenuModel.CommandScanArchive, actions.ScanArchive));
-        // 「查看」= 参考软件的预览面板，功能本身还没做，所以这一格没有命令，也就没有 id：
-        // 没有 id 就没人按命令去点亮它，它会一直灰着 —— 这正是想要的结果。
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_VIEW", "view", compact, null, actions.ToggleViewStyle));
+        // 「查看」就是参考软件那个预览面板，也就是「视图 → 图像预览」那一条（4.6.0 接上）。
+        // 与「添加」「删除」同一个做法：这里带的是<strong>同一个命令 id</strong>，
+        // 所以首页上灰、开着包才亮这两件事由按命令的那一趟统一决定，两处不会各说一套。
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_VIEW", "view", compact,
+            MainMenuModel.CommandPreview, actions.TogglePreview));
 
         // 语言切换本身在「设置 → 语言」里（换完要重启才全面生效），
         // 所以这一颗做的是"跳到那一页"。以前它写着当前语言、点不动，如今它有地方可去。
@@ -210,6 +212,6 @@ internal sealed record MainToolBarActions(
     Action? DeleteFiles = null,
     Action? TestArchive = null,
     Action? ScanArchive = null,
-    Action? ToggleViewStyle = null,
+    Action? TogglePreview = null,
     Action? SwitchLanguage = null);
 

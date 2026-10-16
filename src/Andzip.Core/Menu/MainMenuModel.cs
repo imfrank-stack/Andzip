@@ -91,6 +91,14 @@ public static class MainMenuModel
     public const string CommandColumns = "view.columns";
 
     /// <summary>
+    /// 「视图 → 图像预览」：勾上就把选中那一张图解在左栏底下那一格里。
+    /// <para>它挂的是<strong>压缩包视图</strong>那一格版面，所以与 <see cref="CommandColumns"/>
+    /// 一样在"只有开着包才能用"那张表里：首页上没有那一格，勾一下屏幕上不会有任何变化，
+    /// 而"看得见、点了没反应"正是这一排从 0.9.x 起就在挡的形状。</para>
+    /// </summary>
+    public const string CommandPreview = "view.preview";
+
+    /// <summary>
     /// 「视图 → 工具栏」：大 / 小 / 隐藏 三档。与 <see cref="CommandColumns"/> 同一种形状 ——
     /// <strong>不是一条命令，而是一个子菜单的挂载点</strong>，所以也要登记进主窗口那份
     /// "命令在别处接走"的名单里，不然构造时就抛。
@@ -173,6 +181,7 @@ public static class MainMenuModel
         CommandOpenArchiveFolder,
         CommandFindFiles,
         CommandColumns,
+        CommandPreview,
     ];
 
     /// <summary>
@@ -256,7 +265,7 @@ public static class MainMenuModel
             new("view.tree", "MENUSTR_VIEW_TREECONTROL", "F7"),
             new("view.comment", "MENUSTR_VIEW_COMMENT", "F8"),
             MenuItemModel.Separator(),
-            new("view.preview", "MENUSTR_VIEW_PREVIEW"),
+            new("view.preview", "MENUSTR_VIEW_PREVIEW", Enabled: true, CommandId: CommandPreview),
             new("view.toolbar", "MENUSTR_VIEW_TOOLBAR", Enabled: true, CommandId: CommandToolBar),
             new("view.style", "MENUSTR_VIEW_LISTVIEW"),
             new("view.columns", "MENUSTR_VIEW_COLUMN", Enabled: true, CommandId: CommandColumns),
