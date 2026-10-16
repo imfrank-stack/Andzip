@@ -169,7 +169,7 @@ public static class MainMenuModel
     /// 「编辑」那七项。逐项判的条件比上面那组细：改得动这个格式才点亮增删改名与粘贴、
     /// 注释只对 ZIP、复制类只要选中了东西。
     /// <para>这张表只列"归窗口按选择现算的那几项"，好让窗口知道该管谁 ——
-    /// 条件本身写在窗口里（<c>UpdateEditMenuStates</c>），因为只有它看得见当前选择。</para>
+    /// 条件本身写在窗口里（<c>UpdateEditCommandStates</c>），因为只有它看得见当前选择。</para>
     /// </summary>
     public static IReadOnlyList<string> SelectionCommands { get; } =
     [

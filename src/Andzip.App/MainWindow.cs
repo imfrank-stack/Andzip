@@ -12,6 +12,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -64,6 +65,14 @@ public sealed class MainWindow : Window
 
     /// <summary>菜单条。留着是为了按命令找到某几项、在没有包可操作时把它们置灰。</summary>
     private readonly Menu _menuBar;
+
+    /// <summary>
+    /// 命令 id → 做什么。<strong>菜单与工具栏读的都是这一张表</strong>：
+    /// 「编辑 → 添加文件」与工具栏那颗「添加」是同一条命令的两种入口，
+    /// 各写一份的话，早晚会出现"菜单里能点、工具栏上那颗点了没反应"（或反过来）。
+    /// 置灰也按这里的 id 走（见 <see cref="SetCommandEnabled"/>）。
+    /// </summary>
+    private readonly Dictionary<string, Action> _commands;
 
     /// <summary>自绘标题栏（图标 + 菜单 + 版本号 + 三个窗口按钮，一行）。换主题时要重取一遍令牌。</summary>
     private readonly TitleBar _titleBar;
@@ -141,7 +150,7 @@ public sealed class MainWindow : Window
 
         _homeContent = HomeView.Create(lang);
 
-        var commands = new Dictionary<string, Action>(StringComparer.Ordinal)
+        _commands = new Dictionary<string, Action>(StringComparer.Ordinal)
         {
             [MainMenuModel.CommandExit] = Close,
             [MainMenuModel.CommandNewArchive] = OpenNewArchiveDialog,
@@ -177,7 +186,7 @@ public sealed class MainWindow : Window
 
         var root = new DockPanel();
 
-        _menuBar = MainMenuBar.Create(_lang, commands, new RecentFilesMenu(
+        _menuBar = MainMenuBar.Create(_lang, _commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles),
             new ColumnMenu(() => _hiddenColumns, SetColumnVisible));
 
@@ -186,7 +195,7 @@ public sealed class MainWindow : Window
         // 所以这里当场抛，而不是留给用户先点一下再发现。
         var unwired = MainMenuModel.Create().SelectMany(menu => menu.Items)
             .Where(item => item.Enabled && (item.CommandId is null
-                || (!commands.ContainsKey(item.CommandId) && !HandledElsewhere.Contains(item.CommandId))))
+                || (!_commands.ContainsKey(item.CommandId) && !HandledElsewhere.Contains(item.CommandId))))
             .Select(item => $"'{item.Id}'（{item.TextKey}）")
             .ToArray();
         if (unwired.Length > 0)
@@ -239,7 +248,7 @@ public sealed class MainWindow : Window
 
         ShowHome();
         ApplyViewDefaults();
-        RegisterShortcuts(commands);
+        RegisterShortcuts(_commands);
         AcceptFileDrops();
 
         // 最大化时圆角与边距要收掉：留着一圈透明边，最大化后的窗口会比工作区小一圈，
@@ -310,14 +319,21 @@ public sealed class MainWindow : Window
     /// <summary>
     /// 按当前调色板做一条新工具栏。「查看 → 显示工具栏」的开关状态在这里一并带上，
     /// 否则换完主题工具栏会悄悄跑回来（<see cref="ApplyViewDefaults"/> 那次已经过去了）。
+    /// <para>每一颗都从 <see cref="_commands"/> 里取，不在这里另写一遍"它做什么"。
+    /// 「查看」与「切换语言」两颗<strong>不带命令 id</strong>：前者是预览面板，功能本身还没做，
+    /// 没有命令可给，于是它建出来就是灰的而且谁也不会去点亮它；后者的动作是"跳到设置那一页"，
+    /// 菜单里没有同一条，不该被按命令的那一趟管。</para>
     /// </summary>
     private Control BuildToolBar()
     {
         var bar = MainToolBar.Create(_lang, new MainToolBarActions(
-            OpenArchive: OpenArchiveAsync,
-            ExtractArchive: ExtractArchiveAsync,
-            NewArchive: OpenNewArchiveDialog,
-            TestArchive: TestArchiveAsync,
+            OpenArchive: _commands[MainMenuModel.CommandOpenArchive],
+            ExtractArchive: _commands[MainMenuModel.CommandExtractArchive],
+            NewArchive: _commands[MainMenuModel.CommandNewArchive],
+            AddFiles: _commands[MainMenuModel.CommandAddEntries],
+            DeleteFiles: _commands[MainMenuModel.CommandDeleteEntries],
+            TestArchive: _commands[MainMenuModel.CommandTestArchive],
+            ScanArchive: _commands[MainMenuModel.CommandScanArchive],
             SwitchLanguage: () => OpenSettingsDialogOn("TEXT_SETTINGS_LANGUAGE")));
 
         // 「查看 → 显示工具栏」要跟着带上，否则换完主题工具栏会悄悄跑回来
@@ -416,7 +432,7 @@ public sealed class MainWindow : Window
         _contentHost.Content = _homeContent;
         Title = EngineTitle;
         SetArchiveOnlyCommandsEnabled(false);
-        UpdateEditMenuStates();
+        UpdateEditCommandStates();
     }
 
     private void ShowArchiveView(ArchiveListing listing)
@@ -432,8 +448,8 @@ public sealed class MainWindow : Window
         // 「编辑」那几项里，有三项要"选中了东西"才亮，而选择是视图内部的状态。
         // 订阅它而不是每次改完自己再算一遍：选择会变的地方有四处（点行、点树、导航、定位），
         // 逐个去补必然漏掉一两处。
-        _browser.SelectionChanged += UpdateEditMenuStates;
-        UpdateEditMenuStates();
+        _browser.SelectionChanged += UpdateEditCommandStates;
+        UpdateEditCommandStates();
     }
 
     // ---------- 查找 → 文件查找 ----------
@@ -693,16 +709,17 @@ public sealed class MainWindow : Window
 
     /// <summary>
     /// 按命令把"只有开着压缩包才能用"的那几项点亮或置灰。
-    /// <para>用 <c>Tag</c>（<see cref="MainMenuBar"/> 建的时候写进 CommandId）而不是另存一份
-    /// 控件引用：菜单结构改了不用回来改这张表，也不会漏掉新加的一项。</para>
+    /// <para>用 <c>Tag</c>（<see cref="MainMenuBar"/> 与 <see cref="MainToolBar"/> 建的时候写进
+    /// CommandId）而不是另存一份控件引用：菜单结构或工具栏排布改了不用回来改这张表，
+    /// 也不会漏掉新加的一项。</para>
     /// </summary>
     private void SetArchiveOnlyCommandsEnabled(bool enabled)
     {
-        foreach (var item in WalkItems(_menuBar))
+        foreach (var carrier in CommandCarriers())
         {
-            if (item.Tag is string command && MainMenuModel.ArchiveOnlyCommands.Contains(command))
+            if (carrier.Tag is string command && MainMenuModel.ArchiveOnlyCommands.Contains(command))
             {
-                item.IsEnabled = enabled;
+                carrier.IsEnabled = enabled;
             }
         }
     }
@@ -720,6 +737,26 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 身上带着命令 id 的那些控件：菜单项 + 工具栏那几颗。
+    /// <para>灰与亮<strong>只走这一个口子</strong>。同一个命令在菜单里灰着、在工具栏上却能点
+    /// （或反过来），用户读到的是"其中一处坏了"，而真实原因是两条判据写在了两个地方 ——
+    /// 4.2.0 把工具栏那三颗接上时，这个形状第一次真的会出现，所以先合并再接线。</para>
+    /// <para>走逻辑树而不是视觉树：工具栏在构造时还没挂进窗口，按视觉子节点找会一个都找不到。</para>
+    /// </summary>
+    private IEnumerable<Control> CommandCarriers()
+    {
+        foreach (var item in WalkItems(_menuBar))
+        {
+            yield return item;
+        }
+
+        foreach (var cell in _toolBar.GetLogicalDescendants().OfType<Control>())
+        {
+            yield return cell;
+        }
+    }
+
     // ---------- 编辑（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径） ----------
 
     private IReadOnlyList<ArchiveEntryInfo> SelectedEntries()
@@ -729,13 +766,14 @@ public sealed class MainWindow : Window
         => Session.Passwords.TryGet(archivePath, out var cached) ? cached : null;
 
     /// <summary>
-    /// 按"当前开着什么包、选中了什么"重算「编辑」那七项的灰与亮。
+    /// 按"当前开着什么包、选中了什么"重算「编辑」那七项的灰与亮 —— 菜单里那七行与工具栏上
+    /// 的「添加」「删除」两颗一起算（它们带的是同一个命令 id，见 <see cref="CommandCarriers"/>）。
     /// <para>条件写在这里而不是菜单模型里：<strong>只有窗口看得见当前选择</strong>。
     /// 而"这个格式改不改得动"与"这个格式有没有注释"的判据不在这里重写一遍 ——
     /// 那是 <see cref="ArchiveUpdater.CanUpdate"/> 与 <see cref="ZipComment.CanEdit"/> 的事，
     /// 抄一份写死在界面里，早晚会与真动手那一层说的不是同一件事。</para>
     /// </summary>
-    private void UpdateEditMenuStates()
+    private void UpdateEditCommandStates()
     {
         var entries = SelectedEntries();
         var hasSelection = entries.Count > 0;
@@ -753,11 +791,11 @@ public sealed class MainWindow : Window
 
     private void SetCommandEnabled(string commandId, bool enabled)
     {
-        foreach (var item in WalkItems(_menuBar))
+        foreach (var carrier in CommandCarriers())
         {
-            if (item.Tag is string command && command == commandId)
+            if (carrier.Tag is string command && command == commandId)
             {
-                item.IsEnabled = enabled;
+                carrier.IsEnabled = enabled;
             }
         }
     }

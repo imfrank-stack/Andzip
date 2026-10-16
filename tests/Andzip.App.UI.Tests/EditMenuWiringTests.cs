@@ -15,7 +15,7 @@ namespace Andzip.App.UiTests;
 /// 按当前开着什么包、选中了什么现算。
 /// <para>
 /// 全部从装好的 <see cref="MainWindow"/> 出发、按菜单项的 <c>Tag</c>（就是命令 id）认。
-/// 不直接调 <c>UpdateEditMenuStates</c>：那等于把"这一项在屏幕上灰不灰"换成"这个方法算得对不对"，
+/// 不直接调 <c>UpdateEditCommandStates</c>：那等于把"这一项在屏幕上灰不灰"换成"这个方法算得对不对"，
 /// 而这两件事之间正隔着"窗口有没有真的把它写进菜单"。
 /// </para>
 /// </summary>
