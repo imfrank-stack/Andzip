@@ -215,13 +215,16 @@ internal static class MainMenuBar
     }
 
     /// <summary>
-    /// 那一枚勾。<strong>「列设置」与「工具栏」两排共用</strong> —— 两处各写一个同名的本地函数，
+    /// 那一枚勾。<strong>「列设置」「工具栏」两排与「置顶」共用</strong> —— 各处各写一个同名的本地函数，
     /// 早晚一边是 <c>✓</c> 一边是 <c>✔</c>。
     /// <para>用 <c>MenuItem.Icon</c> 而不是 <c>CheckBox</c>：SimpleTheme 的模板真的托管这一格
     /// （4.1.0 量的：把「列设置」整条展开、抓渲染帧，十行里数到九个勾），
     /// 而勾画在文字左边那一格，不勾的那一行位置照旧对齐。</para>
+    /// <para>前两排在<strong>每次展开时重建</strong>，所以勾是当场算出来的；「置顶」那一行是菜单
+    /// 构造时就建好、一直住在那里的，勾得由窗口在状态变了之后<strong>挂上去 / 摘下来</strong>
+    /// （见 <c>MainWindow.SetCommandChecked</c>）。两种画法共用这一份，勾的形状才只有一处能变。</para>
     /// </summary>
-    private static Control Check() => new TextBlock
+    internal static Control Check() => new TextBlock
     {
         Text = "✓",
         FontSize = Design.Type.Body,

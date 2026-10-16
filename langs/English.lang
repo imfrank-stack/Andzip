@@ -540,6 +540,7 @@ MENUSTR_TOOLBAR_HIDDEN                    = Hide
 MENUSTR_VIEW_TOOLBAR                    = Toolbar
 MENUSTR_VIEW_LISTVIEW                   = View style
 MENUSTR_VIEW_COLUMN                     = Columns
+MENUSTR_VIEW_ALWAYS_ON_TOP              = Always on top
 MENUSTR_VIEW_THEME                      = Dark mode
 
 MENUSTR_TOOLS_REPAIR                    = Repair archive...

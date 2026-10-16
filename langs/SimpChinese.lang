@@ -537,6 +537,7 @@ MENUSTR_TOOLBAR_HIDDEN                    = 隐藏
 MENUSTR_VIEW_TOOLBAR                    = 工具栏
 MENUSTR_VIEW_LISTVIEW                   = 视图样式
 MENUSTR_VIEW_COLUMN                     = 列设置
+MENUSTR_VIEW_ALWAYS_ON_TOP              = 置顶
 MENUSTR_VIEW_THEME                      = 深色模式
 
 MENUSTR_TOOLS_REPAIR                    = 修复压缩包...

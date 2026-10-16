@@ -105,6 +105,15 @@ public static class MainMenuModel
     /// </summary>
     public const string CommandToggleTheme = "view.theme";
 
+    /// <summary>
+    /// 「视图 → 置顶」：把这扇窗口钉在最前面，再点一次放开。
+    /// <para>勾是<strong>这一扇窗口的状态</strong>，不写进 <c>settings.ini</c>：置顶是一次
+    /// "我先盯着这个窗口办点事"的临时姿势，把它做成跨重启的记忆，就等于每次开机都有一扇
+    /// 挡在别的窗口前面的 Andzip —— 而它下面那一排（深浅、列设置、工具栏）都是会落盘的设置，
+    /// 只有这一条不是，所以它的勾只能由窗口自己回答。</para>
+    /// </summary>
+    public const string CommandToggleOnTop = "view.ontop";
+
     /// <summary>设置窗口（F5）。</summary>
     public const string CommandSettings = "options.settings";
 
@@ -241,8 +250,9 @@ public static class MainMenuModel
         [
             // 「启动画面」（F6 在首页与压缩包视图之间来回）4.3.0 删了：来回这两面各有各的入口
             // ——「文件 → 关闭压缩文件」回首页，打开一个包进压缩包视图，这一条是第三扇门。
-            // 「状态栏」「置顶」「颜色设置」也一并删：前一条与「设置 → 查看」里那个真正的开关
-            // 重复（而且这一条还是灰的），后两条对应的功能压根不存在。
+            // 「状态栏」「颜色设置」也一并删：前一条与「设置 → 查看」里那个真正的开关
+            // 重复（而且这一条还是灰的），后一条对应的功能压根不存在。
+            // 「置顶」4.3.0 删的是那条<strong>灰占位</strong>，4.5.0 把它作为真功能放回来了。
             new("view.tree", "MENUSTR_VIEW_TREECONTROL", "F7"),
             new("view.comment", "MENUSTR_VIEW_COMMENT", "F8"),
             MenuItemModel.Separator(),
@@ -251,6 +261,7 @@ public static class MainMenuModel
             new("view.style", "MENUSTR_VIEW_LISTVIEW"),
             new("view.columns", "MENUSTR_VIEW_COLUMN", Enabled: true, CommandId: CommandColumns),
             MenuItemModel.Separator(),
+            new("view.ontop", "MENUSTR_VIEW_ALWAYS_ON_TOP", Enabled: true, CommandId: CommandToggleOnTop),
             new("view.theme", "MENUSTR_VIEW_THEME", Enabled: true, CommandId: CommandToggleTheme),
         ]),
 

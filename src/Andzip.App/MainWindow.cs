@@ -175,6 +175,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandPermanentDeleteArchive] = PermanentlyDeleteArchive,
             [MainMenuModel.CommandOpenArchiveFolder] = OpenArchiveFolder,
             [MainMenuModel.CommandToggleTheme] = ToggleTheme,
+            [MainMenuModel.CommandToggleOnTop] = ToggleTopMost,
             [MainMenuModel.CommandSettings] = OpenSettingsDialog,
             [MainMenuModel.CommandFindFiles] = OpenFindDialog,
             [MainMenuModel.CommandRenameEntry] = RenameEntryAsync,
@@ -442,9 +443,9 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// 重算所有"要看当前视图与选择才定得下来"的命令的灰与亮。
-    /// <para>三个调用点：换视图（首页 ↔ 压缩包）、选择变了、<strong>换掉一条工具栏</strong>。
-    /// 第三个是 4.4.0 引入的洞：换档会重做整条工具栏，而新那一条上每一颗的 <c>IsEnabled</c>
+    /// 重算所有"要看当前视图与选择才定得下来"的命令的灰与亮（以及勾）。
+    /// <para>四个调用点：换视图（首页 ↔ 压缩包）、选择变了、<strong>换掉一条工具栏</strong>、
+    /// <strong>置顶变了</strong>。第三个是 4.4.0 引入的洞：换档会重做整条工具栏，而新那一条上每一颗的 <c>IsEnabled</c>
     /// 都是构造时那个"命令接上了就是亮"的初值 —— 不重算，在首页上刚切完档就会得到两颗
     /// 亮着的「添加」「删除」，点下去 <c>_listing is null</c> 静默返回。
     /// "能点、点了什么也不发生"正是这条规矩从 0.9.x 就在挡的形状。</para>
@@ -453,6 +454,7 @@ public sealed class MainWindow : Window
     {
         SetArchiveOnlyCommandsEnabled(_listing is not null);
         UpdateEditCommandStates();
+        SetCommandChecked(MainMenuModel.CommandToggleOnTop, Topmost);
     }
 
     private void ShowArchiveView(ArchiveListing listing)
@@ -797,6 +799,27 @@ public sealed class MainWindow : Window
             if (carrier.Tag is string command && command == commandId)
             {
                 carrier.IsEnabled = enabled;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 给带着这个命令 id 的菜单项挂上或摘掉那一枚勾。
+    /// <para>只走菜单，不跟 <see cref="CommandCarriers"/> 一起走工具栏：工具栏那一格画的是它自己的
+    /// 图标，勾没有地方放，而「置顶」本来也没有第二个入口（与「列设置」「工具栏」一样只有一排）。</para>
+    /// <para>已经画对了就不重画 —— 勾就是 <c>Icon</c> 那一格本身，所以"现在有没有勾"直接看它。
+    /// 这一趟挂在 <see cref="RefreshCommandStates"/> 里，而那个方法在每次选择变化时都会跑，
+    /// 给一个正展开着的菜单行换一个新控件是能被看见的闪一下。</para>
+    /// <para>为什么要挂上去而不是"菜单只建一次，所以点的时候顺手改一下就够了"：
+    /// 4.4.0 那次就是"状态改了、画面是照旧值建的那批控件"（见开发记录第七节第 88 条）。</para>
+    /// </summary>
+    private void SetCommandChecked(string commandId, bool isChecked)
+    {
+        foreach (var item in WalkItems(_menuBar))
+        {
+            if (item.Tag is string command && command == commandId && (item.Icon is not null) != isChecked)
+            {
+                item.Icon = isChecked ? MainMenuBar.Check() : null;
             }
         }
     }
@@ -1557,6 +1580,24 @@ public sealed class MainWindow : Window
         _settings.SetString(SettingKeys.ViewTheme, mode.ToStorage());
         _settings.Save(AppSettings.DefaultFilePath);
         ApplyViewDefaults();
+    }
+
+    /// <summary>
+    /// 「视图 → 置顶」：把这扇窗口钉在最前面，再点一次放开。
+    /// <para>状态的<strong>唯一一份就是窗口自己那个 <c>Topmost</c></strong>，所以这里不再存一个
+    /// <c>_topMost</c> 布尔 —— 存了就会有两个真相（菜单的勾照着布尔画，实际压不压得住照着窗口画，
+    /// 而窗口可能被系统改动：最小化、别处的置顶窗口、另一扇 Andzip 窗口）。勾由
+    /// <see cref="RefreshCommandStates"/> 从那一个真相算出来。</para>
+    /// <para>不落盘（与 <see cref="ToggleTheme"/> 不同）：置顶是"这一阵子我先盯着这个窗口"的姿势，
+    /// 不是设置。做成跨重启的，等于每次开机都挡一扇在前面，而那正是这一条要防的事。</para>
+    /// <para>只钉这一扇：<c>Ctrl+Shift+N</c> 起的那一扇是新进程、新窗口，从没钉开始 ——
+    /// 与资源管理器每个窗口各钉各的一个道理。自己的那些框（进度、确认、设置）都是
+    /// <c>ShowDialog(this)</c>，被钉住的窗口盖不住自己的对话窗，所以不用跟着钉。</para>
+    /// </summary>
+    private void ToggleTopMost()
+    {
+        Topmost = !Topmost;
+        RefreshCommandStates();
     }
 
     /// <summary>
