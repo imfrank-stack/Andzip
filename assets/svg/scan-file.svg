@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
-  <title>扫描文件</title>
-  <path d="M10.5 5 H20 L28 13 V24.5 A2.5 2.5 0 0 1 25.5 27 H10.5 A2.5 2.5 0 0 1 8 24.5 V7.5 A2.5 2.5 0 0 1 10.5 5 Z" fill="#414B5A"/>
-  <path d="M20 5 L28 13 L20 13 Z" fill="#A7B1BF"/>
-  <circle cx="30.5" cy="30.5" r="9.6" fill="#FFFFFF"/>
-  <path d="M35 35 L39 39" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="30.5" cy="30.5" r="6.6" stroke="#414B5A" stroke-width="3" fill="none"/>
-  <path d="M35 35 L39 39" stroke="#414B5A" stroke-width="3.6" stroke-linecap="round"/>
-</svg>

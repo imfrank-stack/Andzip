@@ -326,6 +326,19 @@ Linux 作业时发现的（见 `../README.md` 第七节第 13 条）。
 - **所有字符串都是 UTF-8。** 由库持有所有权，归属规则写在每个函数的注释里。凡是带
   `_bag` 字段的都要配对调用 `az_*_release`。
 - **不透明句柄。** `az_archive`、`az_writer` 是指向不完全类型的指针。
+- **`az_hasher_*` 收的名字 = 7-Zip 注册表里的那些，外加两个门面补的。** 注册表（`CPP/Common/*Reg.cpp`）
+  给的是 `CRC32 / CRC64 / MD5 / SHA1 / SHA256 / SHA3-256 / SHA512 / XXH64`。界面那排算法里还有两个
+  拿不到：`SHA-384` 在 `Sha3Reg.cpp:70` 被上游注释掉了，`BLAKE2sp` 唯一的 `IHasher` 实现住在
+  `Archive/Rar/Rar5Handler.cpp` 里、只有问 Rar5 处理器要哈希器时才看得见，而静态链接的 `GetHashers()`
+  不会去问。两者都由 `src/api/az_hash.cpp` 直接驱动**已经 vendor、已经参与编译**的 `C/Sha3.c` 与
+  `C/Blake2s.c`（后者本来就是 RAR5 头校验在用的那份）——`third_party/7zip` 一个字节没改，
+  注册表仍然先查，将来上游补了自动走上游那条路。摘要值逐字节对过本机 7-Zip 26.04 的
+  `7z h -scrc*`（见 `Andzip.Native.Tests` 的 `hasher known vectors`）。
+  **两个坑记在这里**：`C/Sha3.h` 的 `Sha3_SET_blockSize(p, blockSize)` 把成员名和参数名写成同一个
+  token，传任何不叫 `blockSize` 的实参都会把成员名一起替换掉（这里直接给字段赋值）；
+  同一个头的 include guard 写的是 `ZIP7_INC_MD5_H`，与 `C/Md5.h` 同名，两个头进同一个 TU 时
+  后一个会被整份跳过。另外 `CBlake2sp` 要求 64 字节对齐，`CSha3` 只靠内部 `_pad` 对齐到
+  自己的起始地址，所以两者的上下文都得放在 over-aligned 的分配里。
 - **`az_result` + `az_last_error_message()`。** 消息是线程本地的，在同线程下一次 `az_*`
   调用前有效。`AZ_OK` 且消息非空，表示"请求成功了，但某个设置被忽略了"——
   `az_writer_finish` 成功后要读这条消息并作为警告呈现。

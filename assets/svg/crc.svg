@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <title>校验和</title>
+  <path d="M10.5 5 H22 L30 13 V33.5 A2.5 2.5 0 0 1 27.5 36 H10.5 A2.5 2.5 0 0 1 8 33.5 V7.5 A2.5 2.5 0 0 1 10.5 5 Z" fill="#414B5A"/>
+  <path d="M22 5 L30 13 L22 13 Z" fill="#A7B1BF"/>
+  <rect x="12" y="17" width="13" height="2.4" fill="#FFFFFF"/>
+  <rect x="12" y="22" width="9" height="2.4" fill="#FFFFFF"/>
+  <rect x="12" y="27" width="15" height="2.4" fill="#FFFFFF"/>
+  <circle cx="33" cy="34" r="9.4" fill="#FFFFFF"/>
+  <circle cx="33" cy="34" r="7.5" fill="#414B5A"/>
+  <rect x="28.6" y="31.2" width="8.8" height="2.2" rx="1.1" fill="#FFFFFF"/>
+  <rect x="28.6" y="35" width="8.8" height="2.2" rx="1.1" fill="#FFFFFF"/>
+</svg>

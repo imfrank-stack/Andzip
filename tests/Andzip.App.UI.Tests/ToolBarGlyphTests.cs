@@ -32,7 +32,7 @@ public class ToolBarGlyphTests
     private static readonly string[] Names =
     [
         "open-archive", "extract", "new-archive", "add-file", "delete-file",
-        "test-archive", "scan-file", "view", "language",
+        "test-archive", "crc", "view", "language",
     ];
 
     /// <summary>原稿里那三个值 —— 每一个都必须有对应的主题令牌，见 <c>SvgGlyph.BrushFor</c>。</summary>
@@ -173,9 +173,14 @@ public class ToolBarGlyphTests
         foreach (var key in ToolBarKeys)
         {
             var label = lang.Label(key);
-            Assert.True(label.Length == 2,
-                $"「{key}」的标签是「{label}」（{label.Length} 个字）—— 这一排要的都是两个字，"
-                + "长短不齐，按钮就宽窄不齐");
+
+            // 「恰好两个字」挡的是"打开压缩包"那种把一颗撑宽的长标签。4.7.0 那颗 CRC 是
+            // 算法名，不翻译 —— 翻成「校验」就和菜单里那一行「CRC」对不上，而这一排点的
+            // 本来就是同一个子菜单（CrcItems）。所以这里放行不含汉字的短名，
+            // 真正"宽窄齐不齐"由下面量出来的宽度守着，不靠数字数。
+            Assert.True(label.Length == 2 || label.All(ch => ch < 0x2E80),
+                $"「{key}」的标签是「{label}」（{label.Length} 个字）—— 这一排要的都是两个字"
+                + "（或一个不翻译的算法名），长短不齐，按钮就宽窄不齐");
         }
 
         var widths = VisualQuery.Of<Button>(window)
@@ -236,7 +241,7 @@ public class ToolBarGlyphTests
     private static readonly string[] ToolBarKeys =
     [
         "TEXT_TOOLBAR_OPEN", "TEXT_TOOLBAR_EXTRACT", "TEXT_TOOLBAR_NEW", "TEXT_TOOLBAR_ADD",
-        "TEXT_TOOLBAR_DELETE", "TEXT_TOOLBAR_TEST", "TEXT_TOOLBAR_SCAN", "TEXT_TOOLBAR_VIEW",
+        "TEXT_TOOLBAR_DELETE", "TEXT_TOOLBAR_TEST", "TEXT_TOOLBAR_CRC", "TEXT_TOOLBAR_VIEW",
         "TEXT_TOOLBAR_LANGUAGE",
     ];
 

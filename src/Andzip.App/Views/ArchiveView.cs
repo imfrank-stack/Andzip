@@ -212,7 +212,6 @@ internal sealed class ArchiveView : IDisposable
         }
 
         _showPreview = visible;
-        ApplyLeftPane();
         UpdatePreview();
     }
 
@@ -240,7 +239,6 @@ internal sealed class ArchiveView : IDisposable
             ColumnDefinitions = new ColumnDefinitions($"{TreePaneWidth},{SeamColumnWidth},*"),
             Margin = new Thickness(0, Design.Space.X1, 0, 0),
         };
-        ApplyLeftPane();
 
         Grid.SetColumn(_treePane, 0);
         Grid.SetColumn(_splitter, 1);
@@ -257,24 +255,6 @@ internal sealed class ArchiveView : IDisposable
         panel.Children.Add(bar);
         panel.Children.Add(_body);
         return panel;
-    }
-
-    /// <summary>
-    /// 左栏那一列到底占不占位置：<strong>树或预览，只要有一个要显示就占</strong>。
-    /// <para>归零的是<strong>列宽</strong>，不只是 <c>IsVisible</c> —— 只藏控件的话 Grid 仍会给
-    /// 300px 与那一列留位置，结果是一条拖不动也点不到的空白（1.7.0 那条老教训）。</para>
-    /// <para>为什么预览要参与这个判断：「设置 → 查看」里把树关掉的人如果同时勾着图像预览，
-    /// 那一格不该跟着树一起消失 —— 否则「视图 → 图像预览」在他那里就成了一颗点了没反应的开关。
-    /// 树自己那一层的 <c>IsVisible</c> 仍然只跟着"要不要树"，所以这一列此时只有预览一块。</para>
-    /// </summary>
-    private void ApplyLeftPane()
-    {
-        var left = _view.ShowTree || _showPreview;
-        _body.ColumnDefinitions[0].Width = new GridLength(left ? TreePaneWidth : 0);
-        _body.ColumnDefinitions[1].Width = new GridLength(left ? SeamColumnWidth : 0);
-        _treePane.IsVisible = left;
-        _splitter.IsVisible = left;
-        _tree.IsVisible = _view.ShowTree;
     }
 
     /// <summary>

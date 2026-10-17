@@ -157,7 +157,6 @@ public static class SettingKeys
     public const string ViewPreview = "view_preview";
 
     public const string ViewShowStatusBar = "view_show_status_bar";
-    public const string ViewShowTree = "view_show_tree";
 
     /// <summary>打开压缩包时先用图标视图而不是详情列表。</summary>
     public const string ViewIconByDefault = "view_icon_by_default";

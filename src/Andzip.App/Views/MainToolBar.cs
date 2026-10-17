@@ -1,3 +1,4 @@
+using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Menu;
 using Andzip.Core.Settings;
@@ -27,7 +28,10 @@ namespace Andzip.App.Views;
 /// <para><strong>「添加」「删除」「扫描」4.2.0 起是真的了</strong>：它们与「编辑 → 添加文件」
 /// 「编辑 → 删除文件」「文件 → 扫描压缩包中的恶意软件」是<strong>同一条命令</strong>（同一个命令 id），
 /// 所以灰与亮由窗口那一趟按命令的置灰统一决定 —— 两处各亮各灰，比两处都灰更糟。
-/// 「查看」仍然没有命令：那是参考软件的预览面板，功能本身还没做。</para>
+/// 「查看」4.6.0 补上，是这一排最后一颗死占位。
+/// <strong>4.7.0 那颗「扫描」换成了「CRC」</strong>（用户要求）：它点开的下拉与
+/// 「文件 → CRC」是同一份名单（<see cref="CrcItems"/>），所以这一排里第一次有一颗
+/// 带的不是动作而是一份选择 —— 它有命令 id、没有 run，亮与灰仍然走同一趟。</para>
 /// <para><strong>2.6.0 起这九枚图标不再由代码画</strong>：几何来自 <c>assets/svg/*.svg</c>
 /// （用户给的设计稿），由 <see cref="SvgGlyph"/> 在运行时读那份原文件画出来 ——
 /// 抄进代码就等于造第二份真相。文字也跟着稿子改成长标签（「打开压缩包」而不是「打开」），
@@ -76,8 +80,11 @@ internal static class MainToolBar
             MainMenuModel.CommandDeleteEntries, actions.DeleteFiles));
         items.Children.Add(Cell(lang, "TEXT_TOOLBAR_TEST", "test-archive", compact,
             MainMenuModel.CommandTestArchive, actions.TestArchive));
-        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_SCAN", "scan-file", compact,
-            MainMenuModel.CommandScanArchive, actions.ScanArchive));
+        // 这颗点开的是与「文件 → CRC」同一份名单（CrcItems），挑一种就算一次校验和。
+        // 它带命令 id 但没有 run：亮与灰照样由按命令的那一趟管，点开的是下拉而不是一个动作。
+        items.Children.Add(Cell(lang, "TEXT_TOOLBAR_CRC", "crc", compact,
+            MainMenuModel.CommandCrc, run: null,
+            flyout: actions.PickChecksum is { } pick ? CrcFlyout(pick) : null));
         // 「查看」就是参考软件那个预览面板，也就是「视图 → 图像预览」那一条（4.6.0 接上）。
         // 与「添加」「删除」同一个做法：这里带的是<strong>同一个命令 id</strong>，
         // 所以首页上灰、开着包才亮这两件事由按命令的那一趟统一决定，两处不会各说一套。
@@ -111,7 +118,7 @@ internal static class MainToolBar
     /// （<c>AutomationProperties.Name</c>），否则小档对读屏用户是整排空按钮。</para>
     /// </summary>
     private static Control Cell(LangCatalog lang, string textKey, string glyph, bool compact,
-        string? commandId, Action? run)
+        string? commandId, Action? run, MenuFlyout? flyout = null)
     {
         var label = lang.Label(textKey);
         var icon = SvgGlyph.Load(glyph, compact ? Design.IconSize.ToolBarCompact : Design.IconSize.ToolBar);
@@ -148,8 +155,14 @@ internal static class MainToolBar
                 Design.Space.X3 + 2, compact ? Design.Space.X1 : Design.Space.X2),
             FontFamily = Design.Font,
             Tag = commandId,
-            IsEnabled = run is not null,
+            IsEnabled = run is not null || flyout is not null,
         };
+
+        // 带下拉的那一颗（CRC）：点一下给的是名单，不是一个动作，所以没有 run。
+        if (flyout is not null)
+        {
+            button.Flyout = flyout;
+        }
 
         if (compact)
         {
@@ -182,6 +195,22 @@ internal static class MainToolBar
     }
 
     /// <summary>
+    /// 工具栏那颗 CRC 点开的下拉。与菜单里那一层子菜单共用 <see cref="CrcItems"/> ——
+    /// 同一份算法名单、同一个回调，两处不会一处有 BLAKE2sp 一处没有。
+    /// </summary>
+    private static MenuFlyout CrcFlyout(Action<ChecksumAlgorithm> pick)
+    {
+        var flyout = new MenuFlyout();
+
+        foreach (var item in CrcItems.Build(pick))
+        {
+            flyout.Items.Add(item);
+        }
+
+        return flyout;
+    }
+
+    /// <summary>
     /// 按 <c>IsEnabled</c> 重画这一格。文字那一段只在<strong>大档</strong>存在，
     /// 所以这里按类型找而不是记着引用 —— 小档找不到文字块是设计，不是漏。
     /// </summary>
@@ -211,7 +240,7 @@ internal sealed record MainToolBarActions(
     Action? AddFiles = null,
     Action? DeleteFiles = null,
     Action? TestArchive = null,
-    Action? ScanArchive = null,
+    Action<ChecksumAlgorithm>? PickChecksum = null,
     Action? TogglePreview = null,
     Action? SwitchLanguage = null);
 

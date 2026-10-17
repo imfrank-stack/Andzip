@@ -1125,7 +1125,6 @@ public sealed class SettingsWindow : Window
     {
         private readonly string _settingsPath;
         private readonly SettingToggle _statusBar;
-        private readonly SettingToggle _tree;
         private readonly SettingToggle _iconDefault;
         private readonly SettingToggle _autoExpand;
         private readonly ComboBox _theme;
@@ -1145,7 +1144,6 @@ public sealed class SettingsWindow : Window
             // （大 / 小 / 隐藏），键也归那个菜单管。一个键两个主人是 1.6.0 立规矩时
             // 专门要防的那种形状 —— 两边都会把对方的改动盖掉。
             _statusBar = Check(lang.Label("TEXT_SETTINGS_VIEW_STATUS"), UpdateApplyState);
-            _tree = Check(lang.Label("TEXT_SETTINGS_VIEW_TREE"), UpdateApplyState);
             _iconDefault = Check(lang.Label("TEXT_SETTINGS_VIEW_ICON_DEFAULT"), UpdateApplyState);
             _autoExpand = Check(lang.Label("TEXT_SETTINGS_VIEW_AUTO_EXPAND"), UpdateApplyState);
 
@@ -1176,7 +1174,6 @@ public sealed class SettingsWindow : Window
             var panel = new StackPanel();
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_VIEW_TITLE")));
             panel.Children.Add(_statusBar);
-            panel.Children.Add(_tree);
             panel.Children.Add(_iconDefault);
             panel.Children.Add(_autoExpand);
             panel.Children.Add(SettingRow.Labeled(lang.Label("TEXT_SETTINGS_VIEW_THEME"), _theme,
@@ -1216,7 +1213,6 @@ public sealed class SettingsWindow : Window
         {
             _live = ViewDefaults.Load(AppSettings.Load(_settingsPath));
             _statusBar.IsChecked = _live.ShowStatusBar;
-            _tree.IsChecked = _live.ShowTree;
             _iconDefault.IsChecked = _live.IconViewByDefault;
             _autoExpand.IsChecked = _live.AutoExpandTree;
             _theme.SelectedIndex = (int)_live.Theme;
@@ -1240,7 +1236,6 @@ public sealed class SettingsWindow : Window
 
         private ViewDefaults Selection() => new(
             _statusBar.IsChecked == true,
-            _tree.IsChecked == true,
             _iconDefault.IsChecked == true,
             _autoExpand.IsChecked == true,
             // 下拉的顺序就是 ThemeMode 的声明顺序（System / Light / Dark），

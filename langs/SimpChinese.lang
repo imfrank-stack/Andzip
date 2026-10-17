@@ -18,7 +18,7 @@ TEXT_TOOLBAR_NEW                        = 新建
 TEXT_TOOLBAR_ADD                        = 添加
 TEXT_TOOLBAR_DELETE                     = 删除
 TEXT_TOOLBAR_TEST                       = 测试
-TEXT_TOOLBAR_SCAN                       = 扫描
+TEXT_TOOLBAR_CRC                        = CRC
 TEXT_TOOLBAR_VIEW                       = 查看
 TEXT_TOOLBAR_LANGUAGE                   = 切换
 
@@ -159,22 +159,10 @@ TEXT_REPAIR_RECHECK_PASSED               = 复查：整包读了一遍，${total
 TEXT_REPAIR_RECHECK_BROKEN               = 复查：仍有 ${bad} / ${total} 个成员校验不过，别把这份当成完好的包用。
 TEXT_REPAIR_RECHECK_SKIPPED              = 没有复查：
 
-; ---- 扫描压缩包中的恶意软件（Ctrl+I）：只问本机引擎，一个字节都不上传 ----
-TEXT_STATUS_SCANNING                    = 正在扫描...
-TEXT_TITLE_SCAN                         = 扫描压缩包中的恶意软件
-TEXT_SCAN_CLEAN                         = 本机的反恶意软件引擎看过这个文件，没有报告问题。
-TEXT_SCAN_NOTE                          = 它看的是这一个包文件本身；会不会拆开容器逐个成员看，由引擎自己决定，Andzip 不替它打包票。Andzip 自己没有病毒库，也不会把这个文件上传给任何服务。
-TEXT_SCAN_DETECTED                      = 本机的反恶意软件引擎把这个文件判为恶意，并且已经拦下。
-TEXT_SCAN_HANDLING                      = 怎么处置（隔离、删除、还原）请到引擎的防护历史里看 —— Andzip 不动你的文件。
-TEXT_SCAN_NO_ENGINE                     = 这台机器上没有可用的反恶意软件引擎，所以这个问题没人能答。
-TEXT_SCAN_NO_ENGINE_HOW                 = Andzip 自己没有病毒库，也不会把文件上传给任何在线扫描服务。打开「Windows 安全中心 → 病毒与威胁防护」，或装上任意一家注册了系统扫描接口（AMSI）的引擎，这一条就能用。
-TEXT_SCAN_ENGINE_CHECK                  = 我查了三处：AMSI 初始化返回 ${code}；Windows 登记的扫描提供程序 ${providers} 个；系统自带引擎的扫描组件${oav}。
-TEXT_SCAN_OAV_PRESENT                   = 在这台机器上
-TEXT_SCAN_OAV_ABSENT                    = 不在这台机器上
-TEXT_SCAN_NO_ENGINE_WAY_REMOVED          = 这台机器上系统自带引擎的那一层已经被移除，去「Windows 安全中心」也没有可以打开的东西。要这一项能用，需要装一家会向 Windows 注册系统扫描接口（AMSI）的引擎（把 Defender 装回来也算），装好重启后再点一次。Andzip 自己没有病毒库，也不会把文件上传给任何在线扫描服务。
-TEXT_SCAN_TOO_BIG                       = 这个文件超过 ${limit} MB —— 一次交给引擎的上限就是这个数，所以没有扫。
-TEXT_SCAN_TOO_BIG_NOTE                  = Andzip 不截断着扫：只喂前半截再报"干净"是假成绩单。要扫它，请在引擎里手动扫这一个文件。
-TEXT_SCAN_FAILED                        = 引擎没有给出判断（${code}）。这既不是"干净"也不是"有问题"，就是没问出来。
+; ---- 文件 → CRC：算校验和。算法名不进语言包（CRC-32 在哪种语言里都是这几个字母）----
+TEXT_STATUS_CHECKSUM                    = 正在计算校验和...
+TEXT_TITLE_CHECKSUM                     = 校验和信息
+TEXT_CHECKSUM_PART_FAILED               = ${done} / ${total} 项算出来了；其余的没读出来，对应那一行写的是为什么。
 
 ; ---- 新建程序窗口（Ctrl+Shift+N / Ctrl+Alt+N）----
 TEXT_TITLE_NEW_WINDOW                   = 新建程序窗口
@@ -375,7 +363,6 @@ TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = 只作用于主窗口的「解压文�
 ; ---- 设置：查看页 / 语言页 ----
 TEXT_SETTINGS_VIEW_TITLE                = 查看设置
 TEXT_SETTINGS_VIEW_STATUS               = 显示状态栏（底部那行汇总）
-TEXT_SETTINGS_VIEW_TREE                 = 显示树形目录
 TEXT_SETTINGS_VIEW_ICON_DEFAULT         = 打开压缩包时默认用图标视图
 TEXT_SETTINGS_VIEW_AUTO_EXPAND          = 自动展开树里的文件夹
 TEXT_SETTINGS_VIEW_THEME                = 界面主题
@@ -517,7 +504,7 @@ MENUSTR_DELETE_ARCHIVE                  = 删除压缩文件
 MENUSTR_PERM_DELETE_ARCHIVE             = 永久删除压缩文件
 MENUSTR_OPEN_ARCHIVE_FOLDER             = 打开压缩文件位置
 MENUSTR_TEST_ARCHIVE                    = 测试压缩文件(&T)
-MENUSTR_SCAN_ARCHIVE                    = 扫描压缩包中的恶意软件
+MENUSTR_CRC                             = CRC
 MENUSTR_EXTRACT_FILE                    = 解压文件(&E)
 MENUSTR_NEW_WINDOW                      = 新建程序窗口
 MENUSTR_NEW_WINDOW_ADMIN                = 新建程序窗口 (管理员权限)
@@ -535,14 +522,11 @@ MENUSTR_FIND_ITEM                       = 文件查找(&I)
 
 MENUSTR_SETTING_SUB                     = 设置(&S)
 
-MENUSTR_VIEW_TREECONTROL                = 树形目录
-MENUSTR_VIEW_COMMENT                    = 压缩文件注释
 MENUSTR_VIEW_PREVIEW                    = 图像预览
 MENUSTR_TOOLBAR_LARGE                    = 大
 MENUSTR_TOOLBAR_SMALL                     = 小
 MENUSTR_TOOLBAR_HIDDEN                    = 隐藏
 MENUSTR_VIEW_TOOLBAR                    = 工具栏
-MENUSTR_VIEW_LISTVIEW                   = 视图样式
 MENUSTR_VIEW_COLUMN                     = 列设置
 MENUSTR_VIEW_ALWAYS_ON_TOP              = 置顶
 MENUSTR_VIEW_THEME                      = 深色模式

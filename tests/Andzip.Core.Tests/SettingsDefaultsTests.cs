@@ -193,7 +193,6 @@ public class SettingsDefaultsTests
 
         Assert.Equal(ViewDefaults.Fallback, loaded);
         Assert.True(loaded.ShowStatusBar);
-        Assert.True(loaded.ShowTree);
         Assert.False(loaded.IconViewByDefault);
 
         // 唯一故意偏离"引入这一页之前的界面"的一项：树默认**不**摊开（2026-10-13 改的）。
@@ -205,7 +204,7 @@ public class SettingsDefaultsTests
     public void ViewDefaults_RoundTripsIncludingTheOffCases()
     {
         var wanted = new ViewDefaults(
-            ShowStatusBar: false, ShowTree: false,
+            ShowStatusBar: false,
             IconViewByDefault: true, AutoExpandTree: false);
 
         var settings = new AppSettings();

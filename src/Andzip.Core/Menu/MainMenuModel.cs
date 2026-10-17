@@ -20,7 +20,8 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 /// <summary>
 /// 主菜单结构（对应需求文档附录 A，7 个顶级菜单）。
 /// <para>已接入的命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
-/// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、文件查找（Ctrl+F）、设置（F5）、
+/// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、<strong>文件 → CRC</strong>（十一种算法，4.7.0）、
+/// 文件查找（Ctrl+F）、设置（F5）、
 /// 关于（F1）、打开 Andzip 安装目录、转到官网，
 /// 以及「编辑」整排七项（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径，3.4.0）、
 /// 「视图 → 列设置」（4.1.0，勾一列当场少一列，选择记进 <c>hidden_columns</c>）。</para>
@@ -49,11 +50,14 @@ public static class MainMenuModel
     public const string CommandTestArchive = "file.test";
 
     /// <summary>
-    /// 扫描压缩包里的恶意软件（Ctrl+I）。<strong>Andzip 自己没有病毒库，也不上传任何文件</strong>：
-    /// 这一条做的只是"把这个文件交给这台机器上已经注册的反恶意软件引擎（AMSI）判断一次"。
-    /// 引擎不在、或它管不了这类内容，界面上就照实说。
+    /// 「文件 → CRC」。<strong>与「列设置」「工具栏」同一种形状：不是一条命令，
+    /// 而是一个子菜单的挂载点</strong> —— 点它没有动作，展开的是那十一种算法
+    /// （名单与顺序照 7-Zip 文件管理器的 CRC 子菜单，见 <c>ChecksumAlgorithm.Menu</c>）。
+    /// <para>它替掉的是 4.0.0 挂上来的「扫描压缩包中的恶意软件」：那一条问的是本机
+    /// AMSI 引擎，而这台机器上根本没有引擎可问（4.6.1 查清的那件事），于是一颗永远只能
+    /// 回答"没人能答"的按钮留在菜单上。CRC 这一排不需要问任何人。</para>
     /// </summary>
-    public const string CommandScanArchive = "file.scan";
+    public const string CommandCrc = "file.crc";
 
     /// <summary>另起一个 Andzip 进程，开一扇新窗口（Ctrl+Shift+N）。当前开着包就一起带过去。</summary>
     public const string CommandNewWindow = "file.newwindow";
@@ -217,7 +221,7 @@ public static class MainMenuModel
             new("file.openfolder", "MENUSTR_OPEN_ARCHIVE_FOLDER", Enabled: true, CommandId: CommandOpenArchiveFolder),
             MenuItemModel.Separator(),
             new("file.test", "MENUSTR_TEST_ARCHIVE", "Ctrl+T", Enabled: true, CommandId: CommandTestArchive),
-            new("file.scan", "MENUSTR_SCAN_ARCHIVE", "Ctrl+I", Enabled: true, CommandId: CommandScanArchive),
+            new("file.crc", "MENUSTR_CRC", Enabled: true, CommandId: CommandCrc),
             new("file.extract", "MENUSTR_EXTRACT_FILE", "Ctrl+E", Enabled: true, CommandId: CommandExtractArchive),
             MenuItemModel.Separator(),
             new("file.newwindow", "MENUSTR_NEW_WINDOW", "Ctrl+Shift+N", Enabled: true, CommandId: CommandNewWindow),
@@ -262,12 +266,16 @@ public static class MainMenuModel
             // 「状态栏」「颜色设置」也一并删：前一条与「设置 → 查看」里那个真正的开关
             // 重复（而且这一条还是灰的），后一条对应的功能压根不存在。
             // 「置顶」4.3.0 删的是那条<strong>灰占位</strong>，4.5.0 把它作为真功能放回来了。
-            new("view.tree", "MENUSTR_VIEW_TREECONTROL", "F7"),
-            new("view.comment", "MENUSTR_VIEW_COMMENT", "F8"),
+            //
+            // 4.7.0 又删三行，同一把尺子：「树形目录」（F7）、「压缩文件注释」（F8）、
+            // 「视图样式」。三行从挂上来那天就没有命令、没有状态、没有渲染处，点了什么也不会发生 ——
+            // 而它们各自要管的那件事<strong>早就有真的地方</strong>：树的显示与折叠在
+            // 「设置 → 查看」与那条可拖的接缝上，包注释的读与写在「编辑 → 注释」里
+            // （只有 ZIP 有那一格），列表与图标两档在视图右下角那一排按钮上。
+            // 留着只是让同一件事在屏幕上出现两个名字，其中一个还是死的。
             MenuItemModel.Separator(),
             new("view.preview", "MENUSTR_VIEW_PREVIEW", Enabled: true, CommandId: CommandPreview),
             new("view.toolbar", "MENUSTR_VIEW_TOOLBAR", Enabled: true, CommandId: CommandToolBar),
-            new("view.style", "MENUSTR_VIEW_LISTVIEW"),
             new("view.columns", "MENUSTR_VIEW_COLUMN", Enabled: true, CommandId: CommandColumns),
             MenuItemModel.Separator(),
             new("view.ontop", "MENUSTR_VIEW_ALWAYS_ON_TOP", Enabled: true, CommandId: CommandToggleOnTop),

@@ -69,6 +69,22 @@ public sealed class ArchiveContentSession : IDisposable
         }
     }
 
+    /// <summary>把一个成员解出来写进 <paramref name="destination"/>。
+    /// <para>CRC 用这一条：算摘要只要过一遍字节，不该让一张 4 GB 的图先进一次内存。
+    /// 与上面那个重载共用同一把锁 —— 一个句柄同一时刻只能被一个线程碰。</para></summary>
+    public void ReadEntry(int index, Stream destination)
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(ArchiveContentSession));
+            }
+
+            _reader.ReadEntry((ulong)index, destination);
+        }
+    }
+
     public void Dispose()
     {
         // 释放也在锁里做，而不是只立起 _disposed：已经开始的那一次读取没法取消

@@ -69,6 +69,27 @@ public sealed class Hasher : IDisposable
     public string FinishHex()
         => Convert.ToHexString(Finish()).ToLowerInvariant();
 
+    /// <summary>
+    /// Renders a finished digest the way 7-Zip's own checksum dialog does, so a
+    /// value shown by Andzip can be compared with one shown by 7-Zip.
+    /// The rule is stated at the top of CPP/7zip/UI/Common/HashCalc.h: a digest
+    /// of 8 bytes or fewer is a little-endian number, so it is printed upper
+    /// case with the bytes reversed (CRC32, CRC64, XXH64); anything longer is a
+    /// byte string, so lower case in storage order (MD5, the SHA families,
+    /// BLAKE2sp).
+    /// </summary>
+    public static string FormatDigest(byte[] digest)
+    {
+        ArgumentNullException.ThrowIfNull(digest);
+        if (digest.Length > 8)
+            return Convert.ToHexString(digest).ToLowerInvariant();
+
+        var bigEndian = new byte[digest.Length];
+        for (var i = 0; i < digest.Length; i++)
+            bigEndian[i] = digest[digest.Length - 1 - i];
+        return Convert.ToHexString(bigEndian);
+    }
+
     private void ThrowIfUnavailable()
     {
         if (_disposed)

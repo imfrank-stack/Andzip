@@ -1,3 +1,4 @@
+using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Andzip.Core.Menu;
 using Avalonia.Controls;
@@ -33,11 +34,35 @@ internal sealed record ToolBarMenu(
     Func<Andzip.Core.Settings.ToolBarMode> Current,
     Action<Andzip.Core.Settings.ToolBarMode> SetMode);
 
+/// <summary>「文件 → CRC」那一排要的那一件事：挑中一种算法去算。</summary>
+internal sealed record CrcMenu(Action<ChecksumAlgorithm> Pick);
+
+/// <summary>
+/// CRC 那一排十一行的<strong>唯一一处构造点</strong>：菜单里那一层子菜单与工具栏那颗 CRC
+/// 点开的下拉，都从这里拿 —— 两处各写一遍的话，改日就是一处有 BLAKE2sp、另一处没有。
+/// <para><strong>算法名不进语言包</strong>：CRC-32、SHA-256 在哪种语言里都是这几个字母，
+/// 翻一遍只会造出第二份名字（7-Zip 在 <c>FileManager/MyLoadMenu.cpp:219</c> 为同一件事
+/// 留了一句话："we don't need lang change for CRC items"）。</para>
+/// </summary>
+internal static class CrcItems
+{
+    public static IEnumerable<MenuItem> Build(Action<ChecksumAlgorithm> pick)
+    {
+        foreach (var algorithm in ChecksumAlgorithm.Menu)
+        {
+            var item = new MenuItem { Header = algorithm.Label }.MenuGrayHover();
+            item.Click += (_, _) => pick(algorithm);
+            yield return item;
+        }
+    }
+}
+
 /// <summary>主菜单栏：由 <see cref="MainMenuModel"/>（需求文档附录 A 结构）渲染。</summary>
 internal static class MainMenuBar
 {
     public static Menu Create(LangCatalog lang, IReadOnlyDictionary<string, Action> commands,
-        RecentFilesMenu? recent = null, ColumnMenu? columns = null, ToolBarMenu? toolBar = null)
+        RecentFilesMenu? recent = null, ColumnMenu? columns = null, ToolBarMenu? toolBar = null,
+        CrcMenu? crc = null)
     {
         var menu = new Menu
         {
@@ -89,6 +114,11 @@ internal static class MainMenuBar
                 if (item.CommandId == MainMenuModel.CommandToolBar && toolBar is not null)
                 {
                     AttachToolBar(menuItem, lang, toolBar);
+                }
+
+                if (item.CommandId == MainMenuModel.CommandCrc && crc is not null)
+                {
+                    AttachCrc(menuItem, crc);
                 }
 
                 topItem.Items.Add(menuItem);
@@ -173,6 +203,21 @@ internal static class MainMenuBar
                 item.Click += (_, _) => columns.SetVisible(key, !visible);
                 host.Items.Add(item);
             }
+        }
+    }
+
+    /// <summary>
+    /// 「文件 → CRC」那一行展开成的十一行。名单与工具栏那颗下拉同一处构造（<see cref="CrcItems"/>）。
+    /// <para>这一排<strong>不照「工具栏」那样每次展开重建</strong>：那三行要跟着当前档位挪那枚勾，
+    /// 而 CRC 是一次性的动作 —— 没有"现在是哪一种"这回事，算完就完了，名单也不会自己变。</para>
+    /// </summary>
+    private static void AttachCrc(MenuItem host, CrcMenu crc)
+    {
+        host.RoundOnOpen();
+
+        foreach (var item in CrcItems.Build(crc.Pick))
+        {
+            host.Items.Add(item);
         }
     }
 

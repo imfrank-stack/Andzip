@@ -13,10 +13,15 @@ namespace Andzip.Core.Settings;
 /// 一个键只归一处管，两边都能改的话两边就都会把对方的改动盖掉。
 /// 这一页原来那个「显示工具栏」开关因此整行删掉了。
 /// </para>
+/// <para>
+/// <strong>4.7.0 起也没有"要不要那棵树"</strong>：左栏那一块是目录导航，也是选中与
+/// 图像预览住的地方，藏掉它没有第二种用法 —— 原来那一档（<c>view_show_tree</c>）与
+/// 「视图 → 树形目录」那行灰占位一起删了。树本身还在，<see cref="AutoExpandTree"/>
+/// 管的还是它打开时摊不摊平。
+/// </para>
 /// </summary>
 public sealed record ViewDefaults(
     bool ShowStatusBar,
-    bool ShowTree,
     bool IconViewByDefault,
     bool AutoExpandTree,
 
@@ -33,7 +38,6 @@ public sealed record ViewDefaults(
     /// </summary>
     public static ViewDefaults Fallback { get; } = new(
         ShowStatusBar: true,
-        ShowTree: true,
         IconViewByDefault: false,
         AutoExpandTree: false,
         Theme: ThemeMode.System);
@@ -44,7 +48,6 @@ public sealed record ViewDefaults(
 
         return new ViewDefaults(
             settings.GetBool(SettingKeys.ViewShowStatusBar, fallback: true),
-            settings.GetBool(SettingKeys.ViewShowTree, fallback: true),
             settings.GetBool(SettingKeys.ViewIconByDefault, fallback: false),
             settings.GetBool(SettingKeys.ViewAutoExpandTree, fallback: false),
             SettingKeys.ParseThemeMode(settings.GetString(SettingKeys.ViewTheme)));
@@ -55,7 +58,6 @@ public sealed record ViewDefaults(
         ArgumentNullException.ThrowIfNull(settings);
 
         settings.SetBool(SettingKeys.ViewShowStatusBar, ShowStatusBar);
-        settings.SetBool(SettingKeys.ViewShowTree, ShowTree);
         settings.SetBool(SettingKeys.ViewIconByDefault, IconViewByDefault);
         settings.SetBool(SettingKeys.ViewAutoExpandTree, AutoExpandTree);
         settings.SetString(SettingKeys.ViewTheme, Theme.ToStorage());

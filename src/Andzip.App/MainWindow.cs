@@ -91,10 +91,12 @@ public sealed class MainWindow : Window
     internal ArchiveView? Browser => _browser;
     /// <summary>
     /// 已启用、但<strong>不归主窗口命令表管</strong>的那几条。「最近的文件」的条目是展开时现生成的
-    /// （见 <c>MainMenuBar</c>），它没有"点一下这条菜单"这个动作。
+    /// （见 <c>MainMenuBar</c>），它没有"点一下这条菜单"这个动作；「列设置」「工具栏」「CRC」
+    /// 同理 —— 点它们不是执行一件事，是展开一层子菜单。
     /// </summary>
     private static readonly IReadOnlyList<string> HandledElsewhere =
-        [MainMenuModel.CommandRecentFiles, MainMenuModel.CommandColumns, MainMenuModel.CommandToolBar];
+        [MainMenuModel.CommandRecentFiles, MainMenuModel.CommandColumns, MainMenuModel.CommandToolBar,
+            MainMenuModel.CommandCrc];
 
     private FindWindow? _find;
     private AboutWindow? _about;
@@ -176,7 +178,6 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandCloseArchive] = CloseArchive,
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
             [MainMenuModel.CommandTestArchive] = TestArchiveAsync,
-            [MainMenuModel.CommandScanArchive] = ScanForMalwareAsync,
             [MainMenuModel.CommandNewWindow] = () => NewWindow(elevated: false),
             [MainMenuModel.CommandNewWindowAdmin] = () => NewWindow(elevated: true),
             [MainMenuModel.CommandRepairArchive] = () => RepairArchiveAsync(),
@@ -207,7 +208,8 @@ public sealed class MainWindow : Window
         _menuBar = MainMenuBar.Create(_lang, _commands, new RecentFilesMenu(
             LoadRecentFiles, OpenRecentFile, ClearRecentFiles),
             new ColumnMenu(() => _hiddenColumns, SetColumnVisible),
-            new ToolBarMenu(() => _toolBarMode, SetToolBarMode));
+            new ToolBarMenu(() => _toolBarMode, SetToolBarMode),
+            new CrcMenu(algorithm => ChecksumAsync(algorithm)));
 
         // 模型里 Enabled: true 的语义是"这条实装过了"。自称实装了却没接到命令，界面上就是
         // 一条黑字、能点、点下去什么都不发生 —— 那比灰着危险得多（文件菜单那四条置灰的同一条判断）。
@@ -352,7 +354,7 @@ public sealed class MainWindow : Window
             AddFiles: _commands[MainMenuModel.CommandAddEntries],
             DeleteFiles: _commands[MainMenuModel.CommandDeleteEntries],
             TestArchive: _commands[MainMenuModel.CommandTestArchive],
-            ScanArchive: _commands[MainMenuModel.CommandScanArchive],
+            PickChecksum: algorithm => ChecksumAsync(algorithm),
             TogglePreview: _commands[MainMenuModel.CommandPreview],
             SwitchLanguage: () => OpenSettingsDialogOn("TEXT_SETTINGS_LANGUAGE")),
             _toolBarMode);
@@ -602,37 +604,56 @@ public sealed class MainWindow : Window
     /// <summary>「帮助 → 转到官网」：交给系统默认浏览器。地址只有一个来源，见 <c>AndzipLinks</c>。</summary>
     private void OpenHomepage() => AboutWindow.OpenUrl(AndzipLinks.Homepage);
 
-    // ---------- 文件 → 扫描恶意软件 / 新建程序窗口（普通与管理员） ----------
+    // ---------- 文件 → CRC（算校验和）/ 新建程序窗口（普通与管理员） ----------
 
     /// <summary>
-    /// 「扫描压缩包中的恶意软件」（Ctrl+I）：把这<strong>一个包文件</strong>交给本机已注册的反恶意软件
-    /// 引擎（AMSI）问一次。没有包开着就先让人挑一个，与「测试压缩包」同一套路。
-    /// <para><strong>Andzip 不带病毒库，也不上传任何文件</strong> —— 这一条只是"问"，
-    /// 问不到（这台机器上没有引擎、引擎报错、文件太大）就照实说问不到，不猜"干净"。
-    /// 详见 <see cref="AntimalwareScanner"/>。</para>
-    /// <para>进度条是不确定态：引擎不给百分比，编一根假走的条比没有条更糟。</para>
-    /// <para>AMSI 没有可中断的点，所以这里的"取消"只能是<strong>不再等它</strong>：结果回来时
-    /// 用户已经取消，就一个字都不说 —— 那时候把回来的那句"没发现"摆到屏幕上，是替引擎撒谎。</para>
+    /// 「文件 → CRC」那一排与工具栏那颗 CRC：给屏幕上正看着的那几样算一次摘要。三种情况，
+    /// 与用户此刻指着的东西对齐：
+    /// ① 开着包且有选中 → 算<strong>那些成员解压出来的字节</strong>；
+    /// ② 开着包但没选中（或只点了文件夹）→ 算<strong>这个包文件本身</strong> ——
+    ///   "我下的这个包对不对"是这个问题最常见的样子；
+    /// ③ 首页 → 先挑文件（可多选），算磁盘上的字节。
+    /// <para>①算的是解压之后的数据，所以它与详情栏那一列 CRC 不是一回事：那一列抄的是包里
+    /// 记着的数，这一排是我们自己算一遍。两个数不一样就说明记录与数据不符 —— 那是
+    /// 「测试压缩包」要回答的问题，这里只报数字，不替用户当裁判。</para>
+    /// <para>进度条走真字节数（成员大小清单里就有）。取消落在<strong>项与项之间</strong>：
+    /// 内核的解压没有可中断的点，正在解的那一格会算完再停，与 <c>ArchiveTester</c> 同一句实话。</para>
     /// </summary>
-    private async void ScanForMalwareAsync()
+    private async void ChecksumAsync(ChecksumAlgorithm algorithm)
     {
-        var path = _listing?.ArchivePath ?? await PickArchiveAsync();
-        if (path is null)
+        var archivePath = _listing?.ArchivePath;
+        var entries = archivePath is null
+            ? []
+            : SelectedEntries().Where(entry => !entry.IsDirectory).ToList();
+        IReadOnlyList<string> files = [];
+
+        if (archivePath is null)
         {
-            return;
+            files = await PickFilesForChecksumAsync();
+            if (files.Count == 0)
+            {
+                return;   // 挑选框里按了取消：那不是失败，别说话
+            }
+        }
+        else if (entries.Count == 0)
+        {
+            files = [archivePath];
         }
 
         var cts = new CancellationTokenSource();
         var progress = new ProgressWindow(
-            _lang, cts, "TEXT_STATUS_SCANNING",
+            _lang, cts, "TEXT_STATUS_CHECKSUM",
             cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
 
         _ = progress.ShowDialog(this);
 
-        AntimalwareScanner.Report report;
+        IReadOnlyList<HashRow> rows;
         try
         {
-            report = await Task.Run(() => AntimalwareScanner.Scan(path), cts.Token);
+            var sink = progress.CreateSink();
+            rows = await Task.Run(
+                () => ComputeChecksum(archivePath, entries, files, algorithm, sink, cts.Token),
+                cts.Token);
         }
         catch (Exception ex)
         {
@@ -653,57 +674,109 @@ public sealed class MainWindow : Window
             return;
         }
 
-        await ShowMessageAsync("TEXT_TITLE_SCAN", ScanVerdictText(report));
-    }
-
-    private string ScanVerdictText(AntimalwareScanner.Report report)
-    {
-        // 每一句都是两段：第一段答"结果是什么"，第二段说"这话的边界在哪"。
-        // 语言包一行一条，段落由这里拼 —— 换行不是文案的事，是显示的事。
-        string Two(string first, string second) => string.Join(Environment.NewLine, first, _lang.Get(second));
-
-        return report.Verdict switch
-        {
-            AntimalwareScanner.Verdict.Clean => Two(_lang.Get("TEXT_SCAN_CLEAN"), "TEXT_SCAN_NOTE"),
-            AntimalwareScanner.Verdict.Detected => Two(_lang.Get("TEXT_SCAN_DETECTED"), "TEXT_SCAN_HANDLING"),
-            AntimalwareScanner.Verdict.NoEngine => NoEngineText(report.Engine),
-            AntimalwareScanner.Verdict.TooBig => Two(
-                _lang.Format("TEXT_SCAN_TOO_BIG", ("limit", (AntimalwareScanner.LimitBytes / 1024 / 1024).ToString())),
-                "TEXT_SCAN_TOO_BIG_NOTE"),
-            _ => _lang.Format("TEXT_SCAN_FAILED", ("code", report.Code ?? "?")),
-        };
+        await ShowMessageAsync("TEXT_TITLE_CHECKSUM", ChecksumText(algorithm, rows));
     }
 
     /// <summary>
-    /// 「没人能答」那一屏：断言 + <strong>凭什么</strong> + 下一步。
-    /// <para>三段各挡一种错法。只给第一段，用户看着自己绿色的防护图标只能回一句"为什么说没开"；
-    /// 加上第二段（AMSI 返回码、登记的提供程序数、自带组件在不在盘上），这一屏就从
-    /// "软件这么说"变成"这三处你自己也能查"。第三段按查到的结果分岔 ——
-    /// 自带引擎被整个移除过的机器上，"去 Windows 安全中心打开实时防护"是一句照着模板念的假话，
-    /// 那里没有可以打开的东西。</para>
+    /// 后台那一半。成员要现开一个读取会话：它的寿命得罩住整次计算，所以不能借视图里那一个
+    /// （视图可能中途被换掉，而会话释放时正有一次读在跑 —— 4.6.3 刚为这件事补过一刀）。
     /// </summary>
-    private string NoEngineText(AntimalwareScanner.EngineState? engine)
+    private static IReadOnlyList<HashRow> ComputeChecksum(
+        string? archivePath,
+        IReadOnlyList<ArchiveEntryInfo> entries,
+        IReadOnlyList<string> files,
+        ChecksumAlgorithm algorithm,
+        IProgress<ArchiveProgress> report,
+        CancellationToken cancel)
     {
-        // `T?`（值类型的可空）不会自动把成员访问抬到里面那一层，所以这里用模式取出实值，
-        // 而不是写完 null 判断后直接 engine.InitializeCode —— 那样编译不过，
-        // 而"看起来已经判过空了"正是这类写法最容易误以为没问题的地方。
-        if (engine is not { } state)
+        void Emit(HashProgress progress) => report.Report(new ArchiveProgress(
+            ArchiveOperation.Hash, progress.DoneBytes, progress.TotalBytes, progress.Current,
+            progress.ItemsDone, progress.ItemCount));
+
+        if (entries.Count > 0 && archivePath is not null)
         {
-            return string.Join(Environment.NewLine,
-                _lang.Get("TEXT_SCAN_NO_ENGINE"), _lang.Get("TEXT_SCAN_NO_ENGINE_HOW"));
+            using var session = ArchiveContentSession.Open(archivePath);
+            return ChecksumCalculator.Compute(
+                [algorithm],
+                [.. entries.Select(entry => new HashItem(
+                    entry.Path,
+                    entry.Size,
+                    stream => session.ReadEntry(entry.Index, stream)))],
+                Emit,
+                cancel);
         }
 
-        var check = _lang.Format("TEXT_SCAN_ENGINE_CHECK",
-            ("code", $"0x{state.InitializeCode:X8}"),
-            ("providers", state.ProviderCount < 0 ? "?" : state.ProviderCount.ToString()),
-            ("oav", _lang.Get(state.DefenderProviderOnDisk ? "TEXT_SCAN_OAV_PRESENT" : "TEXT_SCAN_OAV_ABSENT")));
+        return ChecksumCalculator.Compute(
+            [algorithm],
+            [.. files.Select(path => new HashItem(
+                Path.GetFileName(path),
+                File.Exists(path) ? new FileInfo(path).Length : 0L,
+                stream =>
+                {
+                    using var source = File.OpenRead(path);
+                    source.CopyTo(stream, 64 * 1024);
+                }))],
+            Emit,
+            cancel);
+    }
 
-        // 提供程序一个都没有、自带那个组件又不在盘上 —— 这台机器缺的不是"开关没打开"，是那一层本身。
-        var next = state.ProviderCount <= 0 && !state.DefenderProviderOnDisk
-            ? _lang.Get("TEXT_SCAN_NO_ENGINE_WAY_REMOVED")
-            : _lang.Get("TEXT_SCAN_NO_ENGINE_HOW");
+    /// <summary>
+    /// 结果那一屏的正文：每一项一段，名字一行、下面每种算法一行。
+    /// <para>读不到的一项照样列出来并写明为什么 —— 只报成功的那几项，等于把"有两项没算"
+    /// 这件事藏起来（与「测试压缩包」报全部坏成员同一条判断）。</para>
+    /// </summary>
+    private string ChecksumText(ChecksumAlgorithm chosen, IReadOnlyList<HashRow> rows)
+    {
+        var names = chosen.IsAll
+            ? string.Join(" / ", ChecksumAlgorithm.Ten.Select(algorithm => algorithm.Label))
+            : chosen.Label;
 
-        return string.Join(Environment.NewLine, _lang.Get("TEXT_SCAN_NO_ENGINE"), check, next);
+        var lines = new List<string> { names };
+
+        foreach (var row in rows)
+        {
+            lines.Add(row.Name);
+
+            if (row.Failed)
+            {
+                lines.Add($"    {row.Error}");
+                continue;
+            }
+
+            var digests = row.Digests;
+            for (var i = 0; i < digests.Count; i++)
+            {
+                lines.Add($"    {LabelOf(chosen, i)}    {digests[i]}");
+            }
+        }
+
+        var failed = rows.Count(row => row.Failed);
+        if (failed > 0)
+        {
+            lines.Add(_lang.Format("TEXT_CHECKSUM_PART_FAILED",
+                ("done", (rows.Count - failed).ToString()), ("total", rows.Count.ToString())));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+
+        static string LabelOf(ChecksumAlgorithm chosen, int index) => chosen.IsAll
+            ? ChecksumAlgorithm.Ten[index].Label
+            : chosen.Label;
+    }
+
+    /// <summary>首页那一档的挑选框：任意文件、可多选。与「打开压缩包」不同，这里不该按
+    /// 压缩包过滤 —— 校验和最常见的对象就是手上一个不相干的下载件。</summary>
+    private async Task<IReadOnlyList<string>> PickFilesForChecksumAsync()
+    {
+        var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = _lang.Get("TEXT_TITLE_CHECKSUM"),
+            AllowMultiple = true,
+        });
+
+        return [.. picked
+            .Select(file => file.TryGetLocalPath())
+            .Where(path => !string.IsNullOrEmpty(path))];
     }
 
     /// <summary>

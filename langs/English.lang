@@ -162,22 +162,10 @@ TEXT_REPAIR_RECHECK_PASSED               = Re-check: the whole archive was read 
 TEXT_REPAIR_RECHECK_BROKEN               = Re-check: ${bad} of ${total} member(s) still fail verification -- do not treat this file as healthy.
 TEXT_REPAIR_RECHECK_SKIPPED              = Not re-checked: 
 
-; ---- Scan for malware (Ctrl+I): asks the local engine only, uploads nothing ----
-TEXT_STATUS_SCANNING                    = Scanning...
-TEXT_TITLE_SCAN                         = Scan archive for malware
-TEXT_SCAN_CLEAN                         = The antimalware engine on this machine looked at the file and reported nothing.
-TEXT_SCAN_NOTE                          = It saw this one archive file; whether it opens the container and checks each member is the engine's own decision, and Andzip does not vouch for it. Andzip ships no signature database and never uploads the file anywhere.
-TEXT_SCAN_DETECTED                      = The antimalware engine on this machine flagged the file as malicious and blocked it.
-TEXT_SCAN_HANDLING                      = What happens next (quarantine, delete, restore) is the engine's call -- look in its protection history. Andzip does not touch your file.
-TEXT_SCAN_NO_ENGINE                     = This machine has no usable antimalware engine, so nobody can answer the question.
-TEXT_SCAN_NO_ENGINE_HOW                 = Andzip ships no signature database and never sends files to an online scanning service. Turn on Windows Security -> Virus & threat protection, or install any engine that registers with the system scanning interface (AMSI), and this works.
-TEXT_SCAN_ENGINE_CHECK                  = What I checked: AMSI init returned ${code}; ${providers} scan providers are registered with Windows; the built-in engine's scanning component is ${oav}.
-TEXT_SCAN_OAV_PRESENT                   = present on this machine
-TEXT_SCAN_OAV_ABSENT                    = absent from this machine
-TEXT_SCAN_NO_ENGINE_WAY_REMOVED          = The built-in engine's scanning layer has been removed from this machine, so Windows Security has nothing left to switch on. To make this work, install an engine that registers with the system scanning interface (AMSI) - putting Defender back counts - then restart. Andzip ships no signature database and never sends files to an online scanning service.
-TEXT_SCAN_TOO_BIG                       = This file is over ${limit} MB -- that is the most the engine is handed at once, so nothing was scanned.
-TEXT_SCAN_TOO_BIG_NOTE                  = Andzip does not scan a truncated prefix: feeding half the file and reporting "clean" would be a forged result. Scan this file directly in your engine if you need it covered.
-TEXT_SCAN_FAILED                        = The engine gave no verdict (${code}). That is neither "clean" nor "bad" -- the question simply went unanswered.
+; ---- File -> CRC: compute checksums. Algorithm names stay out of the language pack (CRC-32 is those letters in any language) ----
+TEXT_STATUS_CHECKSUM                    = Computing checksums...
+TEXT_TITLE_CHECKSUM                     = Checksum information
+TEXT_CHECKSUM_PART_FAILED               = ${done} of ${total} item(s) were computed; the rest could not be read and their line says why.
 
 ; ---- New program window (Ctrl+Shift+N / Ctrl+Alt+N) ----
 TEXT_TITLE_NEW_WINDOW                   = New program window
@@ -378,7 +366,6 @@ TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = Applies to "Extract files" in the mai
 ; ---- Settings: view page / language page ----
 TEXT_SETTINGS_VIEW_TITLE                = View settings
 TEXT_SETTINGS_VIEW_STATUS               = Show the status bar (summary line at the bottom)
-TEXT_SETTINGS_VIEW_TREE                 = Show the folder tree
 TEXT_SETTINGS_VIEW_ICON_DEFAULT         = Open archives in icon view
 TEXT_SETTINGS_VIEW_AUTO_EXPAND          = Expand folders in the tree automatically
 TEXT_SETTINGS_VIEW_THEME                = Interface theme
@@ -520,7 +507,7 @@ MENUSTR_DELETE_ARCHIVE                  = Delete archive
 MENUSTR_PERM_DELETE_ARCHIVE             = Permanently delete archive
 MENUSTR_OPEN_ARCHIVE_FOLDER             = Open archive location
 MENUSTR_TEST_ARCHIVE                    = &Test archive
-MENUSTR_SCAN_ARCHIVE                    = Scan archive for malware
+MENUSTR_CRC                             = CRC
 MENUSTR_EXTRACT_FILE                    = &Extract files
 MENUSTR_NEW_WINDOW                      = New application window
 MENUSTR_NEW_WINDOW_ADMIN                = New application window (as administrator)
@@ -538,14 +525,11 @@ MENUSTR_FIND_ITEM                       = Find Files (&I)
 
 MENUSTR_SETTING_SUB                     = &Settings
 
-MENUSTR_VIEW_TREECONTROL                = Folder tree
-MENUSTR_VIEW_COMMENT                    = Archive comment
 MENUSTR_VIEW_PREVIEW                    = Image preview
 MENUSTR_TOOLBAR_LARGE                     = Large
 MENUSTR_TOOLBAR_SMALL                     = Small
 MENUSTR_TOOLBAR_HIDDEN                    = Hide
 MENUSTR_VIEW_TOOLBAR                    = Toolbar
-MENUSTR_VIEW_LISTVIEW                   = View style
 MENUSTR_VIEW_COLUMN                     = Columns
 MENUSTR_VIEW_ALWAYS_ON_TOP              = Always on top
 MENUSTR_VIEW_THEME                      = Dark mode

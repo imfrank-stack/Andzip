@@ -83,8 +83,22 @@ public class MainMenuModelTests
 
         Assert.Contains(menus.Single(m => m.Id == "file").Items, i => i.Shortcut == "Ctrl+N");
         Assert.Contains(menus.Single(m => m.Id == "file").Items, i => i.Shortcut == "Shift+Ctrl+Del");
+        Assert.Contains(menus.Single(m => m.Id == "file").Items, i => i.Shortcut == "Ctrl+T");
         Assert.Contains(menus.Single(m => m.Id == "edit").Items, i => i.Shortcut == "Ctrl+Shift+M");
-        Assert.Contains(menus.Single(m => m.Id == "view").Items, i => i.Shortcut == "F7");
+
+        // 「视图」这一排以前在这里被钉过一次 F7 —— 那是「树形目录」那行灰占位的快捷键，
+        // 4.7.0 连着它要管的功能一起删了（F8「压缩文件注释」同）。这一排现在没有快捷键，
+        // 所以那条断言挪去看「文件」里真的那一条（Ctrl+T 测试压缩包）。
+        Assert.DoesNotContain(menus.Single(m => m.Id == "view").Items,
+            item => item.Shortcut is "F7" or "F8");
+
+        // 「文件 → CRC」替掉的是「扫描压缩包中的恶意软件」（Ctrl+I）：它是一层子菜单的挂载点，
+        // 所以与「列设置」「工具栏」同一种形状 —— 有命令 id、没有快捷键。
+        var crc = menus.Single(m => m.Id == "file").Items.Single(item => item.Id == "file.crc");
+        Assert.True(crc.Enabled);
+        Assert.Equal(MainMenuModel.CommandCrc, crc.CommandId);
+        Assert.Null(crc.Shortcut);
+
         Assert.Contains(menus.Single(m => m.Id == "help").Items, i => i.Shortcut == "F1");
     }
 

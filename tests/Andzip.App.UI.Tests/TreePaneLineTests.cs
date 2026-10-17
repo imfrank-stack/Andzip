@@ -35,7 +35,7 @@ public class TreePaneLineTests
                 new ArchiveCreationSettings(archive, CompressionLevelOption.Store, Format: ArchiveFormatOption.FromId("ZIP")));
 
             var view = new ArchiveView(lang, ArchiveReader.Read(archive), new ViewDefaults(
-                ShowStatusBar: true, ShowTree: true,
+                ShowStatusBar: true,
                 IconViewByDefault: false, AutoExpandTree: true));
             var host = new Window { Content = view.Root, Width = 1200, Height = 800 }.Shown();
 

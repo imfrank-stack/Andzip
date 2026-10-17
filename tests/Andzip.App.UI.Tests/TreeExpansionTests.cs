@@ -58,7 +58,6 @@ public class TreeExpansionTests
     private static (Window Host, IReadOnlyList<TreeViewItem> Items) OpenTree(bool autoExpand)
         => OpenTree(new ViewDefaults(
             ShowStatusBar: true,
-            ShowTree: true,
             IconViewByDefault: false,
             AutoExpandTree: autoExpand));
 

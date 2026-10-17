@@ -540,40 +540,77 @@ internal static class Program
     private static void TestHasherVectors()
     {
         Section("hasher known vectors");
-        var abc = Encoding.UTF8.GetBytes("abc");
 
-        uint crc;
-        using (var h = Hasher.Open("CRC32"))
+        // Both inputs are fixed, and every expected string below was produced by
+        // 7-Zip 26.04 itself (`7z h -scrc* <file>` on this machine), in 7-Zip's
+        // own display form -- upper case reversed for the 4- and 8-byte
+        // digests, lower case straight for the rest. So this table pins three
+        // things at once: the algorithm names this ABI accepts, that the two
+        // fallbacks in az_hash.cpp (SHA-384 and BLAKE2sp, neither of which the
+        // vendored registry publishes) compute the same value as 7-Zip, and
+        // that FormatDigest renders what the user sees identical to 7-Zip's.
+        //
+        // The second input is 1 MiB of a repeating ramp: big enough that
+        // BLAKE2sp's tree (parallel degree 8, 128-byte leaves) is really built
+        // and that the hasher is fed many chunks, not one.
+        var probe = Encoding.UTF8.GetBytes("andzip crc probe\n");
+        var ramp = new byte[1 << 20];
+        for (var i = 0; i < ramp.Length; i++)
+            ramp[i] = (byte)((i % 121) + 5);
+
+        (string Algorithm, string Probe, string Ramp)[] vectors =
+        [
+            ("CRC32",    "D2E07B7A", "0C99D8F1"),
+            ("CRC64",    "0CAD0C4632C96D67", "EF4A983188C3AFF2"),
+            ("XXH64",    "C132F080712BAF0B", "5B23000C84A69FF7"),
+            ("MD5",      "36e4033284360113d7bb47f9f8c8b397", "2257a988321219bfac67b41d52db0e5c"),
+            ("SHA1",     "04041db01f550f53bef0b9eed6d083678a8e1b9a", "2bf11b2949769d326ee3a84d3d09650511d36faa"),
+            ("SHA256",   "8be160c35d73aa1d708faeb9c9131cb0e0d6a07f8a3987a9b7bf5f3c1539bb57",
+                         "8e45e7a3147ce6f126bffe4ae326ac7f875cd5d4ee6e22492a1a3ea89cadc46e"),
+            ("SHA384",   "6ed738e81d6729f1ccc156ab3c30539ecd5e8f3b7dae54708aad403ef38f523c945b135d221a7ca7d1999e6889d5bb58",
+                         "ec008bbfc0899562c0dfa20471aa33cd91147f609bc8c7f205ee0223aaf7607bcc2ca32a31a8e3bc5143f75f4d75debb"),
+            ("SHA512",   "f842b7b2f2f0c5871a870b7bcce2d50e574ada8cc1855165e17f0e0ffcff25a293250f493490e3886cdd7e68b8e2900340eba37e01d9f71d4fff399a73ac50c7",
+                         "082dbf2a026cb9098635bcbb4137c406d7d782defdac8c5afbfc3cb3eb8677e3f8011578654b6b126e7694bafb06922df429e39546d7232d15711078fa46b108"),
+            ("SHA3-256", "97b6c0e8ff29086ba7e0cd081275bbd03c84a4f830161836a8178e1b574a1fc1",
+                         "7ec0d0465d45242e211c9ecd5baa0ccf1abf6c4d5829dfc515e368c218d23100"),
+            ("BLAKE2sp", "16337ba793b033c54f13fe316547b2af7b903fc25a1d15ced58cd4643e95397c",
+                         "c2bd6d6c71d5eec0ce31d86459b993e60f4fced5de6b252024511447e4cf2329"),
+        ];
+
+        foreach (var (algorithm, probeHex, rampHex) in vectors)
         {
-            h.Update(abc);
-            var d = h.Finish();
-            CheckEq("CRC32 length", 4, d.Length);
-            crc = ((uint)d[0] << 24) | ((uint)d[1] << 16) | ((uint)d[2] << 8) | d[3];
-            uint le = ((uint)d[3] << 24) | ((uint)d[2] << 16) | ((uint)d[1] << 8) | d[0];
-            Check("CRC32(abc) == 0x352441C2", crc == 0x352441C2 || le == 0x352441C2);
+            using (var h = Hasher.Open(algorithm))
+            {
+                h.Update(probe);
+                CheckEq($"{algorithm}(probe)", probeHex, Hasher.FormatDigest(h.Finish()));
+            }
+
+            using (var h = Hasher.Open(algorithm))
+            {
+                for (var offset = 0; offset < ramp.Length; offset += 64 * 1024)
+                    h.Update(ramp.AsMemory(offset, Math.Min(64 * 1024, ramp.Length - offset)));
+                CheckEq($"{algorithm}(1 MiB, 64 KiB chunks)", rampHex, Hasher.FormatDigest(h.Finish()));
+            }
         }
 
         using (var h = Hasher.Open("SHA256"))
         {
-            h.Update(abc);
-            var hex = h.FinishHex();
-            CheckEq("SHA256(abc)", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", hex);
-        }
-
-        using (var h = Hasher.Open("SHA256"))
-        {
-            var full = Encoding.UTF8.GetBytes("ab");
-            h.Update(full);
+            h.Update(Encoding.UTF8.GetBytes("ab"));
             h.Update(Encoding.UTF8.GetBytes("c"));
             CheckEq("SHA256 streaming equals one-shot", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", h.FinishHex());
         }
 
         using (var h = Hasher.Open("SHA256"))
         {
-            h.Update(abc);
+            h.Update(Encoding.UTF8.GetBytes("abc"));
             h.Finish();
             CheckThrows<AndzipException>("hasher double-Finish throws AlreadyDone", () => h.Finish(), ex => ex.Result == AzResult.ErrorAlreadyDone);
         }
+
+        // A name the engine has no implementation for must be refused, not
+        // silently answered with something else's digest.
+        CheckThrows<AndzipException>("unknown hash algorithm refused",
+            () => Hasher.Open("MD9"), ex => ex.Result == AzResult.ErrorUnsupported);
     }
 
     private static void TestBufferTooSmallAndUseAfterDispose()
