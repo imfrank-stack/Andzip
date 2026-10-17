@@ -5,7 +5,7 @@ namespace Andzip.Core.Settings;
 /// <para>
 /// 这一页与压缩/解压页有一点不同 —— 它影响的是<strong>已经开着的窗口</strong>，
 /// 所以 <c>MainWindow</c> 在设置对话框关掉之后会重新应用一次（见 <c>ApplyViewDefaults</c>），
-/// 不必重启。语言页就没这么幸运，那是另一回事。
+/// 不必重启。语言页同样不用重启，但它靠的是另一条路（<c>LangCatalog.Changed</c> 广播）。
 /// </para>
 /// <para>
 /// <strong>这里没有工具栏那一档</strong>：4.4.0 起它归「视图 → 工具栏」那个二级菜单管

@@ -78,7 +78,13 @@ internal sealed class ArchiveView : IDisposable
     private readonly ArchiveListing _listing;
     private readonly ArchiveFolderNode _root;
     private readonly Dictionary<ArchiveFolderNode, TreeViewItem> _treeItems = new();
-    private readonly ColumnSpec[] _columns;
+    /// <summary>
+    /// 列的定义：键、表头文字、每一格怎么取值、怎么排序。
+    /// <para>它<strong>不是</strong> readonly：表头与「类型」「附加信息」两列的文字都是建这些
+    /// <see cref="ColumnSpec"/> 的那一刻烤上去的，换语言要按新语言重算一份（<see cref="Relang"/>）。
+    /// 名单与顺序与语言无关，所以重算之后下标照旧 —— <see cref="_shown"/>、排序列、列宽都对得上。</para>
+    /// </summary>
+    private ColumnSpec[] _columns;
 
     /// <summary>
     /// 要画出来的列在 <see cref="_columns"/> 里的下标（按顺序，名称列永远第一，
@@ -213,6 +219,27 @@ internal sealed class ArchiveView : IDisposable
 
         _showPreview = visible;
         UpdatePreview();
+    }
+
+    /// <summary>
+    /// 换语言：<strong>就地</strong>改写这一视图里所有烤进去的文字，不重建整份视图。
+    /// <para>重建会把当前所在的文件夹、树里的展开状态、列宽、列表/图标那一档一起丢掉 ——
+    /// 用户换的是一种语言，不是换一个包。与 <see cref="SetHiddenColumns"/> 同一条理由
+    /// （"勾掉一列不该把人扔回根目录"），这一处更甚。</para>
+    /// <para>列的定义要整个重算一份，不是只换表头那几个字：<strong>「类型」与「附加信息」两列
+    /// 格子里的值</strong>（「文件夹」/ "Folder"）和<strong>「类型」列的排序</strong>都是按语言算的，
+    /// 只改表头会得到"表头是中文、行里还是英文"，而且换完语言的排序结果和没换时不一样。</para>
+    /// <para>代价：重画详情区会把选中的行放掉（与勾一列同一种代价）。留着选中而行里的文字停在
+    /// 旧语言，得让每一格都自己去订阅目录 —— 那一趟比这值得多。</para>
+    /// </summary>
+    public void Relang()
+    {
+        _columns = BuildColumns(_lang);
+        ToolTip.SetTip(_listToggle, _lang.Label("TEXT_VIEW_DETAILS"));
+        ToolTip.SetTip(_iconToggle, _lang.Label("TEXT_VIEW_ICONS"));
+        ToolTip.SetTip(_locateButton, _lang.Label("TEXT_OPEN_ARCHIVE_LOCATION"));
+        Render();
+        UpdateSummary();
     }
 
     // ---------- 布局 ----------

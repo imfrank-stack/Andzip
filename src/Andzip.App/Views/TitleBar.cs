@@ -29,7 +29,13 @@ internal sealed class TitleBar : Border
     private readonly Button? _minimize;
     private readonly Button? _maximize;
     private readonly Button _close;
-    private readonly List<(Button Button, Border Chip, Path Glyph, bool Danger)> _buttons = new();
+    private readonly List<(Button Button, Border Chip, Path Glyph, bool Danger, string NameKey)> _buttons = new();
+
+    /// <summary>图标与菜单共用的那一只横排。<see cref="SetLeading"/> 要往这里换整条菜单。</summary>
+    private readonly StackPanel _left;
+
+    /// <summary>这一行左边那块（主窗口给的是菜单栏）。换语言时整条换掉，不是改文字。</summary>
+    private Control? _leading;
 
     /// <param name="resizable">给不给最小化/最大化两个按钮。对话框与进度窗口不给。</param>
     /// <param name="onClose">叉号要做的事，默认"关掉窗口"；进度窗口换成"取消这件事并关掉"。</param>
@@ -86,11 +92,13 @@ internal sealed class TitleBar : Border
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _left = left;
         left.Children.Add(mark);
         if (leading is not null)
         {
             leading.VerticalAlignment = VerticalAlignment.Center;
             left.Children.Add(leading);
+            _leading = leading;
         }
         else
         {
@@ -145,13 +153,11 @@ internal sealed class TitleBar : Border
             }
         };
 
-        _window.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == Window.WindowStateProperty)
-            {
-                PaintMaximizeGlyph();
-            }
-        };
+        _window.PropertyChanged += OnWindowStateChanged;
+        // 这条挂的是<strong>窗口</strong>的属性变化，而窗口活得比这一条标题栏久：
+        // 换语言会把整条标题栏重做一遍（设置窗口那样的无边框窗口），旧那条不退订就等于
+        // 每换一次语言给窗口多留一个没人要的订阅者。图标那一路已经这么办了，这一路照同一样子。
+        DetachedFromVisualTree += (_, _) => _window.PropertyChanged -= OnWindowStateChanged;
 
         Repaint();
     }
@@ -163,9 +169,50 @@ internal sealed class TitleBar : Border
     public void Repaint()
     {
         _caption.Foreground = Design.Ink.Primary;
-        foreach (var (button, chip, glyph, danger) in _buttons)
+        foreach (var (button, chip, glyph, danger, _) in _buttons)
         {
             Paint(button, chip, glyph, danger);
+        }
+    }
+
+    /// <summary>
+    /// 换语言。这一行上没有看得见的文字 —— 要跟着换的是三枚窗口按钮的<strong>无障碍名</strong>：
+    /// 界面全是中文而读屏器还念着 "Minimize"，同样算没换干净。
+    /// </summary>
+    public void Relang()
+    {
+        foreach (var (button, _, _, _, nameKey) in _buttons)
+        {
+            // 最大化那一枚念的是"当前要做的动作"，所以正最大化时它是「还原」，
+            // 与 <see cref="PaintMaximizeGlyph"/> 换图标那条规矩同一份。
+            var key = ReferenceEquals(button, _maximize) && _window.WindowState == WindowState.Maximized
+                ? "TEXT_TITLEBAR_RESTORE"
+                : nameKey;
+            Avalonia.Automation.AutomationProperties.SetName(button, _lang.Label(key));
+        }
+    }
+
+    /// <summary>
+    /// 把左边那块换成新的那一条。主窗口换语言走这里：菜单的文字是建 <see cref="MenuItem"/>
+    /// 的那一刻烤上去的，改属性改不进子树，只能整条换掉 —— 与工具栏、首页同一个办法。
+    /// </summary>
+    public void SetLeading(Control leading)
+    {
+        if (_leading is { } previous)
+        {
+            _left.Children.Remove(previous);
+        }
+
+        leading.VerticalAlignment = VerticalAlignment.Center;
+        _left.Children.Add(leading);
+        _leading = leading;
+    }
+
+    private void OnWindowStateChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty)
+        {
+            PaintMaximizeGlyph();
         }
     }
 
@@ -209,7 +256,7 @@ internal sealed class TitleBar : Border
         button.PointerExited += (_, _) => Paint(button, chip, glyph, danger);
 
         Paint(button, chip, glyph, danger);
-        _buttons.Add((button, chip, glyph, danger));
+        _buttons.Add((button, chip, glyph, danger, nameKey));
         return (host, button);
     }
 

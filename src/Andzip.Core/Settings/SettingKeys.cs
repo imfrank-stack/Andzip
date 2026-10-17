@@ -205,8 +205,10 @@ public static class SettingKeys
 
     /// <summary>
     /// 界面语言（<c>SimpChinese</c> / <c>English</c>，取语言包文件名）。
-    /// <para>换语言要重启才全面生效：菜单、工具栏、标题栏这些文案是在构造时从语言包取一次
-    /// 就固化到控件上的，翻 <c>LangCatalog</c> 只会影响之后新建的界面。这一点在界面上要如实告诉用户。</para>
+    /// <para>这一项<strong>启动时读、当场也生效</strong>：语言页「立即应用」先写这一行、再翻
+    /// <c>LangCatalog</c>，后者广播 <see cref="Lang.LangCatalog.Changed"/>，开着的窗口各自重做文字
+    /// （5.1.0）。这一行存的仍然是"下次启动该用哪种"，因为翻目录这件事本身不改盘，
+    /// 盘的才是事实 —— 崩在半路也不会出现"屏幕上英文、下次启动中文"。</para>
     /// </summary>
     public const string Language = "language";
 

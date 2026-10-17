@@ -36,16 +36,45 @@ public sealed class SettingsWindow : Window
     private static IBrush LinkBlue => Design.Brand.Base;
     private static IBrush HintText => Design.Ink.Secondary;
 
-    private readonly ContentControl _pageHost = new();
+    /// <summary>
+    /// 九个导航键，<strong>数组顺序就是页面顺序</strong>（与参考软件一致）。
+    /// <para>它住在字段这一层而不是构造期的局部：换语言要把整扇重做一遍，
+    /// 那时得按键找回"用户正停在哪一页"，不然换完语言人就被扔回第一页。</para>
+    /// </summary>
+    private static readonly string[] NavKeys =
+    [
+        "TEXT_SETTINGS_GENERAL",
+        "TEXT_SETTINGS_FILE_ASSOCIATION",
+        "TEXT_SETTINGS_CONTEXT_MENU",
+        "TEXT_SETTINGS_EXTRACT",
+        "TEXT_SETTINGS_COMPRESS",
+        "TEXT_SETTINGS_VIEW",
+        "TEXT_SETTINGS_SECURITY",
+        "TEXT_SETTINGS_ADVANCED",
+        "TEXT_SETTINGS_LANGUAGE",
+    ];
+
+    private readonly LangCatalog _lang;
+    private readonly AppSettings _settings;
+    private readonly string _settingsPath;
+    private ContentControl _pageHost = new();
     private readonly Dictionary<string, Button> _navButtons = new(StringComparer.Ordinal);
-    private readonly ISettingsPage[] _pages;
+    private ISettingsPage[] _pages = [];
+
+    /// <summary>用户正停在哪一页（<see cref="NavKeys"/> 的下标）。整扇重做之后按它放回去。</summary>
+    private int _pageIndex;
+
     private ISettingsPage? _currentPage;
 
     /// <param name="startPage">开在哪一页（导航键）。工具栏那颗「切换语言」要落在语言页上 ——
     /// 它做的事是"把人带到真正能换语言的地方"，而不是自己假装能换。</param>
     public SettingsWindow(LangCatalog lang, AppSettings settings, string settingsPath, string? startPage = null)
     {
-        Title = lang.Label("TEXT_TITLE_SETTINGS");
+        _lang = lang;
+        _settings = settings;
+        _settingsPath = settingsPath;
+        _pageIndex = startPage is { } key ? System.Array.IndexOf(NavKeys, key) : 0;
+
         Width = 1000;
         Height = 660;
         MinWidth = 720;
@@ -53,31 +82,35 @@ public sealed class SettingsWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         this.WindowSurface();
 
-        // 导航顺序与参考软件一致。
-        var navKeys = new[]
-        {
-            "TEXT_SETTINGS_GENERAL",
-            "TEXT_SETTINGS_FILE_ASSOCIATION",
-            "TEXT_SETTINGS_CONTEXT_MENU",
-            "TEXT_SETTINGS_EXTRACT",
-            "TEXT_SETTINGS_COMPRESS",
-            "TEXT_SETTINGS_VIEW",
-            "TEXT_SETTINGS_SECURITY",
-            "TEXT_SETTINGS_ADVANCED",
-            "TEXT_SETTINGS_LANGUAGE",
-        };
+        BuildShell();
+
+        // 语言是这一扇窗口存在的理由之一（它就住在语言页上），所以换档必须当场把自己重做一遍。
+        lang.Changed += Relang;
+        Closed += (_, _) => lang.Changed -= Relang;
+    }
+
+    /// <summary>
+    /// 按当前语言把整扇做出来：无边框外壳 + 左导航 + 当前页 + 页脚两颗按钮。
+    /// <para>构造走这一条，<see cref="Relang"/> 也走这一条 —— 一条建法两处用，比"换语言时逐条
+    /// 改文字"可靠：九页上每一处标签、提示、下拉项都在构造期烤死，逐条改等于把九个构造函数
+    /// 抄第二份，抄漏的那一条就是屏幕上中英混排的那一格。</para>
+    /// </summary>
+    private void BuildShell()
+    {
+        var lang = _lang;
+        Title = lang.Label("TEXT_TITLE_SETTINGS");
 
         _pages =
         [
-            new GeneralPage(this, lang, settings, settingsPath),
-            new FileAssociationPage(this, lang, settings, settingsPath),
-            new ContextMenuPage(this, lang, settings, settingsPath),
-            new ExtractionPage(lang, settingsPath),
-            new CompressionPage(this, lang, settings, settingsPath),
-            new ViewPage(lang, settings, settingsPath),
-            new SecurityPage(this, lang, settings, settingsPath),
-            new AdvancedPage(this, lang, settings, settingsPath),
-            new LanguagePage(lang, settings, settingsPath),
+            new GeneralPage(this, lang, _settings, _settingsPath),
+            new FileAssociationPage(this, lang, _settings, _settingsPath),
+            new ContextMenuPage(this, lang, _settings, _settingsPath),
+            new ExtractionPage(lang, _settingsPath),
+            new CompressionPage(this, lang, _settings, _settingsPath),
+            new ViewPage(lang, _settings, _settingsPath),
+            new SecurityPage(this, lang, _settings, _settingsPath),
+            new AdvancedPage(this, lang, _settings, _settingsPath),
+            new LanguagePage(lang, _settings, _settingsPath),
         ];
 
         // Spacing 必须是 0：条目之间那几像素是点不动的死区（1.8.7 用户第二条反馈）。
@@ -86,11 +119,12 @@ public sealed class SettingsWindow : Window
         {
             Margin = new Thickness(Design.Space.X2, Design.Space.X3, Design.Space.X2, Design.Space.X3),
         };
-        for (var i = 0; i < navKeys.Length; i++)
+        _navButtons.Clear();
+        for (var i = 0; i < NavKeys.Length; i++)
         {
             var index = i;
-            var button = NavButton(lang.Label(navKeys[i]), () => ShowPage(index));
-            _navButtons[navKeys[i]] = button;
+            var button = NavButton(lang.Label(NavKeys[i]), () => ShowPage(index));
+            _navButtons[NavKeys[i]] = button;
             nav.Children.Add(button);
         }
 
@@ -105,6 +139,7 @@ public sealed class SettingsWindow : Window
             Child = nav,
             Width = 200,
         };
+        _pageHost = new ContentControl();
         var contentPane = new Border
         {
             Background = Brushes.Transparent,
@@ -144,12 +179,22 @@ public sealed class SettingsWindow : Window
         root.Children.Add(body);
 
         this.Chromeless(lang, root, resizable: true);
-        ShowPage(startPage is { } key ? System.Array.IndexOf(navKeys, key) : 0);
+        ShowPage(_pageIndex);
     }
+
+    /// <summary>
+    /// 换语言：整扇重做，人放回原来那一页。
+    /// <para>页面上"还没点的改动"会跟着丢掉 —— 这与<strong>切到别的页再切回来</strong>本来就是
+    /// 同一件事：<see cref="ISettingsPage.Reload"/> 每次进页都从真实来源（设置文件、注册表）重读一遍、
+    /// 放弃界面里没应用的改动（这是这一窗口从 0.13.0 就定下的写入时机）。而换语言必须先在该页
+    /// 点过「立即应用」才发生，那一次已经落盘，所以这里没有多丢任何东西。</para>
+    /// </summary>
+    private void Relang() => BuildShell();
 
     private void ShowPage(int index)
     {
         var page = _pages[index];
+        _pageIndex = index;
         _currentPage = page;
 
         foreach (var (key, button) in _navButtons)
@@ -1772,8 +1817,9 @@ public sealed class SettingsWindow : Window
     /// 而且选了确实能切 —— 不会出现"列表里有、切过去又回退"的假选项。
     /// </para>
     /// <para>
-    /// 换语言要重启才全面生效：菜单、工具栏、标题这些文案是在控件构造时取一次就固化了的。
-    /// 这一点如实写在页面上，而不是假装立刻生效。
+    /// 换语言<strong>当场生效</strong>（5.1.0）：「立即应用」把目录翻过去并广播出去，主窗口、
+    /// 这一扇设置窗口与关于窗口各自把文字重做一遍。页面上那行说明写的就是这件事，
+    /// 只留下一个真做不到的例外 —— 资源管理器右键那几条名字存在注册表里，那不是界面文字。
     /// </para>
     /// </summary>
     private sealed class LanguagePage : ISettingsPage
@@ -1832,7 +1878,7 @@ public sealed class SettingsWindow : Window
             panel.Children.Add(SectionTitle(lang.Label("TEXT_SETTINGS_LANGUAGE_TITLE")));
             panel.Children.Add(row);
             panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_LANGUAGE_HINT")));
-            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_LANGUAGE_RESTART")));
+            panel.Children.Add(Hint(lang.Label("TEXT_SETTINGS_LANGUAGE_LIVE")));
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1884,10 +1930,12 @@ public sealed class SettingsWindow : Window
             settings.SetString(SettingKeys.Language, chosen);
             settings.Save(_settingsPath);
 
-            // 当场把目录翻过去：之后新建的界面（对话框、下次打开的压缩包视图）立刻是新语言，
-            // 已经画好的那些要等重启。两者都如实如此，不做"看起来全变了"的假动作。
-            _catalog.SetLanguage(chosen);
+            // 先 Reload 再翻目录：Reload 读的是刚落盘的那一份，于是「立即应用」那颗当场暗下去
+            // （不这么做，重建之后的新语言页要靠 ShowPage 那一次 Reload 才对得上，中间这一帧
+            // 亮着一颗按了也没用的按钮）。翻目录会广播给每一扇开着的窗口，包括本窗口 ——
+            // 那一刻这个页面对象已经被换成新的，所以这行之后不能再碰自己的控件。
             Reload();
+            _catalog.SetLanguage(chosen);
         }
     }
 

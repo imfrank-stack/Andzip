@@ -63,8 +63,12 @@ public sealed class MainWindow : Window
     /// </summary>
     private Control _toolBar;
 
-    /// <summary>菜单条。留着是为了按命令找到某几项、在没有包可操作时把它们置灰。</summary>
-    private readonly Menu _menuBar;
+    /// <summary>
+    /// 菜单条。留着是为了按命令找到某几项、在没有包可操作时把它们置灰。
+    /// <para>它<strong>不是</strong> readonly：每一行 <c>MenuItem</c> 的文字是建它的那一刻烤上去的，
+    /// 换语言要整条换一条新的（<see cref="ApplyLanguage"/>），与工具栏、首页同一种办法。</para>
+    /// </summary>
+    private Menu _menuBar;
 
     /// <summary>
     /// 命令 id → 做什么。<strong>菜单与工具栏读的都是这一张表</strong>：
@@ -206,11 +210,7 @@ public sealed class MainWindow : Window
 
         var root = new DockPanel();
 
-        _menuBar = MainMenuBar.Create(_lang, _commands, new RecentFilesMenu(
-            LoadRecentFiles, OpenRecentFile, ClearRecentFiles),
-            new ColumnMenu(() => _hiddenColumns, SetColumnVisible),
-            new ToolBarMenu(() => _toolBarMode, SetToolBarMode),
-            new CrcMenu(algorithm => ChecksumAsync(algorithm)));
+        _menuBar = BuildMenuBar();
 
         // 模型里 Enabled: true 的语义是"这条实装过了"。自称实装了却没接到命令，界面上就是
         // 一条黑字、能点、点下去什么都不发生 —— 那比灰着危险得多（文件菜单那四条置灰的同一条判断）。
@@ -287,6 +287,12 @@ public sealed class MainWindow : Window
         Design.ActiveChanged += ApplyTheme;
         Opened += (_, _) => ApplyTheme();
         Closed += (_, _) => Design.ActiveChanged -= ApplyTheme;
+
+        // 语言也是最后订阅：换语言重做的是同一套外壳（菜单 / 工具栏 / 内容），
+        // 上面那些还没建完就广播一次会把半套界面当成品换掉。
+        // 每一扇主窗口各订各的 —— 「文件 → 新建程序窗口」开着两扇时，两边都要跟着换。
+        lang.Changed += ApplyLanguage;
+        Closed += (_, _) => lang.Changed -= ApplyLanguage;
     }
 
     /// <summary>
@@ -304,8 +310,9 @@ public sealed class MainWindow : Window
         Background = Brushes.Transparent;
         _surface.Background = Design.Surface.Base;
         _titleBar.Repaint();
-        _menuBar.Background = Brushes.Transparent;
-        _menuBar.Foreground = Design.Ink.Primary;
+
+        // 菜单条不用管：它身上的两支画刷（透明底、主墨字）是 <see cref="BuildMenuBar"/> 给的，
+        // 而 Design 的画刷是全进程一份、换档时改它自己的颜色 —— 抄过一次与每次抄是同一件事。
 
         // 工具栏整条重做：它的图标与文字颜色是构造时取的一次，光刷卡片底色救不回来。
         _toolBar = BuildToolBar();
@@ -325,6 +332,58 @@ public sealed class MainWindow : Window
         }
 
         WindowTheme.Apply(this, dark);
+    }
+
+    /// <summary>
+    /// 换语言：把外壳重做一遍，内容就地改字。
+    /// <para>与 <see cref="ApplyTheme"/> 是同一个形状的两个问题 —— 没有 XAML，文字与颜色都是
+    /// 建控件时取的一次。菜单、工具栏、首页这些"整棵子树都是构造期决定"的整条换新；
+    /// 唯独压缩包视图<strong>不重建</strong>：换语言不该把人从正在看的文件夹里扔回根目录，
+    /// 连展开、列宽、选中一起丢（那三样都住在视图内部，重建必然带走）。</para>
+    /// <para>换完必须当场 <see cref="RefreshCommandStates"/>：新那一条菜单与新工具栏上每一颗的
+    /// <c>IsEnabled</c> 与勾都是构造时的初值，而"没有包可操作"这件事只有窗口自己知道
+    /// （4.4.0 留的那条教训，见 <see cref="RefreshCommandStates"/> 的注释）。</para>
+    /// </summary>
+    private void ApplyLanguage()
+    {
+        _menuBar = BuildMenuBar();
+        _titleBar.SetLeading(_menuBar);
+        _titleBar.Relang();
+
+        _toolBar = BuildToolBar();
+        _headerHost.Child = _toolBar;
+
+        _homeContent = HomeView.Create(_lang);
+
+        if (_browser is { } browser)
+        {
+            browser.Relang();
+        }
+        else
+        {
+            ShowHome();
+        }
+
+        RefreshCommandStates();
+    }
+
+    /// <summary>
+    /// 按当前语言做一条菜单栏。建两处（构造与换语言）用的是同一份，
+    /// 免得哪一天一边接了「列设置」二级菜单、另一边忘了。
+    /// <para>底色在构造期就被 <see cref="MainMenuBar"/> 取成了卡片白，而这一条住在标题栏那一行上
+    /// —— 那一片的底色是整个面板，压一层白就是标题栏中间一块白斑，所以这里当场改回透明。</para>
+    /// </summary>
+    private Menu BuildMenuBar()
+    {
+        var menu = MainMenuBar.Create(_lang, _commands, new RecentFilesMenu(
+            LoadRecentFiles, OpenRecentFile, ClearRecentFiles),
+            new ColumnMenu(() => _hiddenColumns, SetColumnVisible),
+            new ToolBarMenu(() => _toolBarMode, SetToolBarMode),
+            new CrcMenu(algorithm => ChecksumAsync(algorithm)));
+
+        menu.Background = Brushes.Transparent;
+        menu.Foreground = Design.Ink.Primary;
+        return menu;
     }
 
     /// <summary>
@@ -1800,8 +1859,8 @@ public sealed class MainWindow : Window
 
     /// <summary>
     /// 打开设置窗口。<paramref name="startPage"/> 是导航键 —— 工具栏那颗「切换语言」传语言页，
-    /// 因为"换语言"这件事真正的开关在<strong>那一页</strong>（改完要重启才全面生效），
-    /// 工具栏不该假装自己能换。键写错就是代码错：构造时直接抛，
+    /// 因为"换语言"这件事真正的开关在<strong>那一页</strong>（那里有当前加载到的语言包名单、
+    /// 和"要不要就换这一档"的决定），工具栏不该假装自己能换。键写错就是代码错：构造时直接抛，
     /// 而不是悄悄开在第一页让人以为按错了别的什么。
     /// </summary>
     private async void OpenSettingsDialogOn(string? startPage)

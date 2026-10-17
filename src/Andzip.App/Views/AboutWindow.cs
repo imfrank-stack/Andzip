@@ -21,13 +21,29 @@ namespace Andzip.App.Views;
 /// </summary>
 public sealed class AboutWindow : Window
 {
+    private readonly LangCatalog _lang;
+
     public AboutWindow(LangCatalog lang)
     {
-        Title = lang.Label("TEXT_TITLE_ABOUT");
+        _lang = lang;
         Width = 480;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+        BuildShell();
+        lang.Changed += BuildShell;
+        Closed += (_, _) => lang.Changed -= BuildShell;
+    }
+
+    /// <summary>
+    /// 按当前语言把这一屏做一遍。构造与换语言共用这一条 —— 这一屏没有用户输入，
+    /// 重做一份不丢任何东西，所以它是"整条换新"这一类，而不是压缩包视图那一类（就地改字）。
+    /// </summary>
+    private void BuildShell()
+    {
+        var lang = _lang;
+        Title = lang.Label("TEXT_TITLE_ABOUT");
 
         var heading = new StackPanel
         {

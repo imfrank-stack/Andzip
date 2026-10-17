@@ -400,7 +400,7 @@ TEXT_ICON_RESTORE_FAILED                = The factory icon could not be restored
 TEXT_SETTINGS_LANGUAGE_TITLE            = Language
 TEXT_SETTINGS_LANGUAGE_LABEL            = Interface language
 TEXT_SETTINGS_LANGUAGE_HINT             = The list comes from the language packs actually loaded (files under langs/ next to the program first, otherwise the embedded ones), so everything here is genuinely selectable.
-TEXT_SETTINGS_LANGUAGE_RESTART          = Changing language only fully applies after restarting Andzip: menu, toolbar and title text are read once when the UI is built and then fixed onto the controls.
+TEXT_SETTINGS_LANGUAGE_LIVE             = Language applies at once: the menus, the toolbar, the column headers, the status bar and this settings window switch to the new wording without a restart, and an archive you are browsing is rewritten in place so the folder you are in stays open. The right-click entries in Explorer do not count - those names are written into the registry, so they follow on the next start, or the next "Apply" on the Association / Context menu / Extraction pages.
 
 ; ---- Settings: advanced page / security page ----
 TEXT_SETTINGS_ADVANCED_TITLE            = Advanced settings

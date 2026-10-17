@@ -96,7 +96,7 @@ internal static class MainToolBar
         items.Children.Add(Cell(lang, "TEXT_TOOLBAR_VIEW", "view", compact,
             MainMenuModel.CommandPreview, actions.TogglePreview));
 
-        // 语言切换本身在「设置 → 语言」里（换完要重启才全面生效），
+        // 语言切换本身在「设置 → 语言」里（那里才知道这台机器上加载到了哪几份语言包），
         // 所以这一颗做的是"跳到那一页"。以前它写着当前语言、点不动，如今它有地方可去。
         items.Children.Add(Cell(lang, "TEXT_TOOLBAR_LANGUAGE", "language", compact, null, actions.SwitchLanguage));
 
