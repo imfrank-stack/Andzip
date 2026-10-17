@@ -24,7 +24,15 @@ public static class CompressionEstimator
     /// <param name="SampledBytes">真的压进去的样本字节 —— 这个数越小，下面两个结论越虚。</param>
     /// <param name="BytesPerSecond">样本实测吞吐。它不含真实任务里的磁盘争用与被占用文件重试，
     /// 所以是个上界；界面要说"预计"而不是"就会这么久"。</param>
-    public sealed record Prediction(long InputBytes, long OutputBytes, long SampledBytes, long BytesPerSecond)
+    /// <param name="LargestEntryBytes">这批输入里最大的<strong>单个文件</strong>有多大（字节）。
+    /// 它不是预估，是展开清单时顺手量到的输入侧事实，界面用它决定要不要建议换格式
+    /// （<see cref="LargeEntryAdvice"/>）—— 摊在同一个包里算，省掉 UI 再走一遍目录。</param>
+    public sealed record Prediction(
+        long InputBytes,
+        long OutputBytes,
+        long SampledBytes,
+        long BytesPerSecond,
+        long LargestEntryBytes)
     {
         /// <summary>压缩后占原大小的比例。不可压的内容（已经压好的包、视频）会略大于 1，
         /// 因为包头本身就是开销 —— 这不是 bug，是实话。</summary>
@@ -135,7 +143,8 @@ public static class CompressionEstimator
 
             var estimate = (long)Math.Round(plan.TotalInputBytes * ((double)archive.Length / sampled));
             var speed = clock.Elapsed.TotalSeconds > 0 ? (long)(sampled / clock.Elapsed.TotalSeconds) : 0L;
-            return new Prediction(plan.TotalInputBytes, Math.Max(estimate, 1L), sampled, speed);
+            return new Prediction(plan.TotalInputBytes, Math.Max(estimate, 1L), sampled, speed,
+                plan.Files.Max(static entry => entry.Size));
         }
         catch (Exception ex) when (ex is AndzipException or ArchiveConstraintException
             or IOException or UnauthorizedAccessException or ArgumentException)

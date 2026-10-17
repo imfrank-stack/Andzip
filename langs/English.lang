@@ -66,6 +66,15 @@ TEXT_ESTIMATE_UNAVAILABLE               = No estimate
 TEXT_ESTIMATE_DETAIL                    = ≈ ${size} (${percent}) · about ${time}
 TEXT_ESTIMATE_VOLUMES                   = ${count} volumes
 TEXT_ESTIMATE_METHODS                   = By method: ${list}
+; ---- Suggest 7z when one entry is very large (compression speed-up P1') ----
+; Why this line exists: ZIP hands its threads out per entry (the engine caps the thread
+; count at the number of files to compress), so one big file runs on a single core; 7z
+; splits by block, so one big file can use them all. How many times faster is measured in
+; docs/perf-baseline.md; the threshold constant lives in Core's LargeEntryAdvice.
+; The note never blocks and never changes the user's choice: ZIP is often a format someone
+; else asked for, not a performance decision.
+TEXT_HINT_ZIP_LARGE_ENTRY               = One of these files is very large. ZIP splits its threads by entry, so a single file runs on one core; 7z splits by block, so it is much faster here.
+TEXT_HINT_SWITCH_TO_7Z                  = Use 7z
 TEXT_LABEL_COMPRESSION_LEVEL            = Compression level
 TEXT_BTN_ADVANCED_SETTINGS              = Advanced settings »
 TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE     = « Advanced settings

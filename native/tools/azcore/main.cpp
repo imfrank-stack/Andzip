@@ -10,8 +10,9 @@
 //   azcore info    <archive> [-p pass]
 //   azcore test    <archive> [-p pass]
 //   azcore extract <archive> <dir> [-p pass] [--flatten] [--skip]
-//   azcore create  <archive> [-f fmt] [-m method] [-x level] [-p pass]
-//                   [-d dictMiB] [-v volSize] [--solid=on|off] [--headers] <input>...
+//   azcore create  <archive> [-f fmt] [-m method] [-x level] [-d dictMiB]
+//                   [-p pass] [-v volSize] [-t threads] [-e name=value]...
+//                   [--solid=on|off] [--headers] <input>...
 
 #include "andzip/andzip.h"
 
@@ -281,6 +282,10 @@ struct CreateArgs
   int headers;
   int prealloc;
   int shareLocked;
+  uint32_t threads;
+  // Newline separated "name=value" straight into the engine property table,
+  // so the CLI can try a 7-Zip property that has no structured option yet.
+  std::string extra;
 };
 
 int CmdCreate(const char *dest, const CreateArgs &args, const std::vector<const char *> &inputs)
@@ -300,6 +305,8 @@ int CmdCreate(const char *dest, const CreateArgs &args, const std::vector<const 
   opts.solid = args.solid;
   opts.preallocate = args.prealloc;
   opts.share_locked = args.shareLocked;
+  opts.num_threads = args.threads;
+  opts.extra_properties = args.extra.empty() ? NULL : args.extra.c_str();
   opts.callbacks = &cb;
   if (args.password && *args.password)
   {
@@ -345,7 +352,10 @@ void Usage()
     "  azcore extract <archive> <dir> [-p pass] [--flatten] [--skip]\n"
     "  azcore create  <archive> [-f fmt] [-m method] [-x level] [-d dictMiB]\n"
     "                           [-p pass] [--headers] [-v size] [--solid=on|off]\n"
-    "                           [--prealloc] [--share-locked] <input>...\n");
+    "                           [-t threads] [-e name=value]... \n"
+    "                           [--prealloc] [--share-locked] <input>...\n"
+    "  -e passes a 7-Zip property straight through (repeatable), e.g.\n"
+    "     -e fb=273 -e mf=bt4. -t sets num_threads (0 = engine default).\n");
 }
 
 } // namespace
@@ -417,6 +427,7 @@ int main(int argc, char **argv)
     args.headers = 0;
     args.prealloc = 0;
     args.shareLocked = 0;
+    args.threads = 0;
 
     std::vector<const char *> inputs;
     for (int i = 3; i < argc; i++)
@@ -432,6 +443,14 @@ int main(int argc, char **argv)
       else if (!std::strcmp(a, "--prealloc"))              args.prealloc = 1;
       else if (!std::strcmp(a, "--share-locked"))          args.shareLocked = 1;
       else if (!std::strncmp(a, "--solid=", 8))           args.solid = std::strcmp(a + 8, "off") != 0;
+      else if (!std::strcmp(a, "-t") && i + 1 < argc)     args.threads = (uint32_t)std::atoi(argv[++i]);
+      // repeatable: -e fb=273 -e mf=bt4  ->  "fb=273\nmf=bt4"
+      else if (!std::strcmp(a, "-e") && i + 1 < argc)
+      {
+        if (!args.extra.empty())
+          args.extra += '\n';
+        args.extra += argv[++i];
+      }
       else                                                 inputs.push_back(a);
     }
 

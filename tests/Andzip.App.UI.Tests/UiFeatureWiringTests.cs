@@ -624,6 +624,106 @@ public class UiFeatureWiringTests
     }
 
     /// <summary>
+    /// 「ZIP + 一个很大的单条目」那一句换格式建议：两头都要管住。
+    /// <para>
+    /// 该说的时候没说 —— 用户会以为压不动是他的机器不行，而实际上 ZIP 只派了一个核；
+    /// 不该说的时候常驻 —— 压一堆小文件（多条目，本来就吃满多核）被劝去换格式是误导。
+    /// </para>
+    /// <para>
+    /// 这一句挂在预估那条异步路上（同一次目录走查顺手量到的最大条目，不为它再走一遍），
+    /// 所以断言要用 <see cref="UiWait"/> 泵 Dispatcher，而不是 Show 完就读。
+    /// 问的也是「屏幕上看得见什么」，不是读 <c>_formatAdvice.IsVisible</c>。
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ZipSuggestsSevenZipOnlyForOneHugeEntryAndTheButtonSwitches()
+    {
+        var lang = TestLang.Chinese();
+        var hint = lang.Label("TEXT_HINT_ZIP_LARGE_ENTRY");
+        var directory = Directory.CreateTempSubdirectory("andzip-large-entry-").FullName;
+
+        try
+        {
+            // 一个刚过阈值的条目。SetLength 出来的是真实的零填充文件，
+            // 预估要读的头尾样本因此读得到字节，而不用真写 256 MiB 到盘上。
+            var huge = Path.Combine(directory, "movie.bin");
+            using (var created = File.Create(huge))
+            {
+                created.SetLength(LargeEntryAdvice.ThresholdBytes + (1 << 20));
+            }
+
+            var dialog = new NewArchiveWindow(lang, seedPaths: [huge]).Shown();
+            var fileName = VisualQuery.Of<TextBox>(dialog).Single(box => box.Text?.EndsWith(".zip") == true);
+
+            Assert.True(WaitsForHint(dialog, hint), "单条目超过阈值却没有说「换 7z 会快得多」。");
+
+            // 建议不许动用户已经填好的东西（名字是他能看到、可能要改的）。
+            Assert.Equal(Path.Combine(directory, "movie.zip"), fileName.Text);
+            Assert.Equal("ZIP", ItemsOf(FormatCombo(dialog))[FormatCombo(dialog).SelectedIndex]);
+
+            Clicker.Invoke(FindButton(dialog, lang.Label("TEXT_HINT_SWITCH_TO_7Z")));
+
+            // 一键走的是下拉框那条路：格式与输出扩展名都要跟着换过去。
+            Assert.Equal("7Z", ItemsOf(FormatCombo(dialog))[FormatCombo(dialog).SelectedIndex]);
+            Assert.Equal(Path.Combine(directory, "movie.7z"), fileName.Text);
+            UiWait.Pump(600);
+            Assert.DoesNotContain(hint, VisualQuery.VisibleTexts(dialog));
+
+            // 反过来：同样的位置换成一个小文件，这一句就不许出现。
+            var tiny = Path.Combine(directory, "tiny.bin");
+            File.WriteAllBytes(tiny, new byte[4096]);
+            var other = new NewArchiveWindow(lang, seedPaths: [tiny]).Shown();
+
+            // 阴性断言之前先确认预估这一格真的落地了：没落地时"没有这一句"也是真的，
+            // 那条断言就成了摆设；而它落不了地的最常见原因是这个进程里引擎没载上 —— 那要响，不要静。
+            Assert.True(WaitsForEstimate(other, lang.Label("TEXT_ESTIMATE_WORKING")),
+                "小文件那一条连预估都没算出来，引擎没载上 —— 这条用例什么也没证明。");
+            Assert.DoesNotContain(hint, VisualQuery.VisibleTexts(other));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>泵到那一句建议出现为止（预估是异步的，最多等 30 秒）。</summary>
+    private static bool WaitsForHint(Window window, string hint)
+    {
+        var deadline = Environment.TickCount64 + 30_000;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (VisualQuery.VisibleTexts(window).Contains(hint))
+            {
+                return true;
+            }
+
+            UiWait.Pump(100);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 等预估那一格从「正在取样估算…」落到一个数上（两种语言的 TEXT_ESTIMATE_DETAIL 都以 ≈ 开头）。
+    /// </summary>
+    private static bool WaitsForEstimate(Window window, string working)
+    {
+        var deadline = Environment.TickCount64 + 30_000;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (VisualQuery.VisibleTexts(window).Any(text =>
+                    text != working && text.StartsWith("≈", StringComparison.Ordinal)))
+            {
+                return true;
+            }
+
+            UiWait.Pump(100);
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// 高级设置里的「压缩方法」换成 7z 的扩展方法时，那一句兼容性警告要<strong>跟着起落</strong>。
     /// <para>问的是「用户这时看得见什么」（<see cref="VisualQuery.VisibleTexts"/> 只走真看得见的那一支），
     /// 不是读 <c>_methodNote.IsVisible</c>：前者才与屏幕上那一格一致。</para>

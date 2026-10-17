@@ -370,7 +370,13 @@ typedef struct az_create_options {
                                          volumes works for every format that stores them. */
   const char          *comment;       /* zip/7z archive comment; may be NULL */
   const az_callbacks  *callbacks;     /* may be NULL */
-  const char         *extra_properties; /* newline separated "name=value" passthrough, e.g. "mf=bt4\nfb=273" */
+  const char         *extra_properties; /* newline separated "name=value" passthrough, e.g. "mf=bt4\nfb=273".
+                                        Names are the engine's own coder/handler property names, exactly as
+                                        the 7z command line spells them after "-m". A value made only of
+                                        digits is handed over as a number (VT_UI4), anything else as a
+                                        string: the coder-property table is typed, and a string where a
+                                        number is expected is rejected as E_INVALIDARG rather than parsed.
+                                        An unknown name fails the whole operation, as it does upstream. */
   int32_t             preallocate;   /* 1 = reserve the output file's clusters before writing.
                                         Windows: SetFileInformationByHandle(FileAllocationInfo);
                                         POSIX: posix_fallocate(). The reservation is an upper bound

@@ -94,6 +94,10 @@ public sealed record ArchiveFormatOption(
     /// <summary>是否 7z。固实块（solid）是 7z 独有的概念，只有它才接受这个设置。</summary>
     public bool IsSevenZip => string.Equals(CreateFormat, "7z", System.StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>是否 ZIP。两件事按 ZIP 分家：多线程的并行单位是条目（见 <see cref="LargeEntryAdvice"/>），
+    /// 以及非标准方法号会让别人打不开（见 <see cref="CompressionMethodOption"/>）。</summary>
+    public bool IsZip => string.Equals(CreateFormat, "zip", System.StringComparison.OrdinalIgnoreCase);
+
     /// <summary>是否有高级设置可看（FR-2.5）：可选方法多于一个，或可加密。</summary>
     public bool SupportsAdvancedSettings => CanCreate && (Methods.Count > 1 || SupportsPassword);
 

@@ -161,10 +161,10 @@ native/scripts/build-unix.sh -T
 
 | 目标 | 编译 | 链接 | 导出符号核对 | 跑测试 |
 |---|---|---|---|---|
-| Windows x64 动态库 | ✅ MSVC 14.51 | ✅ | ✅ 41/41 | ✅ 532 断言 |
-| Windows x64 静态库 | ✅ | ✅（azcore/azgui/tests 均链接它） | n/a | ✅ 532 断言 |
-| Linux x86_64 动态库 | ✅ Zig/Clang 22 | ✅ 带 `--no-undefined` | ✅ 41/41 | ⚠️ 本机跑不了，交给 CI 的 `linux` 作业 |
-| Linux aarch64 动态库 | ✅ | ✅ | ✅ 41/41 | ❌ |
+| Windows x64 动态库 | ✅ MSVC 14.51 | ✅ | ✅ 43/43 | ✅ 693 断言（5.5.0 重跑） |
+| Windows x64 静态库 | ✅ | ✅（azcore/azgui/tests 均链接它） | n/a | ✅ 同一套断言，链接形式不同（`/WHOLEARCHIVE`） |
+| Linux x86_64 动态库 | ✅ Zig/Clang 22 | ✅ 带 `--no-undefined` | ✅ 43/43 | ⚠️ 本机跑不了，交给 CI 的 `linux` 作业 |
+| Linux aarch64 动态库 | ✅ | ✅ | ✅ 43/43 | ❌ |
 | Linux x86_64 静态库 | ✅ | ✅（azcore 链接 `andzip_core.a`，30.9 MB） | n/a | ❌ |
 | macOS | ❌ 无 Apple SDK | — | — | — |
 
@@ -194,10 +194,15 @@ build\native\bin\azcore.exe formats                 # 支持的格式
 build\native\bin\azcore.exe codecs                  # 支持的编解码器
 build\native\bin\azcore.exe list    backup.7z       # 列出条目
 build\native\bin\azcore.exe create  out.7z -f 7z -m LZMA2 -x 7 C:\some\dir
+build\native\bin\azcore.exe create  out.zip -f zip -x 5 -t 8 -e fb=128 C:\big.bin
 build\native\bin\azcore.exe extract out.7z C:\out -p hunter2
 build\native\bin\azcore.exe test    out.7z          # 只校验不解压
 build\native\bin\azcore.exe hash   file.bin -a sha256
 ```
+
+`-t <n>` 定线程数（0 = 用引擎默认）；`-e name=value` 可以重复，是把任意 7-Zip 属性原样下发到
+handler 的属性表，不用等门面给它加一个结构体字段 —— 试 `fb` / `mf` / `nbWorkers` 这类调优参数
+就靠它（`az_create_options.extra_properties` 是同一条通道）。
 
 ### 2. 最小 GUI 验证程序：azgui
 

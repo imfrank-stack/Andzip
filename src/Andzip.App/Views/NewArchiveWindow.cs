@@ -60,6 +60,7 @@ public sealed class NewArchiveWindow : Window
     private readonly TextBox _commentBox;
     private readonly TextBlock _estimateValue;
     private readonly TextBlock _methodEstimates;
+    private readonly StackPanel _formatAdvice;
     private ArchiveFormatOption _currentFormat = ArchiveFormatOption.Default;
     private string? _password;
     private int? _customVolumeMb;
@@ -275,6 +276,29 @@ public sealed class NewArchiveWindow : Window
             TextWrapping = TextWrapping.Wrap,
         };
 
+        // 单个条目特别大时的一句"换 7z 会快得多"。判断在 Core（LargeEntryAdvice），
+        // 这里只负责说出来和给一键。它是建议不是拦截：按下"开始"照样按 ZIP 压。
+        var switchToSevenZip = new Button { Content = lang.Label("TEXT_HINT_SWITCH_TO_7Z"), MinWidth = 90 }.Ghost();
+        _formatAdvice = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = Design.Space.X2,
+            IsVisible = false,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = lang.Label("TEXT_HINT_ZIP_LARGE_ENTRY"),
+                    Foreground = Design.Ink.Secondary,
+                    FontSize = Design.Type.Caption,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+                switchToSevenZip,
+            },
+        };
+        switchToSevenZip.Click += (_, _) => SelectSevenZipFormat();
+
         // 每种方法各压一小段（表预算比单格小得多，图的是这份排序而不是第三位小数）。
         // 放在高级面板里：这一格本来就是"在方法之间挑一个"的地方。
         _methodEstimates = new TextBlock
@@ -343,7 +367,7 @@ public sealed class NewArchiveWindow : Window
         var grid = new Grid
         {
             Margin = new Thickness(16),
-            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
         };
 
@@ -358,7 +382,8 @@ public sealed class NewArchiveWindow : Window
         AddRow(grid, 8, moreOptionsPanel, 3);
         AddRow(grid, 9, BuildFieldRow(lang.Label("TEXT_LABEL_ESTIMATE"), _estimateValue), 3);
         AddRow(grid, 10, _hint, 3);
-        AddRow(grid, 11, BuildBottomRow(moreOptionsCheck, cancelButton), 3);
+        AddRow(grid, 11, _formatAdvice, 3);
+        AddRow(grid, 12, BuildBottomRow(moreOptionsCheck, cancelButton), 3);
 
         // 右侧「高级设置」面板与主区域并排（展开时窗口加宽，FR-2.5）
         var root = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
@@ -837,6 +862,7 @@ public sealed class NewArchiveWindow : Window
 
         // 每一个会改变"压完多大"的入口都汇到这里：加减文件、换格式、换级别、换方法、
         // 改分卷、甚至改文件名。RefreshEstimate 里有一道合并窗口，所以打字不会被拖累。
+        RefreshFormatAdvice();
         RefreshEstimate();
     }
 
@@ -865,6 +891,7 @@ public sealed class NewArchiveWindow : Window
             _lastPrediction = null;
             _estimateValue.Text = string.Empty;
             _methodEstimates.IsVisible = false;
+            RefreshFormatAdvice();
             return;
         }
 
@@ -897,6 +924,7 @@ public sealed class NewArchiveWindow : Window
 
             _lastPrediction = prediction;
             RenderEstimate();
+            RefreshFormatAdvice();
 
             if (wantTable)
             {
@@ -963,6 +991,46 @@ public sealed class NewArchiveWindow : Window
         }
 
         return (int)((outputBytes + size - 1) / size);
+    }
+
+    /// <summary>
+    /// 那句「换 7z 会快得多」该不该说。依据是刚回来的那份预估顺手量到的最大单条目
+    /// （<see cref="LargeEntryAdvice"/>）—— 不为了这一句话把目录再走一遍。
+    /// </summary>
+    private void RefreshFormatAdvice()
+        => _formatAdvice.IsVisible = _lastPrediction is { } prediction
+            && LargeEntryAdvice.SuggestSevenZip(SelectedFormat(), prediction.LargestEntryBytes)
+            && SevenZipFormatIndex() is not null;
+
+    /// <summary>
+    /// 7z 在格式下拉里排第几。引擎此刻写不了 7z 时它是 null —— 那时候这句建议没处可去，
+    /// 不该摆一颗点了没反应的按钮。
+    /// </summary>
+    private int? SevenZipFormatIndex()
+    {
+        if (_formatCombo.ItemsSource is not IReadOnlyList<DisplayItem> items)
+        {
+            return null;
+        }
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (items[i].Value is ArchiveFormatOption { IsSevenZip: true })
+            {
+                return i;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>一键切到 7z：改的是下拉框的选择，所以扩展名同步、方法表重建、预估重算都自动跟着发生。</summary>
+    private void SelectSevenZipFormat()
+    {
+        if (SevenZipFormatIndex() is { } index)
+        {
+            _formatCombo.SelectedIndex = index;
+        }
     }
 
     /// <summary>每种方法各压一小段之后的总大小，按格式自己的方法表顺序排。要的是这一排数的对比。</summary>

@@ -1103,6 +1103,73 @@ static void TestSplitVolumes7z()
   EndTest();
 }
 
+static void TestExtraProperties()
+{
+  BeginTest("extra_properties hands a number to the coder as a number");
+
+  const fs::path dir = TempSubdir("props");
+  const std::vector<unsigned char> payload = MakePayload(2 * 1024 * 1024);
+
+  az_create_options co = AZ_CREATE_OPTIONS_INIT;
+  co.format = "zip";
+  co.method = "Deflate";
+  co.level = 5;
+
+  az_writer w = NULL;
+  CHECK_AZ(az_writer_open((dir / "base.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+  const unsigned long long baseSize = (unsigned long long)fs::file_size(dir / "base.zip");
+
+  // "fb" (max match length) is declared VT_UI4 in the engine's coder-property table,
+  // and ConvertProperty() only accepts a variant of the matching type. While this
+  // channel handed every value over as a string, "fb=2" failed the whole write with
+  // E_INVALIDARG; being accepted is therefore half of what this asserts. The size is
+  // the other half: a match length of 2 must compress *worse*, which is how we know
+  // the number reached the encoder instead of being dropped on the way.
+  co.extra_properties = "fb=2";
+  CHECK_AZ(az_writer_open((dir / "fb2.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+  CHECK((unsigned long long)fs::file_size(dir / "fb2.zip") > baseSize);
+
+  // A second knob on the same channel. On this payload mc=4 happens to land on the
+  // same output size as the default (it moves the search, and this input's matches are
+  // already found), so the assertion is only that a numeric property of a *different*
+  // name is accepted too -- the size claim above is what proves the values arrive.
+  co.extra_properties = "mc=4";
+  CHECK_AZ(az_writer_open((dir / "mc4.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+  CHECK(fs::file_size(dir / "mc4.zip") > 0);
+
+  // Several pairs at once still go through.
+  co.extra_properties = "fb=16\npass=2";
+  CHECK_AZ(az_writer_open((dir / "ok2.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+  CHECK(fs::file_size(dir / "ok2.zip") > 0);
+
+  // A name the coder does not know is a hard error, not a silent ignore. It arrives at
+  // finish, because that is when the accumulated property list is handed to the handler
+  // -- and it must not leave an archive behind.
+  co.extra_properties = "zzz=1";
+  CHECK_AZ(az_writer_open((dir / "bad.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  az_result badRes = az_writer_finish(w, NULL, NULL);
+  az_writer_free(w);
+  w = NULL;
+  CHECK(badRes != AZ_OK);
+  CHECK(!fs::exists(dir / "bad.zip"));
+
+  co.extra_properties = NULL;
+  EndTest();
+}
+
 // ---------------------------------------------------------------------------
 
 // Builds a USTAR archive byte-by-byte straight from the POSIX tar spec.
@@ -1510,6 +1577,7 @@ int main()
   TestForeignArchive();
   TestBadInput();
   TestSplitVolumes7z();
+  TestExtraProperties();
   TestUpdateExisting();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

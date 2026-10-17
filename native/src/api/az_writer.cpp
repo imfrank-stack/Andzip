@@ -708,6 +708,17 @@ void BuildProperties(const WriterCtx *ctx, CObjectVector<PropEntry> &props, AStr
 
   // Passthrough for anything the structured options do not cover, e.g.
   // "mf=bt4\nfb=273" or "tc=off".
+  //
+  // The value's VARIANT type is not cosmetic. The engine's coder-property table
+  // (Common/MethodProps.cpp, g_NameToPropID) declares fb / mc / pass / a / mt as
+  // VT_UI4, and ConvertProperty() only accepts a source variant of the same type
+  // (the single exceptions are UI4->UI8 and anything convertible to VT_BOOL).
+  // Handing it a VT_BSTR "273" is therefore not "a number in a string", it is a
+  // type mismatch: E_INVALIDARG, and the whole write fails. Measured: before this
+  // block was type-aware, "-e fb=64" on a zip died in az_writer_finish while
+  // "-e d=24m" on a 7z worked, because size properties take the string path.
+  // So an all-digit value goes in as VT_UI4; everything else stays a string, which
+  // is what mf=bt4, filter=... and the d=24m suffix parser actually want.
   if (o.extra_properties && *o.extra_properties)
   {
     const AString extra(o.extra_properties);
@@ -722,7 +733,22 @@ void BuildProperties(const WriterCtx *ctx, CObjectVector<PropEntry> &props, AStr
       if (!line.IsEmpty() && eq > 0)
       {
         const AString propName = line.Left((unsigned)eq);
-        AddStringProp(props, propName.Ptr(), Utf8ToU(line.Ptr(eq + 1)));
+        const AString value = line.Mid((unsigned)eq + 1, line.Len() - (unsigned)eq - 1);
+        UInt32 number = 0;
+        bool isNumber = !value.IsEmpty();
+        for (unsigned k = 0; k < value.Len(); k++)
+        {
+          const char c = value[k];
+          if (c < '0' || c > '9') { isNumber = false; break; }
+          // A value too big for UInt32 is handed over as a string rather than
+          // silently wrapping into a different property value.
+          if (number > (0xFFFFFFFFu - 9u) / 10u) { isNumber = false; break; }
+          number = number * 10u + (UInt32)(c - '0');
+        }
+        if (isNumber)
+          AddUInt32Prop(props, propName.Ptr(), number);
+        else
+          AddStringProp(props, propName.Ptr(), Utf8ToU(value.Ptr()));
       }
       if (eol < 0)
         break;
