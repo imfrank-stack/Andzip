@@ -504,6 +504,12 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// <para><see cref="ExtractOnDoubleClick"/> 对应「设置 → 解压 → 双击压缩包文件时」，
     /// 它决定 <c>shell\open</c> 这一行在菜单上叫什么：<strong>菜单写的必须就是双击真的做的事</strong>
     /// （0.9.12 用户报过反过来的那次：行写着「用 Andzip 打开」，点下去却去解压）。</para>
+    /// <para><strong>5.0.0 起这一行叫「解压」，界面上不再有"智能解压"这个词</strong>（用户要求：
+    /// 所有的解压都是那一条按包里形状决定落点的规则，不需要一个专门的名字）。
+    /// 于是双击=解压时，<c>shell\open</c> 与 <c>shell\extract</c> 是<strong>同一件事</strong> ——
+    /// 后者让位藏起来，菜单上只留一行「解压」，跟 <c>andzip-open</c> 在双击=打开时让位是同一条机制。
+    /// 让位的必须是 <c>extract</c> 不是 <c>open</c>：<see cref="WriteCommands"/> 那条 0.10.0 的实测
+    /// 教训说 <c>shell\open</c> 一藏起来就不再是双击的默认动词。</para>
     /// </summary>
     internal sealed record ExtractionVerbLabels(string Open, string Extract, string ExtractDelete)
     {
@@ -511,12 +517,13 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
 
         public bool ExtractOnDoubleClick { get; init; }
 
-        /// <summary>双击=直接解压时，<c>shell\open</c> 那一行改叫这个名字（来自语言包）。</summary>
-        public string ExtractDirectly { get; init; } = string.Empty;
-
-        /// <summary><c>shell\open</c> 在菜单上的文字。没给"直接解压"那句时退回「用 Andzip 打开」。</summary>
-        public string DoubleClickLabel =>
-            ExtractOnDoubleClick && ExtractDirectly.Length > 0 ? ExtractDirectly : Open;
+        /// <summary>
+        /// <c>shell\open</c> 在菜单上的文字：双击是解压就叫「解压」，是打开就叫「用 Andzip 打开」。
+        /// <para>以前这里读的是另一个键（<c>TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT</c>，值"智能解压"），
+        /// 于是菜单上多出一行与「解压」同义不同名的条目。5.0.0 起两处用同一句文案 ——
+        /// 一个功能两个名字，正是用户这次要消掉的东西。</para>
+        /// </summary>
+        public string DoubleClickLabel => ExtractOnDoubleClick ? Extract : Open;
     }
 
     /// <summary>
@@ -540,9 +547,11 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// 直接读 <c>shell</c> 默认值的走法两种情况下都对 —— 之前三次"修好了"都是被它骗过去的。
     /// </para>
     /// <para>
-    /// 重复的那一行改由「用 Andzip 打开」<strong>自己</strong>让位：双击本来就是打开时，
-    /// <c>shell\open</c> 已经叫这个名字，<c>andzip-open</c> 藏起来；双击是直接解压时两行名字不同，
-    /// 都留着，那条"永远在软件里打开"的承诺还在菜单上。
+    /// 重复的那一行一律由<strong>多出来的那一条自己</strong>让位，<c>shell\open</c> 永远留着：
+    /// 双击本来就是打开时，<c>shell\open</c> 已经叫「用 Andzip 打开」，<c>andzip-open</c> 藏起来；
+    /// 双击是解压时（5.0.0 起这一行就叫「解压」），<c>shell\extract</c> 与它同义又同功能，
+    /// 于是 <c>extract</c> 藏起来，而「用 Andzip 打开」那条承诺回到菜单上。
+    /// 两种情况下菜单里都只剩一行「解压」，做的都是按包里形状决定落点的那一条。
     /// </para>
     /// </summary>
     /// <returns>有没有真的改过（值全都一样时一笔都不写）。</returns>
@@ -560,7 +569,9 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
             hidden: !labels.ExtractOnDoubleClick);
         changed |= WriteVerb(shell, "extract", labels.Extract, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.Extract),
-            enabled: labels.ShowExtractVerbs);
+            // 双击那一档就是解压时，上面那条 shell\open 已经叫「解压」、做的也是同一条任务 ——
+            // 菜单上并排两行同义的就是噪音。让位的是这一条，不是 shell\open（0.10.0 那条教训）。
+            enabled: labels.ShowExtractVerbs && !labels.ExtractOnDoubleClick);
         changed |= WriteVerb(shell, "extract-delete", labels.ExtractDelete, executablePath,
             Quote(executablePath) + " \"%1\" " + Core.Archive.ShellTasks.Switch(Core.Archive.ShellTask.ExtractDelete),
             enabled: labels.ShowExtractVerbs);

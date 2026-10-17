@@ -319,12 +319,12 @@ TEXT_MENU_COMPRESS_ZIP                  = Compress as ZIP
 TEXT_MENU_COMPRESS_DIALOG               = Compress to... (password / volumes)
 TEXT_SETTINGS_CONTEXT_MENU_TITLE        = Context menu
 TEXT_SETTINGS_CTX_NOTE                  = Menu entries are static registry verbs and need no administrator rights; on Windows 11 they live under "Show more options".
-TEXT_SETTINGS_CTX_EXTRACT_RULES         = Extract looks at what the archive holds: a lone file comes out as-is; everything under one top-level folder releases that whole folder without wrapping it in a second copy of itself; anything else goes into a new folder named after the archive, using "name1", "name2" when that name is taken. "Extract and delete" uses the same rules and removes the archive once the extraction succeeded, volumes included.
+TEXT_SETTINGS_CTX_EXTRACT_RULES         = Extract looks at what the archive holds: a lone file comes out as-is; everything under one top-level folder releases that whole folder without wrapping it in a second copy of itself; anything else goes into a new folder named after the archive, using "name1", "name2" when that name is taken. The Extract button on the home screen and the double-click option follow this same rule -- there is no second, "smarter" kind of extraction in this program. "Extract and delete" uses the same rules and removes the archive once the extraction succeeded, volumes included.
 TEXT_SETTINGS_CTX_COMPRESS_FILES        = Add "Compress as" entries for all files
 TEXT_SETTINGS_CTX_COMPRESS_FOLDERS      = Add "Compress as" entries for folders
 TEXT_SETTINGS_CTX_COMPRESS_HINT         = Neither entry appears on an archive: right-clicking a .zip and offering to "Compress as ZIP" is pointless. exe is the exception — to us it is a self-extracting archive, to the user it is a file they may want smaller.
 TEXT_SETTINGS_CTX_EXTRACT               = Add "Extract" entries for associated archives
-TEXT_SETTINGS_CTX_EXTRACT_HINT          = This one follows the file associations: with nothing associated yet it has nothing to act on. Double-click behaviour is not decided here — see "General → On double-clicking an archive".
+TEXT_SETTINGS_CTX_EXTRACT_HINT          = This one follows the file associations: with nothing associated yet it has nothing to act on. Double-click behaviour is decided by "Settings > Extraction > When double-clicking an archive", not here. Note that when that option is set to Extract, the Extract row in the menu *is* the double-click row — one action should not appear twice side by side — so this toggle only governs Extract and delete.
 TEXT_SETTINGS_CTX_UNSUPPORTED           = The context menu can only be configured on Windows.
 TEXT_SETTINGS_CTX_FAILED                = Writing the context menu entries failed:
 TEXT_BTN_SET_DEFAULT                    = Set as default...
@@ -356,10 +356,12 @@ TEXT_SETTINGS_COMPRESS_OUTPUT_FIXED_HINT = Leaving it empty behaves like "the fo
 TEXT_SETTINGS_EXTRACT_TITLE             = Extraction settings
 TEXT_SETTINGS_DOUBLE_CLICK_LABEL        = When double-clicking an archive
 TEXT_SETTINGS_DOUBLE_CLICK_OPEN         = Open Andzip
-TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = Smart extract
-TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This only changes what the program itself does; it does not rewrite registry verbs, so it takes effect at once for every associated format. Double-clicking then does exactly what the right-click Extract does: read the listing first, then let the shape of the archive decide -- a tree wrapped in one top-level directory lands as that directory, a loose mix is wrapped in a folder named after the archive. Only the progress bar shows, and it closes when it finishes.
+// The name of the double-click option. Since 5.0.0 the UI no longer says "smart extract" anywhere:
+// that option and the right-click Extract resolve to the very same ShellTask.Extract.
+TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT      = Extract
+TEXT_SETTINGS_DOUBLE_CLICK_HINT         = This changes what the program itself does, so double-clicking follows it at once; the menu row's own text is rewritten on the next start (or when you press Apply on Settings > Context menu). With it on, double-clicking does exactly what the right-click Extract does: read the listing first, then let the shape of the archive decide -- a tree wrapped in one top-level directory lands as that directory, a loose mix is wrapped in a folder named after the archive. Only the progress bar shows, and it closes when it finishes.
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = When extracting, put a lone file into a new folder too
-TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = Off by default: an archive holding one file simply releases that file. When on, a folder named after that file is created (photo.jpg.gz becomes photo\photo.jpg), using "name1", "name2" when the name is taken. This applies to both the right-click Extract and the double-click Smart extract.
+TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = Off by default: an archive holding one file simply releases that file. When on, a folder named after that file is created (photo.jpg.gz becomes photo\photo.jpg), using "name1", "name2" when the name is taken. The right-click Extract, the double-click option and the Extract button on the home screen all follow this one rule.
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = Open the folder after extraction
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = Only opens once extraction actually finished; a failure or a cancel never pops open a half-filled directory.
 
@@ -506,6 +508,9 @@ MENUSTR_OPEN_ARCHIVE_FOLDER             = Open archive location
 MENUSTR_TEST_ARCHIVE                    = &Test archive
 MENUSTR_CRC                             = CRC
 MENUSTR_EXTRACT_FILE                    = &Extract files
+// Added in 5.0.0: Extract files joined the right-click smart extract, so the pick-a-folder
+// dialog moved onto this row.
+MENUSTR_EXTRACT_TO                      = Extract to...
 MENUSTR_NEW_WINDOW                      = New application window
 MENUSTR_NEW_WINDOW_ADMIN                = New application window (as administrator)
 MENUSTR_EXIT                            = E&xit

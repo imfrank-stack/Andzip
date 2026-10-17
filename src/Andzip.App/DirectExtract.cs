@@ -55,25 +55,35 @@ internal static class DirectExtract
         }
     }
 
-    private static async Task ExtractAsync(
+    /// <summary>
+    /// 跑一次解压。<strong>三条路共用这一份</strong>：右键「解压」/「解压并删除」、双击那一档、
+    /// 以及 5.0.0 起首页那颗「解压」（<c>MainWindow.ExtractArchiveAsync</c>）。
+    /// <para>差别只在传进来的东西上：属主窗口（进度框挂在谁身上）、口令（主窗口浏览过这个包
+    /// 就带着已验证的那一份来，不再问一遍）、以及要不要跑完删包。</para>
+    /// </summary>
+    /// <param name="cachedPassword">主窗口已经为这个包输过并验证过的口令；null 表示没有。</param>
+    internal static async Task<Run> ExtractAsync(
         LangCatalog lang,
         AppSettings appSettings,
         ShellTask task,
         string archivePath,
         ProgressWindow progress,
-        CancellationTokenSource cts)
+        CancellationTokenSource cts,
+        string? cachedPassword = null)
     {
         // 加密包先问一次口令再开工：解压到一半才报“要口令”会留下一堆半截文件。
-        string? password = null;
-        if (await Task.Run(() => ArchiveExtractor.IsPasswordProtected(archivePath)))
+        string? password = cachedPassword;
+        var prompted = false;
+        if (password is null && await Task.Run(() => ArchiveExtractor.IsPasswordProtected(archivePath)))
         {
             var prompt = new PasswordWindow(lang, initialPassword: null, requireConfirmation: false);
             if (await prompt.ShowDialog<bool>(progress) != true)
             {
-                return;
+                return new Run(null, null, false, false);
             }
 
             password = prompt.Password;
+            prompted = true;
         }
 
         var destination = await ExtractDestinationAsync(
@@ -96,12 +106,23 @@ internal static class DirectExtract
         catch (OperationCanceledException)
         {
             // 用户主动取消：静默收尾，不弹错误框吓唬人。
+            return new Run(destination, password, prompted, false);
         }
         catch (Exception ex)
         {
             await ShowError(lang, progress, ex.Message);
+            return new Run(destination, password, prompted, false);
         }
+
+        return new Run(destination, password, prompted, true);
     }
+
+    /// <summary>
+    /// 一次解压的结果。<see cref="Succeeded"/> 为假时调用方别记口令、别开目录 ——
+    /// 「解出来了才算这个口令是对的」，而失败或取消时打开一个装了一半的目录，
+    /// 比不打开更容易让人误以为东西都在里面。
+    /// </summary>
+    internal readonly record struct Run(string? Destination, string? Password, bool Prompted, bool Succeeded);
 
     /// <summary>
     /// 解压落点：读一遍清单，看顶层是单文件、单子目录还是零散一堆。

@@ -28,7 +28,6 @@ internal static class ShellVerbLabels
         // 「设置 → 上下文菜单 → 解压菜单项」。关掉之后 ProgID 里只留双击那一条。
         ShowExtractVerbs = settings.GetBool(SettingKeys.ContextMenuExtractVerbs, fallback: true),
         ExtractOnDoubleClick = SettingKeys.ShouldExtractDirectly(settings.GetString(SettingKeys.DoubleClickAction)),
-        ExtractDirectly = lang.Get("TEXT_SETTINGS_DOUBLE_CLICK_EXTRACT"),
     };
 
     /// <summary>

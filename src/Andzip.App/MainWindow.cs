@@ -177,6 +177,7 @@ public sealed class MainWindow : Window
             [MainMenuModel.CommandOpenArchive] = OpenArchiveAsync,
             [MainMenuModel.CommandCloseArchive] = CloseArchive,
             [MainMenuModel.CommandExtractArchive] = ExtractArchiveAsync,
+            [MainMenuModel.CommandExtractTo] = ExtractToAsync,
             [MainMenuModel.CommandTestArchive] = TestArchiveAsync,
             [MainMenuModel.CommandNewWindow] = () => NewWindow(elevated: false),
             [MainMenuModel.CommandNewWindowAdmin] = () => NewWindow(elevated: true),
@@ -784,7 +785,7 @@ public sealed class MainWindow : Window
     /// 不是在当前窗口里再开一块内容区 —— 参考软件那两条也是两个进程，管理员那一扇才装得下
     /// 后面要做的"改系统位置"这类事。
     /// <para>命令行必须自己带上 <c>/task=open</c>：不带开关的那一条是<strong>双击</strong>的语义，
-    /// 做什么由「设置 → 解压 → 双击压缩包文件时」决定 —— 那一档现在是智能解压，
+    /// 做什么由「设置 → 解压 → 双击压缩包文件时」决定 —— 那一档现在可以就是「解压」，
     /// 少了这个开关，"开一扇新窗口"就变成"把包解压了"。</para>
     /// <para>提权那一条走 <c>Verb = "runas"</c>：UAC 框由系统弹、由用户按，这一条命令本身就是
     /// 用户点出来的，所以不算静默提权。用户按取消（<c>ERROR_CANCELLED</c>）与这台机器不让他提权
@@ -1950,8 +1951,61 @@ public sealed class MainWindow : Window
         _settings.Save(AppSettings.DefaultFilePath);
     }
 
-    /// <summary>解压文件（Ctrl+E）：解压已打开的压缩包；未打开时先选择压缩包（FR-3.1 流程）。</summary>
+    /// <summary>
+    /// 解压（Ctrl+E，也就是首页工具栏那颗「解压」）：5.0.0 起这一颗做的是<strong>与右键「解压」、
+    /// 与双击那一档同一件事</strong> —— 先读一遍清单，落点由包里的形状决定（<c>ExtractionLayout</c>），
+    /// 不再先开一扇「选择解压路径」问一句。用户的话是「所有的解压都是智能解压」。
+    /// <para>
+    /// 执行体是 <see cref="DirectExtract.ExtractAsync"/> 那<strong>同一份</strong>：口令、进度、重名询问、
+    /// 失败报法全在里头。以前这里是一份平行的实现（自己的口令段、自己的 <c>ExtractionSettings</c>、
+    /// 自己的错误框），两份代码两份命运 —— 4.8.0 那次"对话框不避让同名文件夹"就是这么来的。
+    /// 要自己挑目录的走「文件 → 解压到…」（<see cref="ExtractToAsync"/>）。
+    /// </para>
+    /// </summary>
     private async void ExtractArchiveAsync()
+    {
+        var archivePath = _listing?.ArchivePath ?? await PickArchiveAsync();
+        if (archivePath is null)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        var progress = new ProgressWindow(
+            _lang, cts, "TEXT_STATUS_EXTRACTING",
+            cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
+
+        _ = progress.ShowDialog(this);
+
+        // 浏览这个包时已经输过口令 → 带过去，不再问第二遍（右键那一路没有这一份，传 null）。
+        var cached = Session.Passwords.TryGet(archivePath, out var remembered) ? remembered : null;
+        var run = await DirectExtract.ExtractAsync(
+            _lang, _settings, ShellTask.Extract, archivePath, progress, cts, cached);
+
+        // 解出来了才算这个口令是对的。一输完就存，代价是下一次开机 Andzip 会拿着一个
+        // 从没验证过的口令直接失败 —— 用户看到的「密码错误」是他根本没输过的东西。
+        if (run is { Succeeded: true, Prompted: true })
+        {
+            Session.Passwords.Remember(archivePath, run.Password);
+        }
+
+        // 「设置 → 解压 → 解压后打开文件夹」：只在真的解完了之后开。
+        if (run is { Succeeded: true, Destination: { } folder }
+            && ExtractionDefaults.Load(_settings).OpenFolderAfterExtract)
+        {
+            OpenInExplorer(folder);
+        }
+
+        progress.Close();
+    }
+
+    /// <summary>
+    /// 解压到…（Ctrl+Shift+E）：开「选择解压路径」那扇对话框，由用户挑目录。
+    /// <para>5.0.0 之前这就是「解压文件」的全部；那颗改成一键智能解压之后，这一份挪到这里，
+    /// 因为对话框里那三样（挑目录、解压后删除压缩文件、记住设置）智能解压表达不了。
+    /// 名字上两者不冲突：一条叫「解压」，一条叫「解压到…」—— 后者是"我自己说去哪儿"。</para>
+    /// </summary>
+    private async void ExtractToAsync()
     {
         var archivePath = _listing?.ArchivePath ?? await PickArchiveAsync();
         if (archivePath is null)
@@ -2057,7 +2111,7 @@ public sealed class MainWindow : Window
         // 跑完就关。「设置 → 解压 → 解压完成后不关闭进度窗口」那一档 4.9.0 删了：
         // 它唯一的作用是把这一屏留在屏幕上，而留着的时候它永远写着「正在解压… 100%」，
         // 看着就是卡住 —— 4.8.1 修过那句话，但修不完一个不该存在的开关。
-        // 现在窗口里这一颗与右键、双击那一路同一个结局。
+        // 现在窗口里这两颗（「解压」与「解压到…」）与右键、双击那一路同一个结局。
         progress.Close();
     }
 

@@ -20,7 +20,9 @@ public sealed record MenuModel(string Id, string TextKey, IReadOnlyList<MenuItem
 /// <summary>
 /// 主菜单结构（对应需求文档附录 A，7 个顶级菜单）。
 /// <para>已接入的命令：退出（Ctrl+W）、新建压缩文件（Ctrl+N）、打开压缩文件（Ctrl+O）、
-/// 关闭（F4）、解压文件、测试压缩文件（Ctrl+T）、<strong>文件 → CRC</strong>（十一种算法，4.7.0）、
+/// 关闭（F4）、解压文件（5.0.0 起这一条与右键「解压」同一条任务）、
+/// 解压到…（Ctrl+Shift+E，同一轮加的：挑目录那扇对话框挪到这里）、测试压缩文件（Ctrl+T）、
+/// <strong>文件 → CRC</strong>（十一种算法，4.7.0）、
 /// 文件查找（Ctrl+F）、设置（F5）、
 /// 关于（F1）、打开 Andzip 安装目录、转到官网，
 /// 以及「编辑」整排七项（重命名 / 添加 / 删除 / 注释 / 复制 / 粘贴 / 复制完整路径，3.4.0）、
@@ -43,8 +45,19 @@ public static class MainMenuModel
     /// <summary>关闭压缩文件（回到启动画面）。</summary>
     public const string CommandCloseArchive = "file.close";
 
-    /// <summary>解压文件（未打开压缩包时先选择压缩包）。</summary>
+    /// <summary>
+    /// 解压文件（5.0.0 起与右键「解压」、与双击那一档同一条任务：落点由包里的形状决定）。
+    /// 首页工具栏那颗「解压」也是这一条命令。
+    /// </summary>
     public const string CommandExtractArchive = "file.extract";
+
+    /// <summary>
+    /// 解压到…（<c>Ctrl+Shift+E</c>）：开「选择解压路径」那扇对话框，目录由用户挑。
+    /// <para>这一条以前就是「解压文件」本身；那颗并到智能解压之后，对话框挪到这里单独给一个入口 ——
+    /// 里面那三样（挑目录、解压后删除压缩文件、记住设置）一键那条表达不了，
+    /// 而把对话框整个删掉等于顺手抹掉一个还在用的功能。</para>
+    /// </summary>
+    public const string CommandExtractTo = "file.extractto";
 
     /// <summary>测试压缩包完整性（Ctrl+T；未打开时同样先选择压缩包）。</summary>
     public const string CommandTestArchive = "file.test";
@@ -223,6 +236,7 @@ public static class MainMenuModel
             new("file.test", "MENUSTR_TEST_ARCHIVE", "Ctrl+T", Enabled: true, CommandId: CommandTestArchive),
             new("file.crc", "MENUSTR_CRC", Enabled: true, CommandId: CommandCrc),
             new("file.extract", "MENUSTR_EXTRACT_FILE", "Ctrl+E", Enabled: true, CommandId: CommandExtractArchive),
+            new("file.extractto", "MENUSTR_EXTRACT_TO", "Ctrl+Shift+E", Enabled: true, CommandId: CommandExtractTo),
             MenuItemModel.Separator(),
             new("file.newwindow", "MENUSTR_NEW_WINDOW", "Ctrl+Shift+N", Enabled: true, CommandId: CommandNewWindow),
             new("file.newwindowadmin", "MENUSTR_NEW_WINDOW_ADMIN", "Ctrl+Alt+N", Enabled: true, CommandId: CommandNewWindowAdmin),
