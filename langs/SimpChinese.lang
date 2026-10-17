@@ -79,6 +79,8 @@ TEXT_BTN_START                          = 开始(&S)
 TEXT_BTN_CANCEL                         = 取消
 TEXT_DEFAULT_ARCHIVE_NAME               = 新建压缩
 TEXT_STATUS_COMPRESSING                 = 正在压缩...
+// 开着「设置 → 压缩 → 压缩完成后不关闭进度窗口」时，那一屏跑完之后说的话
+TEXT_STATUS_COMPRESS_DONE               = 压缩完成
 TEXT_STATUS_NOT_IMPLEMENTED             = 该功能暂未实现
 TEXT_ERR_NO_INPUT                       = 请先添加要压缩的文件或文件夹。
 TEXT_ERR_OUTPUT_NOT_SET                 = 请指定压缩文件路径。
@@ -109,6 +111,9 @@ TEXT_CHECK_DELETE_ARCHIVE_AFTER         = 解压后删除压缩文件(&L)
 TEXT_CHECK_REMEMBER_SETTINGS            = 记住设置(&R)
 TEXT_NEW_FOLDER_DEFAULT                 = 新建文件夹
 TEXT_STATUS_EXTRACTING                  = 正在解压...
+// 开着「设置 → 解压 → 解压完成后不关闭进度窗口」时，那一屏跑完之后说的话。
+// 少了这一句，留着的框永远停在「正在解压… 100%」，读起来是卡住而不是完事。
+TEXT_STATUS_EXTRACT_DONE                = 解压完成
 TEXT_ERR_DEST_NOT_SET                   = 请指定解压目标路径。
 TEXT_TITLE_ERROR                        = 错误
 TEXT_ERR_EXTRACT_FAILED                 = 解压失败：

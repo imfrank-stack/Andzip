@@ -40,6 +40,16 @@ public sealed class ProgressWindow : Window
     private bool _cancelled;
 
     /// <summary>
+    /// 这件事已经跑完，只是这一屏按「完成后不关闭进度窗口」留着。
+    /// <para>立起这一枚之后 <see cref="Update"/> 不再画任何东西 —— 晚到的一帧会把
+    /// 「解压完成」说回「正在解压」，而 <see cref="Cancel"/> 也不再碰那个令牌。</para>
+    /// </summary>
+    private bool _finished;
+
+    /// <summary>最后一帧进度，<see cref="Finish"/> 用它把"解了多少"这半句留在屏幕上。</summary>
+    private ArchiveProgress? _last;
+
+    /// <summary>
     /// 从<strong>第一帧进度</strong>开始计时，不是从窗口构造开始。
     /// 构造到真正搬字节之间可能隔着一次口令询问 —— 把用户想口令的那几十秒算进速度里，
     /// 剩余时间会估成一个荒谬的大数。
@@ -112,8 +122,47 @@ public sealed class ProgressWindow : Window
         }
 
         _cancelled = true;
-        _cancellation.Cancel();
+
+        // 跑完之后这一屏只是留着给人看结果：这时候的 X 与 Esc 关窗就行，
+        // 再去碰那个已经结束的令牌只是让"取消"这个词说谎（它什么也取消不了）。
+        if (!_finished)
+        {
+            _cancellation.Cancel();
+        }
+
         Close();
+    }
+
+    /// <summary>
+    /// 这件事跑完了，而这一屏要留着（「设置 → 解压 / 压缩 → 完成后不关闭进度窗口」）。
+    /// <para>
+    /// <strong>为什么必须有这一句</strong>：一根满的蓝条配一句「正在解压…」读起来是"卡住了"，
+    /// 不是"完事了" —— 用户报的「进度条不消失」就是这个。开着这一档的人要的是"留着让我
+    /// 看一眼跑了多少"，那就得把话说成完成，而不是把"正在"两个字永远停在屏幕上。
+    /// </para>
+    /// </summary>
+    /// <param name="doneKey">说"…完成"的那条文案（解压与压缩各一条，不能共用一句"正在"的）。</param>
+    public void Finish(string doneKey)
+    {
+        _finished = true;
+        _textKey = doneKey;
+        _bar.IsIndeterminate = false;
+        _bar.Value = 100;
+
+        var label = _lang.Label(doneKey);
+        var line = $"{label}  100%";
+
+        if (_last is { TotalBytes: > 0 } sized)
+        {
+            line += $"  {SizeText.Format(sized.DoneBytes)} / {SizeText.Format(sized.TotalBytes)}";
+        }
+        else if (_last is { DoneBytes: > 0 } unsized)
+        {
+            line += $"  {SizeText.Format(unsized.DoneBytes)}";
+        }
+
+        Title = label;
+        _text.Text = line;
     }
 
     /// <summary>
@@ -127,6 +176,16 @@ public sealed class ProgressWindow : Window
     /// <summary>刷新一帧进度。只能从 UI 线程调用 —— 用 <see cref="CreateSink"/> 就自动满足。</summary>
     public void Update(ArchiveProgress progress)
     {
+        // 已经说过"完成了"，就别让晚到的那一帧把这句话改回"正在…"。
+        // （交给 Core 的那条汇是先进先出的投递，正常情况下最后一帧本来就排在 Finish 之前；
+        // 这里挡的是以后那种"跑完之后再报一次"的实现改动。）
+        if (_finished)
+        {
+            return;
+        }
+
+        _last = progress;
+
         if (!_clock.IsRunning)
         {
             _clock.Start();

@@ -834,12 +834,16 @@ public sealed class NewArchiveWindow : Window
                 ShowHint(string.Join(Environment.NewLine, warnings));
             }
 
-            // 「设置 → 压缩 → 压缩完成后不关闭进度窗口」：留着时进度窗停在 100%，
+            // 「设置 → 压缩 → 压缩完成后不关闭进度窗口」：留着时这一屏要说"压缩完成"，
             // 对话框也不关，用户看完自己关。它是 ShowDialog 出来的模态窗，所以先关它才回到对话框。
             if (!_defaults.KeepProgressWindow)
             {
                 progress.Close();
                 Close();
+            }
+            else
+            {
+                progress.Finish("TEXT_STATUS_COMPRESS_DONE");
             }
 
             return;

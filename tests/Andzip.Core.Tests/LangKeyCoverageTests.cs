@@ -112,7 +112,7 @@ public class LangKeyCoverageTests
         "TEXT_TOOLBAR_ADD",
         "TEXT_TOOLBAR_DELETE",
         "TEXT_TOOLBAR_TEST",
-        "TEXT_TOOLBAR_SCAN",
+        "TEXT_TOOLBAR_CRC",
         "TEXT_TOOLBAR_VIEW",
         "TEXT_COLUMN_MODIFIED",
         "TEXT_COLUMN_CRC",

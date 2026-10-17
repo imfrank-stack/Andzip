@@ -18,7 +18,7 @@ TEXT_TOOLBAR_NEW                        = New
 TEXT_TOOLBAR_ADD                        = Add
 TEXT_TOOLBAR_DELETE                     = Delete
 TEXT_TOOLBAR_TEST                       = Test
-TEXT_TOOLBAR_SCAN                       = Scan
+TEXT_TOOLBAR_CRC                        = CRC
 TEXT_TOOLBAR_VIEW                       = View
 TEXT_TOOLBAR_LANGUAGE                   = Switch
 
@@ -79,6 +79,8 @@ TEXT_BTN_START                          = &Start
 TEXT_BTN_CANCEL                         = Cancel
 TEXT_DEFAULT_ARCHIVE_NAME               = New archive
 TEXT_STATUS_COMPRESSING                 = Compressing...
+// What the progress window says once it is done, when "keep the progress window open" is on
+TEXT_STATUS_COMPRESS_DONE               = Compressed
 TEXT_STATUS_NOT_IMPLEMENTED             = Not implemented yet
 TEXT_ERR_NO_INPUT                       = Add files or folders first.
 TEXT_ERR_OUTPUT_NOT_SET                 = Specify the output archive path.
@@ -109,6 +111,9 @@ TEXT_CHECK_DELETE_ARCHIVE_AFTER         = Delete the archive after extraction (&
 TEXT_CHECK_REMEMBER_SETTINGS            = &Remember settings
 TEXT_NEW_FOLDER_DEFAULT                 = New folder
 TEXT_STATUS_EXTRACTING                  = Extracting...
+// What the kept-open progress window says when the extraction is done - without it the
+// window sits at "Extracting... 100%" forever, which reads as stuck rather than finished
+TEXT_STATUS_EXTRACT_DONE                = Extracted
 TEXT_ERR_DEST_NOT_SET                   = Specify a destination path.
 TEXT_TITLE_ERROR                        = Error
 TEXT_ERR_EXTRACT_FAILED                 = Extraction failed:

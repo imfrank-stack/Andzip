@@ -2058,6 +2058,12 @@ public sealed class MainWindow : Window
         {
             progress.Close();
         }
+        else
+        {
+            // 开着「解压完成后不关闭进度窗口」时这一屏会一直留着 —— 那它必须说"解压完成"，
+            // 不能永远停在「正在解压… 100%」：满的条子加"正在"读起来是卡住（用户报的那条）。
+            progress.Finish("TEXT_STATUS_EXTRACT_DONE");
+        }
     }
 
     /// <summary>
