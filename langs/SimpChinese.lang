@@ -111,9 +111,6 @@ TEXT_CHECK_DELETE_ARCHIVE_AFTER         = 解压后删除压缩文件(&L)
 TEXT_CHECK_REMEMBER_SETTINGS            = 记住设置(&R)
 TEXT_NEW_FOLDER_DEFAULT                 = 新建文件夹
 TEXT_STATUS_EXTRACTING                  = 正在解压...
-// 开着「设置 → 解压 → 解压完成后不关闭进度窗口」时，那一屏跑完之后说的话。
-// 少了这一句，留着的框永远停在「正在解压… 100%」，读起来是卡住而不是完事。
-TEXT_STATUS_EXTRACT_DONE                = 解压完成
 TEXT_ERR_DEST_NOT_SET                   = 请指定解压目标路径。
 TEXT_TITLE_ERROR                        = 错误
 TEXT_ERR_EXTRACT_FAILED                 = 解压失败：
@@ -362,8 +359,6 @@ TEXT_SETTINGS_EXTRACT_SINGLE_FILE_TO_FOLDER = 解压时，单个文件也放进�
 TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT  = 默认关闭：包里只有一个文件时直接把它解出来。打开后会建一个以那个文件命名的文件夹（photo.jpg.gz → photo\photo.jpg），名字被占用时依次用「名称1」「名称2」。右键「解压」与双击那一档（智能解压）走的都是这一条规则。
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER       = 解压后打开文件夹
 TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT  = 只在真的解完之后打开；失败或中途取消都不会弹出一个装了一半的目录。
-TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS     = 解压完成后不关闭进度窗口
-TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT = 只作用于主窗口的「解压文件」。右键与双击那条路径跑完即消失，是有意为之，不跟随这一项。
 
 ; ---- 设置：查看页 / 语言页 ----
 TEXT_SETTINGS_VIEW_TITLE                = 查看设置
@@ -389,8 +384,6 @@ TEXT_ICON_BACK_0                        = 后层 起
 TEXT_ICON_BACK_1                        = 后层 止
 TEXT_ICON_DIRECTION                     = 方向
 TEXT_ICON_DERIVE                        = 后层跟随前景
-TEXT_ICON_EXPORT_SVG                    = 导出 SVG…
-TEXT_ICON_EXPORT_PNG                    = 导出 PNG 512…
 TEXT_ICON_APPLY                         = 设为桌面图标
 TEXT_ICON_RESTORE                       = 恢复默认
 TEXT_ICON_APPLIED                       = 已设好：${n} 个快捷方式与 ${m} 个格式图标都换过了。
@@ -399,7 +392,6 @@ TEXT_ICON_APPLY_PARTIAL                 = 已设好 ${n} 处，但公共桌面�
 TEXT_ICON_APPLY_FAILED                  = 没能生成图标文件：${reason}
 TEXT_ICON_RESTORED                      = 已恢复出厂那张图标。
 TEXT_ICON_RESTORE_FAILED                = 没能恢复出厂那张图标：${reason}
-TEXT_ICON_EXPORTED                      = 已导出到 ${path}
 TEXT_SETTINGS_LANGUAGE_TITLE            = 语言
 TEXT_SETTINGS_LANGUAGE_LABEL            = 界面语言
 TEXT_SETTINGS_LANGUAGE_HINT             = 列表来自实际加载到的语言包（程序目录 langs/ 优先，否则用内嵌的那几份），所以这里出现的都是真能选的。

@@ -136,7 +136,6 @@ public class SettingsDefaultsTests
         var wanted = new ExtractionDefaults(
             SingleFileToFolder: true,
             OpenFolderAfterExtract: false,
-            KeepProgressWindow: true,
             DoubleClick: ArchiveDoubleClick.ExtractDirectly);
 
         var settings = new AppSettings();
@@ -154,7 +153,6 @@ public class SettingsDefaultsTests
         Assert.Equal(ExtractionDefaults.Fallback, loaded);
         Assert.False(loaded.SingleFileToFolder);
         Assert.False(loaded.OpenFolderAfterExtract);
-        Assert.False(loaded.KeepProgressWindow);
         Assert.Equal(ArchiveDoubleClick.OpenInAndzip, loaded.DoubleClick);
     }
 

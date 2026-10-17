@@ -2054,16 +2054,11 @@ public sealed class MainWindow : Window
             OpenInExplorer(destination);
         }
 
-        if (!extractionDefaults.KeepProgressWindow)
-        {
-            progress.Close();
-        }
-        else
-        {
-            // 开着「解压完成后不关闭进度窗口」时这一屏会一直留着 —— 那它必须说"解压完成"，
-            // 不能永远停在「正在解压… 100%」：满的条子加"正在"读起来是卡住（用户报的那条）。
-            progress.Finish("TEXT_STATUS_EXTRACT_DONE");
-        }
+        // 跑完就关。「设置 → 解压 → 解压完成后不关闭进度窗口」那一档 4.9.0 删了：
+        // 它唯一的作用是把这一屏留在屏幕上，而留着的时候它永远写着「正在解压… 100%」，
+        // 看着就是卡住 —— 4.8.1 修过那句话，但修不完一个不该存在的开关。
+        // 现在窗口里这一颗与右键、双击那一路同一个结局。
+        progress.Close();
     }
 
     /// <summary>

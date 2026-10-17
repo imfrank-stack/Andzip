@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Text;
 using Andzip.Core.Iconography;
 using Andzip.Core.Installation;
 using Andzip.Core.Settings;
@@ -239,12 +238,4 @@ internal sealed class IconStudio
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
-
-    /// <summary>导出用的默认文件名（界面上"另存为"的初始名字）。</summary>
-    public static string SuggestedName(IconGlyph glyph, string extension)
-        => $"andzip-{(glyph == IconGlyph.Punched ? "punched" : "overflow")}{extension}";
-
-    /// <summary>把 SVG 文本写成 UTF-8 无 BOM —— 带 BOM 的 SVG 有几个查看器不认。</summary>
-    public static void WriteSvg(string path, string svg)
-        => File.WriteAllBytes(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(svg));
 }

@@ -975,10 +975,17 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 解压页：双击怎么办 + 三个开关。
+    /// 解压页：双击怎么办 + 两个开关。
     /// <para>
     /// 「双击压缩包」这一项原本住在常规页，1.6.0 搬到这里：它选出的「直接解压」用的正是本页
     /// 第一条落点规则，拆在两处会让用户在一个页面改完、在另一个页面找不到自己刚改的东西。
+    /// </para>
+    /// <para>
+    /// <strong>第三个开关「解压完成后不关闭进度窗口」4.9.0 删了</strong>（用户要求）：它唯一的作用是
+    /// 让那一屏留在屏幕上，而"跑完了还写着正在解压"这件事被当成故障报了 —— 一颗只会让框子
+    /// 留下来、又说不清自己已经跑完的开关，不如没有。解压现在一律跑完即关，与右键那一路一致。
+    /// 压缩那一档（「设置 → 压缩」）留着：那颗框留着的时候外面还压着「新建压缩文件」对话框，
+    /// 立刻关会让用户以为没压成。
     /// </para>
     /// <para>
     /// 没有放参考软件上的「一次性解压 TGZ/TBZ」「自动检测 Macintosh 代码页」「并行解压」等项 ——
@@ -993,7 +1000,6 @@ public sealed class SettingsWindow : Window
         private readonly ComboBox _doubleClick;
         private readonly SettingToggle _singleFileToFolder;
         private readonly SettingToggle _openFolderAfter;
-        private readonly SettingToggle _keepProgress;
         private readonly Button _applyButton;
 
         private ExtractionDefaults _live = ExtractionDefaults.Fallback;
@@ -1016,8 +1022,6 @@ public sealed class SettingsWindow : Window
                 lang.Label("TEXT_SETTINGS_EXTRACT_SINGLE_FILE_HINT"));
             _openFolderAfter = Check(lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER"), UpdateApplyState,
                 lang.Label("TEXT_SETTINGS_EXTRACT_OPEN_FOLDER_HINT"));
-            _keepProgress = Check(lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS"), UpdateApplyState,
-                lang.Label("TEXT_SETTINGS_EXTRACT_KEEP_PROGRESS_HINT"));
 
             _applyButton = new Button
             {
@@ -1035,7 +1039,6 @@ public sealed class SettingsWindow : Window
                 lang, "TEXT_SETTINGS_DOUBLE_CLICK_HINT"));
             panel.Children.Add(_singleFileToFolder);
             panel.Children.Add(_openFolderAfter);
-            panel.Children.Add(_keepProgress);
             panel.Children.Add(_applyButton);
 
             Root = panel;
@@ -1051,7 +1054,6 @@ public sealed class SettingsWindow : Window
             _doubleClick.SelectedIndex = _live.DoubleClick == ArchiveDoubleClick.ExtractDirectly ? 1 : 0;
             _singleFileToFolder.IsChecked = _live.SingleFileToFolder;
             _openFolderAfter.IsChecked = _live.OpenFolderAfterExtract;
-            _keepProgress.IsChecked = _live.KeepProgressWindow;
             UpdateApplyState();
         }
 
@@ -1066,7 +1068,6 @@ public sealed class SettingsWindow : Window
         private ExtractionDefaults Selection() => new(
             _singleFileToFolder.IsChecked == true,
             _openFolderAfter.IsChecked == true,
-            _keepProgress.IsChecked == true,
             _doubleClick.SelectedIndex == 1
                 ? ArchiveDoubleClick.ExtractDirectly
                 : ArchiveDoubleClick.OpenInAndzip);
@@ -1261,13 +1262,16 @@ public sealed class SettingsWindow : Window
 
     /// <summary>
     /// 「设置 → 查看」里的图标配色（2.5.0）：五段渐变颜色、四档方向、两种字形，
-    /// 改一处立刻重画预览，能导出 SVG / PNG，也能设成这台机器上的程序图标。
+    /// 改一处立刻重画预览，也能设成这台机器上的程序图标。
+    /// <para><strong>「导出 SVG…」「导出 PNG 512…」两颗按钮 4.9.0 删了</strong>（用户要求）：
+    /// 这一节的契约是"挑一套颜色，让它成为这台机器上的图标"，把图抠出来另存不是它的一部分 ——
+    /// 生成 SVG 与 PNG 那两条路照旧留着，因为预览与那颗「设为程序图标」就走的是同一条。</para>
     /// <para><strong>为什么这一节自己落盘、不等页脚的「应用」</strong>：预览要的就是即时反馈
     /// （参考工具的原文是"改色即时生效"），而那一颗「应用」管的是界面骨架的五个开关。
     /// 两套生效时机混在一起，只会让用户分不清哪一处要按哪一颗。</para>
     /// <para><strong>为什么颜色是"色块 + 十六进制框"而不是系统取色器</strong>：
     /// 取色器要 P/Invoke <c>comdlg32</c> 的 <c>ChooseColor</c>，而这一节的真正契约是
-    /// "我能把颜色说清楚"——十六进制就是那个说法，它同时是导出的 SVG 里写的东西。</para>
+    /// "我能把颜色说清楚"——十六进制就是那个说法，它同时是画出来那张图的 SVG 里写的东西。</para>
     /// </summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private sealed class IconStudioSection
@@ -1367,12 +1371,6 @@ public sealed class SettingsWindow : Window
             var derive = new Button { Content = lang.Label("TEXT_ICON_DERIVE") }.Ghost();
             derive.Click += (_, _) => DeriveBack();
 
-            var exportSvg = new Button { Content = lang.Label("TEXT_ICON_EXPORT_SVG") }.Ghost();
-            exportSvg.Click += async (_, _) => await ExportAsync(svg: true);
-
-            var exportPng = new Button { Content = lang.Label("TEXT_ICON_EXPORT_PNG") }.Ghost();
-            exportPng.Click += async (_, _) => await ExportAsync(svg: false);
-
             var apply = new Button { Content = lang.Label("TEXT_ICON_APPLY") }.Accent();
             apply.Click += (_, _) => ApplyToDesktop();
 
@@ -1380,8 +1378,6 @@ public sealed class SettingsWindow : Window
             restore.Click += (_, _) => RestoreDefault();
 
             actions.Children.Add(derive);
-            actions.Children.Add(exportSvg);
-            actions.Children.Add(exportPng);
             actions.Children.Add(apply);
             actions.Children.Add(restore);
             root.Children.Add(actions);
@@ -1610,40 +1606,6 @@ public sealed class SettingsWindow : Window
                 : _lang.Format("TEXT_ICON_APPLIED",
                     ("n", outcome.ShortcutsUpdated.ToString()),
                     ("m", outcome.ProgIdsUpdated.ToString()));
-        }
-
-        private async Task ExportAsync(bool svg)
-        {
-            var provider = GetTopLevel(_status)?.StorageProvider;
-            if (provider is null)
-            {
-                return;
-            }
-
-            var name = IconStudio.SuggestedName(_state.Glyph, svg ? ".svg" : ".png");
-            var choice = await provider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = _lang.Label(svg ? "TEXT_ICON_EXPORT_SVG" : "TEXT_ICON_EXPORT_PNG"),
-                SuggestedFileName = name,
-                DefaultExtension = svg ? "svg" : "png",
-            });
-
-            var target = choice?.TryGetLocalPath();
-            if (string.IsNullOrEmpty(target))
-            {
-                return;
-            }
-
-            if (svg)
-            {
-                IconStudio.WriteSvg(target, IconArt.Svg(_state.Glyph, _state.Palette));
-            }
-            else
-            {
-                File.WriteAllBytes(target, IconPainter.Png(_state.Glyph, _state.Palette, 512));
-            }
-
-            _status.Text = _lang.Format("TEXT_ICON_EXPORTED", ("path", target));
         }
 
         /// <summary>存完要把主窗口那份快照同步回来 —— 它下次写盘是整文件覆盖，

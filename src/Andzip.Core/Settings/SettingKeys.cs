@@ -121,12 +121,6 @@ public static class SettingKeys
     /// <summary>解压成功后用资源管理器打开目标目录。</summary>
     public const string ExtractOpenFolderAfter = "extract_open_folder_after";
 
-    /// <summary>
-    /// 主窗口里的「解压文件」完成后保留进度窗口。
-    /// <para>只管这一条路径：右键与双击那条"跑完即消失"是更早明确定下的行为，别合并。</para>
-    /// </summary>
-    public const string ExtractKeepProgress = "extract_keep_progress_window";
-
     // ------------------------------------------------------------- 查看页
     //
     // 这一组影响的是"界面骨架露哪几块"，MainWindow 在设置对话框关掉后会重新应用一次，
