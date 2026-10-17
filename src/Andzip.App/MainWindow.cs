@@ -2082,7 +2082,7 @@ public sealed class MainWindow : Window
         // 那一层是我们自己造的目录，所以走同一套避让 —— 名字被占用就依次试
         // 「名字1」「名字2」。以前这里是裸 Path.Combine：用户选的那个目录里只要已经有一个同名文件夹，
         // 这一次解压就静默并进那个文件夹里，把包里的内容和目录里原有的东西混在一处
-        // （原有的同名文件还会撞上 FR-3.7 的逐个询问）。右键那一侧从 0.9.6 起就在避让，
+        // （原有的同名文件还会撞上 FR-3.7 的重名询问，5.2.0 起那一句一次问清整批）。右键那一侧从 0.9.6 起就在避让，
         // 同一个"解压"两条路两种结局，这才是这条的成因（见开发记录第七节第 95 条）。
         var destination = choice.ExtractIntoArchiveNamedFolder
             ? ShellTasks.UniqueFolder(ShellTasks.SiblingFolder(archivePath, choice.DestinationPath))
@@ -2109,27 +2109,22 @@ public sealed class MainWindow : Window
             prompted = true;
         }
 
+        // 重名先问一次、整批照这一个决定办（5.2.0）。问在开工之前：那时候进度条还没出现，
+        // 用户面对的是这一扇窗和一句"撞名的怎么办"，不是一个停在 0% 的框。
+        var overwrite = await DirectExtract.AskAboutDuplicatesAsync(
+            _lang, this, archivePath, destination, password);
+
         var cts = new CancellationTokenSource();
         var progress = new ProgressWindow(
             _lang, cts, "TEXT_STATUS_EXTRACTING",
             cancelViaEsc: _settings.GetBool(SettingKeys.AllowEscCancelProgress, fallback: true));
 
-        // 重名询问（FR-3.7「要解压的文件」）：以进度窗口为属主，在 UI 线程弹出并等待用户选择
-        DuplicateDecision ResolveDuplicate(string fileName)
-            => Dispatcher.UIThread.InvokeAsync<DuplicateDecision>(async () =>
-            {
-                var dialog = new DuplicateFileWindow(_lang, fileName);
-                await dialog.ShowDialog<bool>(progress);
-                return dialog.Decision;
-            }).GetAwaiter().GetResult();
-
         var settings = new ExtractionSettings(
             archivePath,
             destination,
-            OverwritePolicy.Ask,
+            overwrite,
             Password: password,
             DeleteArchiveAfterExtraction: choice.DeleteArchiveAfterExtraction,
-            DuplicateResolver: ResolveDuplicate,
             Progress: progress.CreateSink());
 
         _ = progress.ShowDialog(this);

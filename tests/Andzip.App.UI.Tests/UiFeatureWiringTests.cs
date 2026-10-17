@@ -382,7 +382,7 @@ public class UiFeatureWiringTests
             new MessageWindow(lang, lang.Get("TEXT_TITLE_TEST_PASSED"), "所有成员校验通过。"),
             new NewArchiveWindow(lang),
             new ExtractPathWindow(lang, archive),
-            new DuplicateFileWindow(lang, "a.txt"),
+            new DuplicateFileWindow(lang, ["a.txt"]),
             new VolumeSizeWindow(lang, 100),
             new PasswordWindow(lang),
             new RepairWindow(lang, archive, @"C:\somewhere\box.修复.zip"),

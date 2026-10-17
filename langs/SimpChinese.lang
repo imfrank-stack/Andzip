@@ -171,12 +171,12 @@ TEXT_TITLE_NEW_WINDOW                   = 新建程序窗口
 TEXT_NEW_WINDOW_CANCELED                = 没有起管理员窗口：系统那个确认框被取消了，或者这个账户提不了权。
 TEXT_NEW_WINDOW_FAILED                  = 新窗口没起来：${reason}
 
-; ---- 重名询问（FR-3.7）/ 解压密码（对话框 #7）----
+; ---- 重名询问（FR-3.7，整批一次问清）/ 解压密码（对话框 #7）----
 TEXT_TITLE_ASK_DUPEFILE                 = 要解压的文件
-TEXT_MSG_FILE_EXISTS                    = 目标文件夹中已存在同名文件：
-TEXT_BTN_RENAME                         = 重命名(&R)
-TEXT_BTN_OVERWRITE                      = 覆盖(&O)
-TEXT_BTN_SKIP                           = 跳过(&S)
+TEXT_MSG_FILES_EXIST                    = 目标文件夹中已存在 ${count} 个同名文件：
+TEXT_BTN_RENAME_ALL                     = 全部重命名
+TEXT_BTN_OVERWRITE_ALL                  = 全部覆盖
+TEXT_BTN_SKIP_ALL                       = 全部跳过
 TEXT_ERR_PASSWORD_EMPTY                 = 请输入密码。
 
 ; ---- 压缩包视图（FR-4）----

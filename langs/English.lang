@@ -174,12 +174,12 @@ TEXT_TITLE_NEW_WINDOW                   = New program window
 TEXT_NEW_WINDOW_CANCELED                = No elevated window: the system confirmation was cancelled, or this account cannot elevate.
 TEXT_NEW_WINDOW_FAILED                  = The new window did not start: ${reason}
 
-; ---- Duplicate file prompt (FR-3.7) / extract password (dialog #7) ----
-TEXT_TITLE_ASK_DUPEFILE                 = Duplicate file
-TEXT_MSG_FILE_EXISTS                    = A file with the same name already exists in the destination:
-TEXT_BTN_RENAME                         = &Rename
-TEXT_BTN_OVERWRITE                      = &Overwrite
-TEXT_BTN_SKIP                           = &Skip
+; ---- Duplicate file prompt (FR-3.7, asked once for the whole batch) / extract password (dialog #7) ----
+TEXT_TITLE_ASK_DUPEFILE                 = Duplicate files
+TEXT_MSG_FILES_EXIST                    = ${count} files already exist in the destination:
+TEXT_BTN_RENAME_ALL                     = Rename all
+TEXT_BTN_OVERWRITE_ALL                  = Overwrite all
+TEXT_BTN_SKIP_ALL                       = Skip all
 TEXT_ERR_PASSWORD_EMPTY                 = Enter a password.
 
 ; ---- Archive view (FR-4) ----

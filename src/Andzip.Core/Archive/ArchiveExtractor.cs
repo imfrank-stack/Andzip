@@ -94,6 +94,60 @@ public static class ArchiveExtractor
     }
 
     /// <summary>
+    /// 开工之前先算清"目标里已经有哪些同名文件"，返回的是包内路径（界面上列的就是用户见过的名字）。
+    /// <para>为什么要有这一条：重名原来是<strong>逐条</strong>问的 —— 一次解压里四个文件撞名就要点四次，
+    /// 而用户要的是"这一次怎么算"<strong>一个</strong>决定（5.2.0）。要一次问清，就得先知道有几个、是谁，
+    /// 所以这一趟排在解压之前。</para>
+    /// <para>路径算法用的是 <see cref="BuildPlan"/> 同一批 helper（<see cref="RelativeFromEntry"/> /
+    /// <see cref="TrySafeCombine"/> / <see cref="SanitizePath"/>）—— 两处各写一遍"怎么拼目标路径"，
+    /// 早晚一边问一边不问。这里不剥顶层目录（<c>commonRoot: null</c>）：界面上那颗
+    /// "解压到同名文件夹"改的是目标目录而不是包内路径，两条调用路的 <c>StripSingleRootFolder</c>
+    /// 都是 false，与解压时看到的一致。</para>
+    /// <para><strong>目录不算冲突</strong>：解出一个目录到一个已有目录里是正常事，不是要问用户的东西。
+    /// 读清单失败（口令错、格式不支持、包被占用）返回空表 —— 这一趟只决定"要不要多问一句"，
+    /// 真正的失败留给解压去报，那里有完整的错误文案。</para>
+    /// </summary>
+    public static IReadOnlyList<string> FindCollisions(
+        string archivePath, string destinationPath, string? password = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+
+        try
+        {
+            using var single = SingleFileArchive.Open(Path.GetFullPath(archivePath));
+            using var reader = ArchiveReader.OpenNative(single.FilePath, password);
+            var destination = Path.GetFullPath(destinationPath);
+            var collisions = new List<string>();
+
+            foreach (var entry in reader.Entries)
+            {
+                if (entry.IsDirectory)
+                {
+                    continue;
+                }
+
+                var relative = RelativeFromEntry(entry.Name, commonRoot: null);
+                if (!TrySafeCombine(destination, relative, out var target))
+                {
+                    continue;
+                }
+
+                if (File.Exists(SanitizePath(target)))
+                {
+                    collisions.Add(relative);
+                }
+            }
+
+            return collisions;
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
     /// 只把指定的几个成员解出来（「编辑 → 将文件复制到剪贴板」把选中的东西落到临时目录时用它）。
     /// <para>与 <see cref="Extract(ExtractionSettings, CancellationToken)"/> 的差别只有两点：
     /// 只解列出的那几个成员，并且<strong>原样保留包内路径</strong> —— 不剥顶层目录、不清洗文件名、

@@ -4,7 +4,6 @@ using Andzip.Core.Lang;
 using Andzip.Core.Settings;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Threading;
 
 namespace Andzip.App;
 
@@ -89,12 +88,14 @@ internal static class DirectExtract
         var destination = await ExtractDestinationAsync(
             archivePath, password, ExtractionDefaults.Load(appSettings).SingleFileToFolder);
 
+        // 撞名先问一次、整批照这一个决定办（5.2.0），所以问话排在开工之前而不是解压中途。
+        var overwrite = await AskAboutDuplicatesAsync(lang, progress, archivePath, destination, password);
+
         var settings = new ExtractionSettings(
             archivePath,
             destination,
-            OverwritePolicy.Ask,
+            overwrite,
             Password: password,
-            DuplicateResolver: fileName => AskAboutDuplicate(lang, progress, fileName),
             // 「解压并删除」与「解压」走的是同一套解压代码，差别只在这一个开关上。
             DeleteArchiveAfterExtraction: task == ShellTask.ExtractDelete,
             Progress: progress.CreateSink());
@@ -137,14 +138,34 @@ internal static class DirectExtract
             archivePath, ExtractionLayout.Inspect(listing), singleFileToFolder);
     }
 
-    /// <summary>重名询问（FR-3.7）：以进度窗口为宿主，在工作线程回调里同步等 UI 答复。</summary>
-    private static DuplicateDecision AskAboutDuplicate(LangCatalog lang, Window owner, string fileName)
-        => Dispatcher.UIThread.InvokeAsync(async () =>
+    /// <summary>
+    /// 重名询问（FR-3.7）：<strong>整批一次问清</strong>。先把目标里已经存在的同名文件数一遍，
+    /// 有冲突就弹一扇"这一次撞名的怎么算"，把答案翻成策略交给 Core —— 从此这一批不再逐个弹。
+    /// <para>一个都没撞着就不弹，返回 <see cref="OverwritePolicy.Ask"/>：这一趟不该凭空多出一个框。
+    /// 真到了落盘那一刻才发现撞了（别的程序刚建了一个同名文件）也不回头问 ——
+    /// Ask 没有回调时 Core 按「重命名」落地，那是"不静默覆盖别人的东西"的缺省。</para>
+    /// <para>数冲突要打开归档读清单，放后台线程；弹框必须在 UI 线程，所以两件事分在两侧，
+    /// 中间不再需要 <c>Dispatcher.InvokeAsync(...).GetAwaiter().GetResult()</c> 那种
+    /// "在工作线程里同步等一扇窗"的形状（它当年是把逐条询问接进解压循环里没办法的产物）。</para>
+    /// </summary>
+    internal static async Task<OverwritePolicy> AskAboutDuplicatesAsync(
+        LangCatalog lang, Window owner, string archivePath, string destination, string? password)
+    {
+        var collisions = await Task.Run(() => ArchiveExtractor.FindCollisions(archivePath, destination, password));
+        if (collisions.Count == 0)
         {
-            var dialog = new DuplicateFileWindow(lang, fileName);
-            await dialog.ShowDialog<bool>(owner);
-            return dialog.Decision;
-        }).GetAwaiter().GetResult();
+            return OverwritePolicy.Ask;
+        }
+
+        var dialog = new DuplicateFileWindow(lang, collisions);
+        await dialog.ShowDialog<bool>(owner);
+        return dialog.Decision switch
+        {
+            DuplicateDecision.Overwrite => OverwritePolicy.Overwrite,
+            DuplicateDecision.Skip => OverwritePolicy.Skip,
+            _ => OverwritePolicy.Rename,
+        };
+    }
 
     private static Task ShowError(LangCatalog lang, Window owner, string message)
         => new MessageWindow(lang, lang.Get("TEXT_TITLE_ERROR"), lang.Get("TEXT_ERR_EXTRACT_FAILED") + message)
