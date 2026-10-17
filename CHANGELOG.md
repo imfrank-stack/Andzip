@@ -89,7 +89,9 @@ Rar1..5 那四条"只有解码"的条目就是这套机制的上游自用证据�
 本轮**没有改写任何老断言**。
 
 复现：`powershell -File tests/perf/bench.ps1`（基线）、
-`powershell -File tests/perf/props.ps1`（参数扫，待跑）。
+`powershell -File tests/perf/props.ps1 -Levels 3`（参数扫 —— 已跑，读数在
+`docs/perf-baseline.md` 第 7 节；那节里最值得看的不是流程文档预期的 `fb` / `mc`，
+而是 `a=0`：level 9 上快 13-27 倍，体积最多差 0.8%，在高冗余语料上还**更小**）。
 
 ---
 

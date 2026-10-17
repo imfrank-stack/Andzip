@@ -32,8 +32,10 @@ param(
   [string]$BenchData = '',
   [string]$WorkDir = '',
   [long]$MiB = 128,
+  [int[]]$Levels = @(3, 9),
   [int]$Repeat = 1,
   [string]$Tsv = '',
+  [switch]$Append,
   [switch]$SkipDeflate,
   [switch]$SkipZstd
 )
@@ -84,7 +86,21 @@ Write-Output "  source=$source"
 Write-Output "  sweep=$target bytes=$want"
 Write-Output ("  sha256={0}" -f (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash)
 
+# Rows land in the TSV as they are measured, not in one write at the end. The sweep
+# is long (level 9 is ~95 s a cell, and pass=5 multiplies that), and a level-9 cell
+# that dies of an OOM or a stopped job must not take the eleven measurements that
+# already finished down with it.
 $rows = New-Object System.Collections.Generic.List[object]
+$tsvHeader = 'cell	format	method	level	props	exit_code	seconds	mb_per_s	ratio	out_bytes	note'
+# -Append exists because the level-9 sweep is ~15 minutes on its own: a run that has
+# to redo the level-3 cells to add one row will not get run twice.
+if (-not $Append) { Set-Content -LiteralPath $Tsv -Value $tsvHeader -Encoding ASCII }
+
+function Add-TsvRow([object]$Row) {
+  $line = (@($Row.Cell, $Row.Format, $Row.Method, $Row.Level, $Row.Props, $Row.ExitCode,
+    $Row.Seconds, $Row.MBps, $Row.Ratio, $Row.OutBytes, ($Row.Note -replace "`t", ' ')) -join "`t")
+  Add-Content -LiteralPath $Tsv -Value $line -Encoding ASCII
+}
 
 function Invoke-Sweep {
   param(
@@ -118,7 +134,9 @@ function Invoke-Sweep {
     $note = (@($captured -split "`r?`n" | Where-Object { $_ } | Select-Object -Last 2) -join ' ')
   }
 
-  $mbps = if ($stopwatch.Elapsed.TotalSeconds -gt 0) {
+  # A rejected row has no throughput: the 0.01 s it took to say "no" would otherwise
+  # print as 9 000 MB/s, which is the kind of number that gets quoted out of context.
+  $mbps = if ($code -eq 0 -and $stopwatch.Elapsed.TotalSeconds -gt 0) {
     [Math]::Round(($want / 1MB) / $stopwatch.Elapsed.TotalSeconds, 1)
   } else { 0 }
 
@@ -127,8 +145,10 @@ function Invoke-Sweep {
     Props = (($Extra -join ',') + $(if ($Threads -gt 0) { "|mt=$Threads" } else { '' }))
     ExitCode = $code; Seconds = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 2)
     MBps = $mbps; Ratio = $(if ($outBytes -gt 0 -and $code -eq 0) { [Math]::Round($outBytes / $want, 4) } else { 0 })
+    OutBytes = $outBytes
     Note = $note
   }) | Out-Null
+  Add-TsvRow $rows[$rows.Count - 1]
 
   $status = if ($code -eq 0) { '{0} MB/s  ratio {1}' -f $mbps, $rows[$rows.Count - 1].Ratio }
             else { 'FAILED exit {0}' -f $code }
@@ -138,7 +158,7 @@ function Invoke-Sweep {
 
 if (-not $SkipDeflate) {
   Write-Output "== sweep A: ZIP/Deflate knobs (level 3 and 9, $MiB MiB single entry) =="
-  foreach ($level in @(3, 9)) {
+  foreach ($level in $Levels) {
     Invoke-Sweep -Label "zip-l$level-baseline" -Format zip -Method Deflate -Level $level
     foreach ($knob in @('fb=16', 'fb=64', 'fb=128', 'fb=258', 'mc=16', 'mc=64', 'pass=2', 'pass=5', 'a=0', 'a=1')) {
       Invoke-Sweep -Label "zip-l$level-$($knob -replace '=', '')" -Format zip -Method Deflate -Level $level -Extra @($knob)
@@ -171,15 +191,8 @@ if (-not $SkipZstd) {
   }
 }
 
-$header = 'cell	format	method	level	props	exit_code	seconds	mb_per_s	ratio	note'
-$lines = @($header)
-foreach ($row in $rows) {
-  $lines += (@($row.Cell, $row.Format, $row.Method, $row.Level, $row.Props, $row.ExitCode,
-    $row.Seconds, $row.MBps, $row.Ratio, ($row.Note -replace "`t", ' ')) -join "`t")
-}
-Set-Content -LiteralPath $Tsv -Value $lines -Encoding ASCII
 Write-Output "== written =="
-Write-Output "  $Tsv ($($rows.Count) rows)"
+Write-Output "  $Tsv ($($rows.Count) rows, appended as they were measured)"
 
 $ok = @($rows | Where-Object { $_.ExitCode -eq 0 })
 if ($ok.Count -gt 0) {
@@ -193,7 +206,7 @@ Write-Output ("  rejected rows: {0} of {1}" -f $failed.Count, $rows.Count)
 
 Write-Output "== what this does NOT measure =="
 Write-Output "  - decompression speed of anything written here"
-Write-Output "  - multi-entry runs: every row is one 128 MiB entry, so entry-level"
-Write-Output "    parallelism (the thing the baseline measures) is held out on purpose"
+Write-Output "  - multi-entry runs: every row is one $MiB MiB entry, so entry-level"
+Write-Output '    parallelism (the thing the baseline measures) is held out on purpose'
 Write-Output "  - memory: -t and nbWorkers are pushed without watching the working set"
 Write-Output "  - solid vs non-solid 7z (that is P5's table, not this one)"
