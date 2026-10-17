@@ -187,12 +187,39 @@ internal static class NativeEngine
             // 固实块是 7z 的概念；对别的格式不下发，免得引擎回一条用户从没要求的警告。
             Solid = format.IsSevenZip ? settings.Solid : false,
             MultiThread = true,
+            // 分卷分两种：7z 把卷大小交给引擎，由它逐卷写；ZIP 那族是 Core 事后切块
+            // （WinZip 的 .zNN 命名，引擎的卷机制不产那种名字），所以这里必须是 null。
+            VolumeSize = format.IsSevenZip && settings.HasVolume
+                ? VolumeSizeText(settings.VolumeSizeBytes!.Value)
+                : null,
             Preallocate = settings.Preallocate,
             ShareLocked = settings.ShareSources,
             Progress = Bridge(progress, ArchiveOperation.Compress),
             // EntryComment 故意不下发：ABI 的 comment 是「归档注释」，而 7-Zip 的
             // out-handler 不支持设置它（见 az_writer.cpp）；Core 侧改为记一条警告。
             Comment = null,
+        };
+    }
+
+    /// <summary>
+    /// 字节数 → 引擎听得懂的卷大小。内核认 <c>"100M"</c> / <c>"700m"</c> / <c>"4G"</c> 这种带单位的
+    /// 写法，也认裸字节数；界面上给的是整 MB，所以能整除就用人话写，不能就老实写字节数。
+    /// </summary>
+    private static string? VolumeSizeText(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return null;
+        }
+
+        const long KiB = 1024, MiB = KiB * 1024, GiB = MiB * 1024, TiB = GiB * 1024;
+        return bytes switch
+        {
+            _ when bytes % TiB == 0 => $"{bytes / TiB}t",
+            _ when bytes % GiB == 0 => $"{bytes / GiB}g",
+            _ when bytes % MiB == 0 => $"{bytes / MiB}m",
+            _ when bytes % KiB == 0 => $"{bytes / KiB}k",
+            _ => bytes.ToString(),
         };
     }
 

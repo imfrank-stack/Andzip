@@ -1006,41 +1006,99 @@ static void TestBadInput()
   EndTest();
 }
 
-static void TestSplitVolumesUnsupported()
+static void TestSplitVolumes7z()
 {
-  BeginTest("split volumes rejected, not silently ignored");
+  BeginTest("7z split-volume output reaches the disk and reads back as one archive");
 
-  // Creating spanned archives is not implemented. What must never happen is
-  // the call reporting success while producing no files, so the ABI refuses
-  // up front instead.
   const fs::path dir = TempSubdir("volumes");
-  const std::vector<unsigned char> payload = MakePayload(128 * 1024);
+  const size_t kVol = 1024 * 1024;
+  const std::vector<unsigned char> payload = MakePayload(3 * kVol);
 
   az_create_options co = AZ_CREATE_OPTIONS_INIT;
   co.format = "7z";
-  co.method = "Copy";
-  co.volume_size = "64K";
+  co.method = "Copy";      // incompressible, so the volume sizes are predictable
+  co.volume_size = "1M";
 
   az_writer w = NULL;
-  CHECK_AZ_FAILS_WITH(az_writer_open((dir / "vol.7z").string().c_str(), &co, &w),
+  CHECK_AZ(az_writer_open((dir / "vol.7z").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "big.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+
+  // This test exists because the write used to report success while the volume
+  // object deleted every file it had made. So the disk is asked, not the code.
+  std::vector<fs::path> parts;
+  for (unsigned i = 1; i <= 32; i++)
+  {
+    char name[32];
+    std::sprintf(name, "vol.7z.%03u", i);
+    const fs::path p = dir / name;
+    if (!fs::exists(p))
+      break;
+    parts.push_back(p);
+  }
+  CHECK(parts.size() >= 4);                       // 3 MiB of payload plus the header
+  unsigned long long total = 0;
+  for (size_t i = 0; i < parts.size(); i++)
+  {
+    const unsigned long long n = (unsigned long long)fs::file_size(parts[i]);
+    total += n;
+    if (i + 1 < parts.size()) CHECK(n == kVol);   // every volume but the last is exactly one
+    else CHECK(n > 0 && n < kVol);
+  }
+
+  // Chopping a stream into volumes must not change its bytes: compare against the
+  // same archive written as a single file.
+  co.volume_size = NULL;
+  CHECK_AZ(az_writer_open((dir / "one.7z").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "big.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+  CHECK(total == (unsigned long long)fs::file_size(dir / "one.7z"));
+
+  // Reading goes through the volume callback: opening .001 must pull in the rest.
+  az_archive arc = NULL;
+  CHECK_AZ(az_archive_open(parts.front().string().c_str(), NULL, &arc));
+  int isVolume = 0;
+  CHECK_AZ(az_archive_is_volume(arc, &isVolume));
+  CHECK(isVolume);
+  uint64_t count = 0;
+  CHECK_AZ(az_archive_entry_count(arc, &count));
+  CHECK(count == 1);
+  std::vector<unsigned char> back(payload.size());
+  uint64_t got = 0;
+  CHECK_AZ(az_entry_read(arc, 0, back.data(), back.size(), &got));
+  CHECK(got == payload.size());
+  CHECK(back == payload);
+  az_archive_close(arc);
+
+  // Under the megabyte floor: refused, and nothing written.
+  co.volume_size = "64K";
+  CHECK_AZ_FAILS_WITH(az_writer_open((dir / "small.7z").string().c_str(), &co, &w),
+                      AZ_ERROR_INVALID_ARG);
+  CHECK(w == NULL);
+  CHECK(!fs::exists(dir / "small.7z"));
+  CHECK(!fs::exists(dir / "small.7z.001"));
+
+  // Not for ZIP: Core splits those itself, in WinZip .zNN naming. The kernel
+  // guards this too, so a caller cannot talk the engine into a half-implementation.
+  co.format = "zip";
+  co.volume_size = "1M";
+  CHECK_AZ_FAILS_WITH(az_writer_open((dir / "vol.zip").string().c_str(), &co, &w),
                       AZ_ERROR_UNSUPPORTED);
   CHECK(w == NULL);
-
-  // ... and the whole directory really is still empty.
-  std::error_code ec;
-  int created = 0;
-  for (fs::directory_iterator it(dir, ec); it != fs::directory_iterator(); it.increment(ec))
-    created++;
-  CHECK(created == 0);
+  CHECK(!fs::exists(dir / "vol.zip"));
 
   // An unparsable size string is the same as no volume_size at all: a normal
   // single-file archive must still be produced.
+  co.format = "7z";
   co.volume_size = "banana";
   CHECK_AZ(az_writer_open((dir / "single.7z").string().c_str(), &co, &w));
   CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "big.bin", NULL));
   CHECK_AZ(az_writer_finish(w, NULL, NULL));
   az_writer_free(w);
   CHECK(fs::exists(dir / "single.7z"));
+  CHECK(!fs::exists(dir / "single.7z.001"));
 
   EndTest();
 }
@@ -1451,7 +1509,7 @@ int main()
   TestHashers();
   TestForeignArchive();
   TestBadInput();
-  TestSplitVolumesUnsupported();
+  TestSplitVolumes7z();
   TestUpdateExisting();
 
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);

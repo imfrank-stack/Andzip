@@ -58,11 +58,27 @@ public sealed class NewArchiveWindow : Window
     private readonly CheckBox _symlinkCheck;
     private readonly CheckBox _fileCommentCheck;
     private readonly TextBox _commentBox;
+    private readonly TextBlock _estimateValue;
+    private readonly TextBlock _methodEstimates;
     private ArchiveFormatOption _currentFormat = ArchiveFormatOption.Default;
     private string? _password;
     private int? _customVolumeMb;
     private int _lastVolumeIndex;
     private bool _suppressVolumeChange;
+
+    /// <summary>
+    /// 取样预估的取消源。<strong>只 Cancel、不 Dispose</strong>：上一份估算可能正跑在
+    /// 线程池里、手里握着这个 token，提前 Dispose 会把"用户改了选择"变成一场
+    /// ObjectDisposedException。没挂计时器也没做链接的 CTS 交给终结器收就够了，
+    /// 而这里同一时刻最多攒着一两个。
+    /// </summary>
+    private CancellationTokenSource? _estimateCts;
+
+    /// <summary>第几代估算。回来的结果只对得上最新那一代，旧的一律丢掉。</summary>
+    private int _estimateGeneration;
+
+    /// <summary>最新一次取样压出来的那份预估；换分卷时只重画它，不重压样本。</summary>
+    private CompressionEstimator.Prediction? _lastPrediction;
 
     /// <summary>
     /// 「新建压缩文件」对话框（FR-2）。
@@ -149,6 +165,9 @@ public sealed class NewArchiveWindow : Window
             Width = 170,
             HorizontalAlignment = HorizontalAlignment.Left,
         }.Picker();
+        // 级别改的是压缩比本身，预估必须跟着重算 —— 只重算方法那一格会留下
+        // "屏幕上是 41%、按 0-仅存储 压出来是 100%"这种自相矛盾。
+        _levelCombo.SelectionChanged += (_, _) => RefreshState();
 
         _volumeCombo = new ComboBox
         {
@@ -198,7 +217,11 @@ public sealed class NewArchiveWindow : Window
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
-        _methodCombo.SelectionChanged += (_, _) => RefreshMethodNote();
+        _methodCombo.SelectionChanged += (_, _) =>
+        {
+            RefreshMethodNote();
+            RefreshEstimate();
+        };
 
         // 面板标题跟着格式走：这一格里的方法表本来就是按格式给的（2.2.0 起 7z 有 11 项），
         // 顶着一句「ZIP 压缩设置」挑 LZ4 是自我矛盾 —— 真机截图里就是这样露出来的。
@@ -240,6 +263,27 @@ public sealed class NewArchiveWindow : Window
             Height = 80,
             IsEnabled = false,
         };
+
+        // 压缩后的体积是"要不要压、值不值得等"这一判断的全部依据，所以它必须在这里说清楚，
+        // 而不是等压完才知道。数字来自 CompressionEstimator：拿输入里按比例取的一段样本，
+        // 用同一个编码器真的压一遍再外推 —— 不是查表猜的比例。
+        // 界面上始终写"预估"：它是量出来的推断，不是实测。
+        _estimateValue = new TextBlock
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Design.Ink.Secondary,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        // 每种方法各压一小段（表预算比单格小得多，图的是这份排序而不是第三位小数）。
+        // 放在高级面板里：这一格本来就是"在方法之间挑一个"的地方。
+        _methodEstimates = new TextBlock
+        {
+            Foreground = Design.Ink.Secondary,
+            FontSize = Design.Type.Caption,
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+        };
         _fileCommentCheck.IsCheckedChanged += (_, _) =>
             _commentBox.IsEnabled = _fileCommentCheck.IsChecked == true;
 
@@ -267,6 +311,7 @@ public sealed class NewArchiveWindow : Window
                     _advancedTitle,
                     BuildFieldRow(lang.Label("TEXT_LABEL_COMPRESSION_METHOD"), _methodCombo),
                     _methodNote,
+                    _methodEstimates,
                     BuildFieldRow(lang.Label("TEXT_LABEL_ENCRYPTION_METHOD"), _encryptionCombo),
                     BuildFieldRow(lang.Label("TEXT_LABEL_CPU_THREADS"), _threadsCombo),
                     _symlinkCheck,
@@ -298,7 +343,7 @@ public sealed class NewArchiveWindow : Window
         var grid = new Grid
         {
             Margin = new Thickness(16),
-            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
         };
 
@@ -311,8 +356,9 @@ public sealed class NewArchiveWindow : Window
         AddRow(grid, 6, BuildFieldRow(lang.Label("TEXT_LABEL_FILE_NAME"), _fileNameBox, browseButton));
         AddRow(grid, 7, BuildFieldRow(lang.Label("TEXT_LABEL_FORMAT"), _formatCombo, _passwordButton));
         AddRow(grid, 8, moreOptionsPanel, 3);
-        AddRow(grid, 9, _hint, 3);
-        AddRow(grid, 10, BuildBottomRow(moreOptionsCheck, cancelButton), 3);
+        AddRow(grid, 9, BuildFieldRow(lang.Label("TEXT_LABEL_ESTIMATE"), _estimateValue), 3);
+        AddRow(grid, 10, _hint, 3);
+        AddRow(grid, 11, BuildBottomRow(moreOptionsCheck, cancelButton), 3);
 
         // 右侧「高级设置」面板与主区域并排（展开时窗口加宽，FR-2.5）
         var root = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
@@ -327,6 +373,9 @@ public sealed class NewArchiveWindow : Window
         {
             SeedFrom(seeds);
         }
+
+        // 关窗之后没有人再要这一行字，而估算可能正压着一份样本。
+        Closed += (_, _) => _estimateCts?.Cancel();
 
         RefreshState();
     }
@@ -358,6 +407,13 @@ public sealed class NewArchiveWindow : Window
         _advancedPanel.IsVisible = visible;
         _advancedButton.Content = _lang.Label(visible ? "TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE" : "TEXT_BTN_ADVANCED_SETTINGS");
         Width = visible ? 1292 : 972;
+
+        // 「每种方法各能压到多大」这张表只在面板展开时才算：它是这一格里那几个方法的对比，
+        // 面板收着的时候没人看，而它是真压一遍样本，不该白算。
+        if (visible)
+        {
+            RefreshEstimate();
+        }
     }
 
     private static TextBlock SectionTitle(string text) => new()
@@ -595,12 +651,11 @@ public sealed class NewArchiveWindow : Window
     }
 
     /// <summary>方法下拉的显示文本：有语言键就翻译，否则直接显示引擎方法名（专有名词不翻译）。</summary>
+    private string MethodName(CompressionMethodOption option)
+        => option.TextKey is { } key ? _lang.Label(key) : option.DisplayName;
+
     private List<DisplayItem> MethodItems(ArchiveFormatOption format)
-        =>
-        [
-            .. format.Methods.Select(o => new DisplayItem(
-                o.TextKey is { } key ? _lang.Label(key) : o.DisplayName, o)),
-        ];
+        => [.. format.Methods.Select(option => new DisplayItem(MethodName(option), option))];
 
     /// <summary>换格式后重建方法列表；保持用户已选的方法（如果新格式也支持）。</summary>
     private void RefreshMethodOptions(ArchiveFormatOption format)
@@ -660,6 +715,7 @@ public sealed class NewArchiveWindow : Window
         if (!option.IsCustom)
         {
             _lastVolumeIndex = _volumeCombo.SelectedIndex;
+            ReRenderEstimate();
             return;
         }
 
@@ -669,6 +725,7 @@ public sealed class NewArchiveWindow : Window
             _customVolumeMb = dialog.SizeMb;
             _lastVolumeIndex = _volumeCombo.SelectedIndex;
             UpdateCustomVolumeText(dialog.SizeMb);
+            ReRenderEstimate();
         }
         else
         {
@@ -719,6 +776,43 @@ public sealed class NewArchiveWindow : Window
             ? encryption
             : EncryptionMethodOption.Default;
 
+    private CompressionLevelOption SelectedLevel()
+        => _levelCombo.SelectedItem is DisplayItem { Value: CompressionLevelOption option }
+            ? option
+            : CompressionLevelOption.Default;
+
+    /// <summary>
+    /// 把这一对话框的控件状态拼成 Core 的创建设置。<strong>「开始」与取样预估共用这一份</strong>：
+    /// 分成两处写就允许出现"屏幕上说 1.24 GB、按下去压出 3 GB" —— 而那个数是用户决定
+    /// 值不值得等的依据，不能各说各话。
+    /// <see cref="ArchiveCreationSettings.Progress"/> 由调用方自己接（预估不装回调）。
+    /// </summary>
+    private ArchiveCreationSettings BuildSettings(string output, CompressionLevelOption? level = null)
+    {
+        var format = SelectedFormat();
+        return new ArchiveCreationSettings(
+            output,
+            level ?? SelectedLevel(),
+            Format: format,
+            // 排除规则没有对应的对话框控件，所以它完全来自「设置 → 压缩」——
+            // 用户在这里看不到勾，但包里确实不会混进 *.bak。
+            ExcludeThumbsDb: _defaults.ExcludeThumbsDb,
+            ExcludePatterns: _defaults.ParsedExcludePatterns,
+            IncludeRootFolder: _defaults.IncludeRootFolder,
+            Preallocate: _defaults.PreallocateDisk,
+            ShareSources: _defaults.ShareSources,
+            TestAfterCreation: _testAfterCheck.IsChecked == true,
+            DeleteSourceAfterCreation: _deleteSourceCheck.IsChecked == true,
+            SeparateArchives: _separateCheck.IsChecked == true,
+            Password: format.SupportsPassword ? _password : null,
+            VolumeSizeBytes: SelectedVolumeSizeBytes(),
+            Method: format.SupportsAdvancedSettings ? SelectedMethod() : null,
+            Encryption: format.SupportsAdvancedSettings ? SelectedEncryption() : null,
+            EntryComment: format.SupportsAdvancedSettings && _fileCommentCheck.IsChecked == true
+                ? _commentBox.Text?.Trim()
+                : null);
+    }
+
     private void RefreshState()
     {
         var format = SelectedFormat();
@@ -740,7 +834,143 @@ public sealed class NewArchiveWindow : Window
         {
             HideHint();
         }
+
+        // 每一个会改变"压完多大"的入口都汇到这里：加减文件、换格式、换级别、换方法、
+        // 改分卷、甚至改文件名。RefreshEstimate 里有一道合并窗口，所以打字不会被拖累。
+        RefreshEstimate();
     }
+
+    /// <summary>
+    /// 重开一份取样估算。旧的先取消，新的等 350ms 没有新改动才真压样本。
+    /// <para>
+    /// 只 Cancel、不 Dispose 上一个 CTS：还在跑的那一份手里握着它的 token。
+    /// </para>
+    /// </summary>
+    private void RefreshEstimate()
+    {
+        _estimateCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _estimateCts = cts;
+        _ = EstimateAsync(cts.Token);
+    }
+
+    private async Task EstimateAsync(CancellationToken cancellationToken)
+    {
+        var generation = ++_estimateGeneration;
+        var format = SelectedFormat();
+        var inputs = _inputs.ToList();
+
+        if (inputs.Count == 0 || !format.CanCreate)
+        {
+            _lastPrediction = null;
+            _estimateValue.Text = string.Empty;
+            _methodEstimates.IsVisible = false;
+            return;
+        }
+
+        // 与"开始"用的是同一个 BuildSettings：屏幕上那句预估说的就是按下去会发生的这次压缩。
+        var settings = BuildSettings(string.IsNullOrWhiteSpace(_fileNameBox.Text)
+            ? DefaultOutputPath()
+            : _fileNameBox.Text!.Trim());
+
+        _estimateValue.Text = _lang.Label("TEXT_ESTIMATE_WORKING");
+        var wantTable = _advancedPanel.IsVisible;
+        if (wantTable)
+        {
+            _methodEstimates.Text = _lang.Label("TEXT_ESTIMATE_WORKING");
+            _methodEstimates.IsVisible = true;
+        }
+
+        try
+        {
+            // 取样是真的压一遍（Core 里那 4 MiB 样本），所以这里要有合并窗口：连着点两次
+            // 下拉框不该压两遍。代价是明知过期的那一份还是要跑完（最长几秒）—— 换来的是
+            // 这一格永远在算最新的那个选择，而不是一堆互相覆盖的半截结果。
+            await Task.Delay(350, cancellationToken);
+
+            var prediction = await Task.Run(
+                () => CompressionEstimator.Estimate(inputs, settings), cancellationToken);
+            if (generation != _estimateGeneration)
+            {
+                return;
+            }
+
+            _lastPrediction = prediction;
+            RenderEstimate();
+
+            if (wantTable)
+            {
+                var rows = await Task.Run(
+                    () => CompressionEstimator.EstimateMethods(inputs, settings), cancellationToken);
+                if (generation != _estimateGeneration)
+                {
+                    return;
+                }
+
+                _methodEstimates.Text = _lang.Format("TEXT_ESTIMATE_METHODS", ("list", FormatMethodTable(rows)));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 用户已经改了这一项，那一句不该再落到屏幕上
+        }
+    }
+
+    /// <summary>
+    /// 把最新一份预估写进那一行。换分卷也走这里：卷的大小不改变压完的总量，
+    /// 只改变它被分成几个文件 —— 为这个重压一遍样本是浪费。
+    /// </summary>
+    private void RenderEstimate()
+    {
+        if (_lastPrediction is not { } prediction)
+        {
+            // 取样压不出数（引擎没装、这个格式写不了、输入全都读不动）时说的是"无法预估"，
+            // 而不是留一个看起来像 0 的空格。
+            _estimateValue.Text = _lang.Label("TEXT_ESTIMATE_UNAVAILABLE");
+            return;
+        }
+
+        var text = _lang.Format("TEXT_ESTIMATE_DETAIL",
+            ("size", SizeText.Format(prediction.OutputBytes)),
+            ("percent", $"{(int)Math.Round(prediction.Ratio * 100.0)}%"),
+            ("time", DurationText.Format(prediction.Duration)));
+
+        if (VolumeCount(prediction.OutputBytes) is { } volumes)
+        {
+            text += $"  ·  {_lang.Format("TEXT_ESTIMATE_VOLUMES", ("count", volumes.ToString()))}";
+        }
+
+        _estimateValue.Text = text;
+    }
+
+    /// <summary>
+    /// 换分卷时重画这一行。卷大小不改变压完的总量，只改变它被分成几个文件 ——
+    /// 为这个重压一遍样本是浪费，所以这里不叫 RefreshEstimate。
+    /// </summary>
+    private void ReRenderEstimate()
+    {
+        if (_lastPrediction is not null)
+        {
+            RenderEstimate();
+        }
+    }
+
+    /// <summary>这一包会被切成几个文件？没设分卷或装得下时给 null（那句就不说）。</summary>
+    private int? VolumeCount(long outputBytes)    {
+        if (SelectedVolumeSizeBytes() is not { } size || size <= 0 || outputBytes <= size)
+        {
+            return null;
+        }
+
+        return (int)((outputBytes + size - 1) / size);
+    }
+
+    /// <summary>每种方法各压一小段之后的总大小，按格式自己的方法表顺序排。要的是这一排数的对比。</summary>
+    private string FormatMethodTable(
+        IReadOnlyList<(CompressionMethodOption Method, CompressionEstimator.Prediction? Prediction)> rows)
+        => string.Join("  ·  ", rows.Select(row => row.Prediction is { } prediction
+            ? $"{MethodName(row.Method)} ≈{SizeText.Format(prediction.OutputBytes)}"
+            : $"{MethodName(row.Method)} —"));
 
     private ArchiveFormatOption SelectedFormat()
         => _formatCombo.SelectedItem is DisplayItem { Value: ArchiveFormatOption format }
@@ -781,27 +1011,7 @@ public sealed class NewArchiveWindow : Window
             ? option
             : CompressionLevelOption.Default;
 
-        var settings = new ArchiveCreationSettings(
-            output,
-            level,
-            Format: format,
-            // 排除规则没有对应的对话框控件，所以它完全来自「设置 → 压缩」——
-            // 用户在这里看不到勾，但包里确实不会混进 *.bak。
-            ExcludeThumbsDb: _defaults.ExcludeThumbsDb,
-            ExcludePatterns: _defaults.ParsedExcludePatterns,
-            IncludeRootFolder: _defaults.IncludeRootFolder,
-            Preallocate: _defaults.PreallocateDisk,
-            ShareSources: _defaults.ShareSources,
-            TestAfterCreation: _testAfterCheck.IsChecked == true,
-            DeleteSourceAfterCreation: _deleteSourceCheck.IsChecked == true,
-            SeparateArchives: _separateCheck.IsChecked == true,
-            Password: format.SupportsPassword ? _password : null,
-            VolumeSizeBytes: SelectedVolumeSizeBytes(),
-            Method: format.SupportsAdvancedSettings ? SelectedMethod() : null,
-            Encryption: format.SupportsAdvancedSettings ? SelectedEncryption() : null,
-            EntryComment: format.SupportsAdvancedSettings && _fileCommentCheck.IsChecked == true
-                ? _commentBox.Text?.Trim()
-                : null);
+        var settings = BuildSettings(output, level);
         var inputs = _inputs.ToList();
         var cts = new CancellationTokenSource();
         var progress = new ProgressWindow(_lang, cts);
@@ -817,6 +1027,10 @@ public sealed class NewArchiveWindow : Window
         }
 
         _ = progress.ShowDialog(this);
+
+        // 真的要压了，就把手里那份取样估算停掉：它和这次压缩抢的是同一批 CPU 核，
+        // 而屏幕上这一行已经改成实测的进度了。
+        _estimateCts?.Cancel();
 
         try
         {
@@ -843,7 +1057,7 @@ public sealed class NewArchiveWindow : Window
             }
             else
             {
-                progress.Finish("TEXT_STATUS_COMPRESS_DONE");
+                progress.Finish("TEXT_STATUS_COMPRESS_DONE", result.OutputBytes);
             }
 
             return;

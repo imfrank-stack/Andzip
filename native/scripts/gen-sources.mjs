@@ -49,13 +49,13 @@ const GROUP_DIRS = {
 // Bundle-level additions from Bundles/Format7zF/makefile, plus FileStreams.cpp:
 // 7z.dll leaves file I/O to the console/GUI front ends, so CInFileStream and
 // COutFileStream are only pulled in by CPP/7zip/UI/Common, which we do not
-// vendor. MultiOutStream.cpp is deliberately not listed -- driving it from the
-// facade produced no volume files at all, so split-volume output is rejected
-// rather than silently losing data (see az_writer.cpp).
+// vendor. MultiOutStream.cpp came back with 5.4.0: driving it is split-volume
+// output for 7z, and the reason it once produced no files at all was our own
+// missing FinalFlush_and_CloseFiles() call, not the class (see az_writer.cpp).
 const EXTRA = {
   COMPRESS_OBJS: ['CodecExports'],
   AR_OBJS: ['ArchiveExports', 'DllExports2'],
-  '7ZIP_COMMON_OBJS': ['FileStreams'],
+  '7ZIP_COMMON_OBJS': ['FileStreams', 'MultiOutStream'],
 };
 
 // Objects contributed by the sub-makefiles Arc.mak !includes at the bottom,

@@ -55,6 +55,16 @@ TEXT_VOLUME_CUSTOM                      = 自定义大小
 TEXT_TITLE_VOLUME_SIZE                  = 分卷大小
 TEXT_LABEL_VOLUME_SIZE                  = 分卷大小 (MB)
 TEXT_ERR_VOLUME_SIZE_INVALID            = 请输入有效的分卷大小（1 - 102400 MB）。
+
+; ---- 压缩后大小的预估 ----
+; 这一行的数不是查表猜的：Core 从输入里按比例取一段样本，用同一个编码器、同一个级别真的压一遍
+; （CompressionEstimator），再外推。所以它是"预估"而不是"实测"，界面上必须这样写出来。
+TEXT_LABEL_ESTIMATE                     = 预估压缩后
+TEXT_ESTIMATE_WORKING                   = 正在取样估算…
+TEXT_ESTIMATE_UNAVAILABLE               = 无法预估
+TEXT_ESTIMATE_DETAIL                    = ≈ ${size}（${percent}）· 预计 ${time}
+TEXT_ESTIMATE_VOLUMES                   = 分 ${count} 卷
+TEXT_ESTIMATE_METHODS                   = 各方法预估：${list}
 TEXT_LABEL_COMPRESSION_LEVEL            = 压缩级别
 TEXT_BTN_ADVANCED_SETTINGS              = 高级设置 »
 TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE     = « 高级设置
@@ -119,6 +129,11 @@ TEXT_ERR_COMPRESS_FAILED                = 压缩失败：
 ; ---- 完整性测试（FR-3.6）----
 TEXT_STATUS_TESTING                     = 正在测试...
 TEXT_PROGRESS_TIME_LEFT                 = 剩余 ${time}
+; 速率与剩余时间同源：已处理的未压缩字节 / 已用时间（与 7-Zip 命令行那个 Speed 一个口径）。
+; 跑完之后同一条式子就是平均速度，那时它旁边还会跟上实测的输出大小。
+TEXT_PROGRESS_SPEED                     = 速度 ${speed}
+TEXT_PROGRESS_AVG_SPEED                 = 平均 ${speed}
+TEXT_PROGRESS_OUTPUT_SIZE               = 输出 ${size}
 TEXT_TITLE_TEST_PASSED                  = 测试完成
 TEXT_TEST_PASSED                        = 所有成员校验通过，没有发现损坏。
 TEXT_TITLE_TEST_FAILED                  = 测试未通过

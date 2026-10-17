@@ -38,7 +38,7 @@ public sealed record ArchiveFormatOption(
         new("TGZ", ".tgz", "tar", CreateWrapper: "gzip"),
         new("LZH", ".lzh", null),
         new("ISO", ".iso", null),
-        new("7Z", ".7z", "7z", PasswordCapable: true, HeaderEncryptionCapable: true),
+        new("7Z", ".7z", "7z", PasswordCapable: true, HeaderEncryptionCapable: true, VolumeCapable: true),
         new("GZ", ".gz", "gzip"),
         new("BZ2", ".bz2", "bzip2"),
         new("XZ", ".xz", "xz"),
@@ -81,7 +81,11 @@ public sealed record ArchiveFormatOption(
     public bool SupportsNonAsciiPassword => SupportsPassword
         && !string.Equals(CreateFormat, "zip", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>是否支持分卷（FR-2.3）。仅 ZIP：分卷由 Core 切块实现，引擎侧的分卷输出尚未实现。</summary>
+    /// <summary>
+    /// 是否支持分卷（FR-2.3）。两种实现，不是一种：7z 由<strong>引擎逐卷写</strong>
+    /// （<c>name.7z.001…</c>，7-Zip 自己的命名，别的软件也认），ZIP 由 <strong>Core 事后切块</strong>
+    /// （WinZip 的 <c>name.z01…name.zip</c>）。命名与"哪一卷是入口"的差别见 <see cref="SplitVolumeSupport"/>。
+    /// </summary>
     public bool SupportsVolume => CanCreate && VolumeCapable;
 
     /// <summary>是否支持加密文件名（7z 专属：连文件列表一起加密）。</summary>

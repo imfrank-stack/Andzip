@@ -142,7 +142,7 @@ public sealed class ProgressWindow : Window
     /// </para>
     /// </summary>
     /// <param name="doneKey">说"…完成"的那条文案（解压与压缩各一条，不能共用一句"正在"的）。</param>
-    public void Finish(string doneKey)
+    public void Finish(string doneKey, long? outputBytes = null)
     {
         _finished = true;
         _textKey = doneKey;
@@ -159,6 +159,18 @@ public sealed class ProgressWindow : Window
         else if (_last is { DoneBytes: > 0 } unsized)
         {
             line += $"  {SizeText.Format(unsized.DoneBytes)}";
+        }
+
+        // 跑完了就不猜了：这两句是实测。输出大小只有压缩给得出（解压的"输出"是散开的
+        // 一堆文件），所以它是可选参数，调用方没有就不说。
+        if (outputBytes is { } written)
+        {
+            line += $"  ·  {_lang.Format("TEXT_PROGRESS_OUTPUT_SIZE", ("size", SizeText.Format(written)))}";
+        }
+
+        if (MeasuredSpeed() is { } average)
+        {
+            line += $"  ·  {_lang.Format("TEXT_PROGRESS_AVG_SPEED", ("speed", average))}";
         }
 
         Title = label;
@@ -215,6 +227,11 @@ public sealed class ProgressWindow : Window
             line += $"  {SizeText.Format(progress.DoneBytes)}";
         }
 
+        if (MeasuredSpeed() is { } speed)
+        {
+            line += $"  ·  {_lang.Format("TEXT_PROGRESS_SPEED", ("speed", speed))}";
+        }
+
         if (EstimateRemaining(progress) is { } left)
         {
             line += $"  ·  {_lang.Format("TEXT_PROGRESS_TIME_LEFT", ("time", left))}";
@@ -255,13 +272,30 @@ public sealed class ProgressWindow : Window
         var remaining = TimeSpan.FromSeconds(secondsPerByte * (progress.TotalBytes - progress.DoneBytes));
 
         // 估出一天以上说明这帧数据不可信（多半是总量算错了），宁可不报。
-        return remaining.TotalDays >= 1 ? null : Format(remaining);
+        return remaining.TotalDays >= 1 ? null : DurationText.Format(remaining);
     }
 
-    private static string Format(TimeSpan span)
-        => span.TotalHours >= 1
-            ? $"{(int)span.TotalHours}:{span.Minutes:D2}:{span.Seconds:D2}"
-            : $"{span.Minutes}:{span.Seconds:D2}";
+    /// <summary>
+    /// 实测吞吐：<strong>已处理的未压缩字节 / 已用时间</strong>，与 7-Zip 命令行那个
+    /// <c>Speed</c> 同一个口径 —— 算的是"读进来压掉了多少"，不是"写出了多少"，
+    /// 所以压缩比再高也不会把这个数说得忽快忽慢。
+    /// <para>
+    /// 起步半秒内不报：那会儿分母还是噪声，一个先跳一下再稳住的数字比没有数字更糟
+    /// （和上面剩余时间"前 3% 不报"是同一条考虑）。跑完之后同一条式子就是平均速度。
+    /// </para>
+    /// </summary>
+    private string? MeasuredSpeed()
+    {
+        if (_last is not { DoneBytes: > 0 } progress)
+        {
+            return null;
+        }
+
+        var seconds = _clock.Elapsed.TotalSeconds;
+        return seconds < 0.5
+            ? null
+            : SizeText.Format((long)(progress.DoneBytes / seconds)) + "/s";
+    }
 
     /// <summary>
     /// 交给 Core 的进度汇。<strong>别自己 <c>new Progress&lt;T&gt;(window.Update)</c></strong>：

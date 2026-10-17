@@ -43,7 +43,7 @@ public sealed record ArchiveCreationSettings(
     /// <summary>是否设置了非空密码。</summary>
     public bool HasPassword => !string.IsNullOrEmpty(Password);
 
-    /// <summary>是否启用分卷（FR-2.3；当前仅 ZIP 由 Core 切块实现）。</summary>
+    /// <summary>是否启用分卷（FR-2.3）。谁去分看格式：7z 交给引擎逐卷写，ZIP 由 Core 事后切块。</summary>
     public bool HasVolume => VolumeSizeBytes is > 0;
 
     /// <summary>压缩方法；未显式指定时取所选格式的第一项。</summary>

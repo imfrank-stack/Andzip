@@ -38,8 +38,9 @@ public static class ArchiveCreator
 
         if (settings.TestAfterCreation)
         {
-            // 分卷时 CreatedArchives 含 name.z01… 这些中间卷；它们是字节切片，不是归档，
-            // 只有末卷（配合它的兄弟卷）能被测试。
+            // 分卷时 CreatedArchives 是一地卷，而它们只是字节切片：只测"自己就能被打开的
+            // 那一个"——WinZip 风格是末卷 name.zip，7z 风格是首卷 name.7z.001（内核从它
+            // 往后拼）。判据在 SplitVolumeSupport.IsVolumePart 里，两族各说各的入口。
             foreach (var archivePath in result.CreatedArchives.Where(path => !SplitVolumeSupport.IsVolumePart(path)))
             {
                 ArchiveTester.Test(archivePath, settings.Password, settings.Progress, cancellationToken);
@@ -77,13 +78,16 @@ public static class ArchiveCreator
         }
 
         var wantsVolumes = settings.HasVolume && format.SupportsVolume;
+        // 两族分卷不是一条路：7z 由引擎逐卷写（x.7z.001…，首卷就是入口），中间不落整包；
+        // ZIP 那一族是 WinZip 命名，引擎不产它，所以先把整包写到一个中间文件里再切块。
+        var engineVolumes = wantsVolumes && format.IsSevenZip;
 
         // 写入目标有三种：
-        //   普通      直接写最终文件
+        //   普通      直接写最终文件（7z 分卷也走这条，卷由引擎分）
         //   分卷      先写中间文件再切块 —— Split 会先删掉它的目标路径，所以不能就地切
         //   复合(tgz) 先写 <stem>.tar 中间文件，再把它整体压成最终文件
-        string? staging = wantsVolumes || format.IsCompound
-            ? (wantsVolumes ? outputFullPath + ".tmp-full" : CompoundStagingPath(outputFullPath))
+        string? staging = (wantsVolumes && !engineVolumes) || format.IsCompound
+            ? (wantsVolumes && !engineVolumes ? outputFullPath + ".tmp-full" : CompoundStagingPath(outputFullPath))
             : null;
         var innerTarget = staging ?? outputFullPath;
         var plan = ArchivePlanBuilder.Build(inputs, settings, innerTarget);
@@ -101,6 +105,13 @@ public static class ArchiveCreator
         var warnings = new List<string>();
         try
         {
+            if (engineVolumes)
+            {
+                // 引擎逐卷是"创建"而不是覆盖：卷号已被上一次的残留占了位，这一次会直接报
+                // 文件已存在。旧 sets 留下的 .005 更坏 —— 三包的结果看起来像四包。
+                SplitVolumeSupport.DeleteStaleSevenZipParts(outputFullPath);
+            }
+
             warnings.AddRange(CreateOne(format.CreateFormat!, plan, settings, innerTarget, cancellationToken));
 
             if (format.IsCompound)
@@ -120,7 +131,12 @@ public static class ArchiveCreator
                     cancellationToken));
             }
 
-            if (wantsVolumes)
+            if (engineVolumes)
+            {
+                // 引擎已经一卷一卷写完了，这里只是把落地的卷数清楚 —— 没有整包可切。
+                created = [.. SplitVolumeSupport.EnumerateSevenZipParts(outputFullPath)];
+            }
+            else if (wantsVolumes)
             {
                 SplitVolumeSupport.DeleteStaleParts(outputFullPath);
                 created = [.. SplitVolumeSupport.Split(

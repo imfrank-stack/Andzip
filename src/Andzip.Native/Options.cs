@@ -50,9 +50,10 @@ public sealed record CreateOptions
     public bool Solid { get; init; } = true;
     public bool MultiThread { get; init; } = true;
     /// <summary>
-    /// Volume size spec such as "100M". NOTE: the native engine currently rejects
-    /// split-volume <em>output</em> — a non-null value makes <c>az_writer_open</c> fail
-    /// with <see cref="AzResult.ErrorUnsupported"/>. Reading split volumes does work.
+    /// Volume size spec such as "100M" (also "700m", "4G", or bare bytes). 7z only:
+    /// the engine writes <c>name.7z.001, .002, ...</c> as it goes, so nothing is staged
+    /// as a single file first. Below 1 MiB, or for any other format,
+    /// <c>az_writer_open</c> fails rather than ignoring the request. Null = one file.
     /// </summary>
     public string? VolumeSize { get; init; }
     public string? Comment { get; init; }

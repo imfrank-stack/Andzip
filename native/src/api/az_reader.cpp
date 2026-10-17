@@ -678,6 +678,53 @@ size_t ReadProbe(IInStream *stream, CByteBuffer &probe)
   return processed;
 }
 
+// Collect a "<base>.001, .002, ..." set for a path whose name ends in exactly
+// three digits. Only a set that really continues is reported: a lone "x.001" (or
+// one missing its ".001") is an ordinary file, and opening a middle volume as if
+// it were the start would hand the handler the tail of an archive.
+bool FindVolumeSet(const UString &path, UString &baseOut, CObjectVector<UString> &partsOut)
+{
+  partsOut.Clear();
+  baseOut.Empty();
+
+  const int dot = path.ReverseFind_Dot();
+  if (dot <= 0 || path.Len() != dot + 4)
+    return false;
+
+  unsigned value = 0;
+  for (int i = dot + 1; i < dot + 4; i++)
+  {
+    const wchar_t c = path[i];
+    if (c < L'0' || c > L'9')
+      return false;
+    value = value * 10 + (unsigned)(c - L'0');
+  }
+  if (value == 0)
+    return false;
+
+  const UString head = path.Left(dot + 1);   // "<dir><base>.", dot included
+  for (unsigned n = 1; n <= 999; n++)
+  {
+    UString name = head;
+    if (n < 10)   name += L'0';
+    if (n < 100)  name += L'0';
+    name.Add_UInt32(n);
+
+    if (!NWindows::NFile::NFind::DoesFileExist_Raw(us2fs(name.Ptr())))
+      break;
+    partsOut.Add(name);
+  }
+
+  if (partsOut.Size() < 2)
+  {
+    partsOut.Clear();
+    return false;
+  }
+
+  baseOut = path.Left(dot);
+  return true;
+}
+
 az_result OpenStreamInternal(IInStream *stream, const UString &nameHint,
                              const UString &fullPathForVolumes,
                              const az_open_options *opts, ArchiveCtx **out)
@@ -835,6 +882,31 @@ AZ_API az_result AZ_CALL az_archive_open(const char *path_utf8,
     return az::Fail(AZ_ERROR_INVALID_ARG, "az_archive_open: path is NULL or empty");
 
   const UString path = az::Utf8ToU(path_utf8);
+
+  // A "<base>.001" with siblings is one archive spread over several files. The 7z
+  // handler has no volume logic of its own -- upstream leaves the reassembling to
+  // the UI front end, which is not vendored -- so hand the handlers the whole set
+  // as one stream and let them see "<base>", whose extension they understand.
+  UString base;
+  CObjectVector<UString> parts;
+  if (az::FindVolumeSet(path, base, parts))
+  {
+    az::CVolInStream *volSpec = new az::CVolInStream();
+    CMyComPtr<IInStream> volStream(volSpec);
+    if (volSpec->Init(parts) != S_OK)
+      return az::Fail(AZ_ERROR_NOT_FOUND,
+                      "split archive '%s' has a volume that cannot be read", path_utf8);
+
+    az::ArchiveCtx *volCtx = NULL;
+    const az_result volRes = az::OpenStreamInternal(volStream, base, base, opts, &volCtx);
+    if (volRes != AZ_OK)
+      return volRes;
+    // The handler cannot tell us this -- it sees one continuous stream. We know,
+    // because we are the ones who stitched it.
+    volCtx->IsVolume = true;
+    *out = (az_archive)volCtx;
+    return AZ_OK;
+  }
 
   CInFileStream *fileStream = new CInFileStream();
   CMyComPtr<IInStream> stream(fileStream);

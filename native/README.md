@@ -457,7 +457,7 @@ Linux x86_64 静态库 `andzip_core.a` 30.9 MB 且被 `azcore` 成功链接，�
 跑的地方它就能跑。覆盖范围：ABI/版本协商、格式与编码器注册表、15 组"格式×方法"的内存往返
 并逐字节比对、多条目嵌套名称与流式读取、磁盘目录树、三种口令方案加口令回调、进度与取消、
 路径穿越防护、已知 CRC32/SHA-256 值，以及各种错误路径（文件不存在、非归档、NULL 参数、
-finish 之后再用、分卷请求被拒）。
+finish 之后再用、非 7z 格式的分卷请求与小于 1 MiB 的卷大小被拒）。
 
 其中 `single entry sink stress`（4,000 轮 × 3 格 × 两种读法，12,000 次单条目读取）是后来补的，
 补它的理由值得记下来：**它抓不住自己要守的那件事**。这一层曾经把交给解压过程的输出流
@@ -479,11 +479,23 @@ finish 之后再用、分卷请求被拒）。
 
 依赖某个功能前请先读这几条。
 
-- **分卷输出未实现。** `az_create_options.volume_size` 给出可解析的大小时，
-  `az_writer_open` 会以 `AZ_ERROR_UNSUPPORTED` 失败。这是故意的：由门面驱动 7-Zip 的
-  `CMultiOutStream` 时会报告成功却**一个文件都不生成**，那是丢数据级别的故障，所以改成明确
-  拒绝。**读取**分卷归档是好的——`IArchiveOpenVolumeCallback` 已实现，`archive.7z.001`
-  会作为一个归档打开并从同目录取回其余分卷。
+- **分卷输出只有 7z。** `az_create_options.volume_size` 认 `"100M" / "700m" / "4G"` 与裸字节数：
+  7z 逐卷写成 `名字.7z.001, .002, …`，小于 1 MiB 报 `AZ_ERROR_INVALID_ARG`，其他格式报
+  `AZ_ERROR_UNSUPPORTED`（ZIP 的分卷是 Core 事后切块，命名是 WinZip 的 `.z01…name.zip`，
+  跟引擎的卷机制不是一套东西），"改写一个已存在的包并同时分卷"也一并拒绝——那条路要先把
+  临时文件换回原名，卷数一多就不是一个 rename 能收的。
+  实现用的是 7-Zip 自己的 `CMultiOutStream`：handler 拿到的仍然是**一条可以 seek 的流**，
+  切分与"回头改第一卷"都归它管。**这里有一条只认错一次的规矩**：`Init()` 是
+  armed-to-delete 的（`NeedDelete = true`），写完必须 `FinalFlush_and_CloseFiles()` 把它改成
+  false，否则对象析构时会把它生成的每一个卷都删掉——上一版"报告成功却一个文件都不生成"
+  就是这么来的，不是这个类的错。
+  **读**同样好，但机制是门面的：`.NNN` 这一族由 `az_archive_open` 先认出整套卷、拼成一条
+  `IInStream` 再交给 handler。这一步是 5.4.0 补的，之前"把 `.001` 直接交给 handler、
+  指望 `IArchiveOpenVolumeCallback` 取回其余分卷"读不出来——7z 的 handler 自己**没有**卷逻辑
+  （只有 ZIP 的 `CVols` 会去要兄弟文件），上游是在没 vendor 进来的 `UI/` 那一层拼的流。
+  所以从前那句"读分卷是好的"对 7z 并不成立——5.4.0 实测把 `.001` 交给旧的读路径，
+  得到的是 `not a recognised archive format`（`.zip.001` 那一族没测过，ZIP 的 handler
+  确实会自己去要兄弟文件）。
 - **没有 `az_entry_find`。** 早先的版本导出过一个原生按名字查找的函数，它经过 P/Invoke 调用
   时会不确定地崩溃（`0xC0000005`）——包括在什么都没跑过的时候——而从 C++ 里做 60 轮交错调用
   又完全复现不了。因此查找改为在 `ArchiveReader.FindEntry` 里基于 `az_entry_get` 完成，这条
@@ -571,8 +583,9 @@ node native/scripts/gen-sources.mjs        # 重新生成源文件清单（这�
   相对路径解析自己的 include，所以它不属于默认 vendor —— 默认那份是"干净的原生 7-Zip"。
 - **`gen-sources.mjs` 会补两个上游清单里没有的文件。** `Bundles/Format7zF/Arc.mak` 是
   `7z.dll` 的配方，它把文件 I/O 和分卷拆分推给控制台/GUI 前端。由于没有 vendor 任何 `UI/`
-  代码，`FileStreams.cpp` 是手工加进来的。`MultiOutStream.cpp` 也曾加上、之后又移除——见上面
-  的分卷限制。
+  代码，`FileStreams.cpp` 是手工加进来的。`MultiOutStream.cpp` 加上过、又移除过、5.4.0
+  起又加回来了：当年"一个文件都不生成"不是这个类的错，是门面漏了 `FinalFlush_and_CloseFiles()`
+  ——见上面的分卷那一条与 `az_writer.cpp` 里那段注释。
 
 生成器从 `7zip.mak` 里解析出 group→directory 映射，所以升级 7-Zip 版本后重跑一次，就会自动
 带上新增和删除的 handler，并报告清单里已经不存在的源文件。

@@ -79,7 +79,7 @@ Windows 上用 PowerShell；在 Git Bash 里请写成 `powershell -ExecutionPoli
 pwsh native/scripts/build-windows.ps1 -RunTests
 ```
 
-编译 `andzip_core.dll`（约 284 个编译单元，几分钟）、跑原生断言、核对导出符号恰好是头文件声明的
+编译 `andzip_core.dll`（约 285 个编译单元，几分钟）、跑原生断言、核对导出符号恰好是头文件声明的
 43 个 `az_*`，最后**把 DLL 暂存到 `src/Andzip.Native/runtimes/win-x64/native/`**。
 最后一步是界面工程能找到引擎的前提：**跳过它 `dotnet build` 照样成功**，只是程序一起来就显示
 「compression engine unavailable」。

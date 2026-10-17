@@ -182,6 +182,38 @@ public:
   az_result Status() const { return _status; }
 };
 
+// Read side of a split archive. 7-Zip chops a 7z into <name>.001, .002, ... and
+// leaves the reassembling to its UI front end, which is not vendored: a handler
+// handed only volume one sees a truncated stream and refuses the file. This
+// presents the whole set as one seekable stream, and it is what makes the
+// volumes az_writer can now write actually openable.
+Z7_CLASS_IMP_COM_1(
+  CVolInStream
+  , IInStream)
+  Z7_IFACE_COM7_IMP(ISequentialInStream)
+  CObjectVector<UString> _paths;
+  CRecordVector<UInt64> _starts;   // global offset where each volume begins
+  CRecordVector<UInt64> _sizes;
+  UInt64 _pos;
+  unsigned _openIndex;
+  UInt64 _handleRel;               // position inside the open volume
+  CInFileStream *_fileSpec;
+  CMyComPtr<IInStream> _fileRef;
+
+  // Make sure the open handle is volume `index` sitting at `rel`. Every Read
+  // asks for this, because a Seek can land anywhere in any volume.
+  bool PositionAt(unsigned index, UInt64 rel);
+  // Volume holding global offset `pos`, or (unsigned)-1 past the end.
+  unsigned VolumeOf(UInt64 pos, UInt64 &relOffset) const;
+public:
+  CVolInStream() : _pos(0), _openIndex((unsigned)-1), _handleRel(0), _fileSpec(NULL) {}
+  ~CVolInStream();
+  // Stats every file up front: a set with an unreadable sibling is not opened.
+  HRESULT Init(const CObjectVector<UString> &paths);
+  UInt64 Size() const
+  { return _paths.IsEmpty() ? 0 : _starts.Back() + _sizes.Back(); }
+};
+
 // ---------------------------------------------------------------------------
 // Progress + password plumbing
 // ---------------------------------------------------------------------------

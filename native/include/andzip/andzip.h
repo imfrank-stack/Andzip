@@ -361,10 +361,13 @@ typedef struct az_create_options {
   int32_t              solid;            /* 7z: one solid block (default 1) */
   int32_t              multi_thread;     /* 1 = allow MT coders (default 1) */
   const char          *volume_size;   /* "100M", "700m", "4G"... NULL = single file.
-                                         Creating split volumes is not supported yet:
-                                         a non-NULL value makes az_writer_open fail
-                                         with AZ_ERROR_UNSUPPORTED. Reading split
-                                         volumes does work. */
+                                         7z only: the archive is written as one logical
+                                         stream and chopped into <name>.7z.001, .002, ...
+                                         Below 1 MiB az_writer_open fails with
+                                         AZ_ERROR_INVALID_ARG; any other format gets
+                                         AZ_ERROR_UNSUPPORTED (ZIP volumes are cut by
+                                         the caller, in WinZip .zNN naming). Reading split
+                                         volumes works for every format that stores them. */
   const char          *comment;       /* zip/7z archive comment; may be NULL */
   const az_callbacks  *callbacks;     /* may be NULL */
   const char         *extra_properties; /* newline separated "name=value" passthrough, e.g. "mf=bt4\nfb=273" */

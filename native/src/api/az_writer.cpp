@@ -22,6 +22,8 @@
 
 #include "az_internal.h"
 
+#include "CPP/7zip/Common/MultiOutStream.h"
+
 #include <algorithm>
 #include <atomic>
 #include <ctime>
@@ -447,6 +449,10 @@ UInt64 ParseVolumeSize(const char *spec)
   return value * mult;
 }
 
+// Floor for a volume. Under a megabyte the result is mostly headers, and every
+// caller we have (the dialog, azcore) speaks in whole megabytes anyway.
+const UInt64 kMinVolumeSize = 1024ull * 1024;
+
 void AddStringProp(CObjectVector<PropEntry> &props, const char *name, const UString &value)
 {
   PropEntry &e = props.AddNew();
@@ -539,6 +545,12 @@ struct WriterCtx
   CMyComPtr<IOutStream> FileOutRef;
   COutFileStream *FileOut;
 
+  // Split-volume output: the handler writes ONE logical stream and 7-Zip's
+  // CMultiOutStream chops it into <name>.7z.001, .002, ... The volume files stay
+  // open inside it until az_writer_finish flushes and renames them.
+  CMyComPtr<IOutStream> VolOutRef;
+  CMultiOutStream *VolOut;
+
   // Update-in-place. SourceArchive is a handle this writer opened and owns: the
   // handler holding the parsed database *is* the writer, and it keeps reading
   // member bytes off that stream while UpdateItems runs. SourceItemCount bounds
@@ -552,7 +564,8 @@ struct WriterCtx
 
   WriterCtx() : Callback(NULL), FormatIndex(-1), VolumeSize(0), ToMemory(false),
                 Finished(false), Failed(false), HasCallbacks(false),
-                MemOut(NULL), FileOut(NULL), SourceArchive(NULL), SourceItemCount(0),
+                MemOut(NULL), FileOut(NULL), VolOut(NULL),
+                SourceArchive(NULL), SourceItemCount(0),
                 IsUpdate(false)
   {
     memset(&Opts, 0, sizeof(Opts));
@@ -908,10 +921,28 @@ az_result WriterOpenInternal(const char *path_utf8, const az_create_options *opt
 
   ctx->VolumeSize = az::ParseVolumeSize(resolved.volume_size);
   if (ctx->VolumeSize != 0)
-    return az::Fail(AZ_ERROR_UNSUPPORTED,
-                    "split-volume output is not supported yet (volume_size='%s'); "
-                    "reading split archives is supported", resolved.volume_size);
-  ctx->VolumeSize = 0;
+  {
+    // Volumes are only implemented where the format's own handler can seek back
+    // across a cut, which today is 7z: the handler is handed ONE seekable stream
+    // and CMultiOutStream chops it into <name>.7z.001, .002, ... ZIP keeps being
+    // split by Core afterwards (WinZip .zNN naming), so the kernel still says no
+    // here rather than writing something nobody asked for.
+    if (az::UToUtf8A(ctx->FormatName) != "7z")
+      return az::Fail(AZ_ERROR_UNSUPPORTED,
+                      "split-volume output is only implemented for 7z, not '%s'",
+                      az::UToUtf8A(ctx->FormatName).Ptr());
+    if (ctx->ToMemory)
+      return az::Fail(AZ_ERROR_INVALID_ARG,
+                      "volume_size needs a destination file, not an in-memory archive");
+    if (ctx->IsUpdate)
+      return az::Fail(AZ_ERROR_UNSUPPORTED,
+                      "rewriting an existing archive into volumes is not supported");
+    if (ctx->VolumeSize < az::kMinVolumeSize)
+      return az::Fail(AZ_ERROR_INVALID_ARG,
+                      "volume_size must be at least %llu bytes (got %llu)",
+                      (unsigned long long)az::kMinVolumeSize,
+                      (unsigned long long)ctx->VolumeSize);
+  }
 
   az::CUpdateCallback *cb = new az::CUpdateCallback();
   ctx->CallbackRef = cb;
@@ -1193,6 +1224,46 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
     ctx->MemOut = mem;
     outStream = mem;
   }
+  else if (ctx->VolumeSize != 0)
+  {
+    const az_result mk = az::MakeDirTree(ctx->DestPath);
+    if (mk != AZ_OK)
+    {
+      ctx->Failed = true;
+      return mk;
+    }
+
+    // The handler is handed ONE seekable stream; CMultiOutStream is the splitter.
+    // It names each piece "<Prefix><n>" with n padded to three digits, so the
+    // prefix keeps the trailing dot: big.7z -> big.7z.001, big.7z.002, ...
+    CMultiOutStream *vol = new CMultiOutStream();
+    ctx->VolOutRef = vol;
+    ctx->VolOut = vol;
+
+    UString prefix = ctx->DestPath;
+    prefix += L'.';
+    vol->Prefix = us2fs(prefix.Ptr());
+
+    CRecordVector<UInt64> sizes;
+    try
+    {
+      // One entry means "every volume this size, the last one whatever is left":
+      // the repeated-size form of 7-Zip's -v. Init() throws on a size it cannot use.
+      sizes.Add(ctx->VolumeSize);
+      vol->Init(sizes);
+    }
+    catch (...)
+    {
+      ctx->Failed = true;
+      return az::Fail(AZ_ERROR_INVALID_ARG, "volume_size %llu cannot be armed for 7z",
+                      (unsigned long long)ctx->VolumeSize);
+    }
+
+    if (ctx->Opts.preallocate)
+      problems += "preallocate does not apply to split-volume output; continuing without it. ";
+
+    outStream = vol;
+  }
   else
   {
     const az_result mk = az::MakeDirTree(ctx->DestPath);
@@ -1284,6 +1355,31 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
       ctx->Failed = true;
       return az::FailHr(closeRes, AZ_ERROR_IO, "closing the archive file");
     }
+  }
+
+  if (ctx->VolOut)
+  {
+    // Until this call the volumes are still open and still named temporarily.
+    // Init() arms NeedDelete, and the destructor honours it -- right for a write
+    // that aborted, fatal for one that finished: forgetting this call is exactly
+    // how an earlier attempt reported success and left no files at all. Leaving
+    // the flag armed on the failure path below is what cleans up a half-written
+    // set when az_writer_free finally drops the context.
+    unsigned numVolumes = 0;
+    const HRESULT flushRes = ctx->VolOut->FinalFlush_and_CloseFiles(numVolumes);
+    if (flushRes != S_OK)
+    {
+      ctx->Failed = true;
+      return az::FailHr(flushRes, AZ_ERROR_IO, "closing the volume files");
+    }
+    // Zero volumes with a success code is the failure this whole path used to
+    // have, so it is checked rather than assumed away.
+    if (numVolumes == 0)
+    {
+      ctx->Failed = true;
+      return az::Fail(AZ_ERROR_IO, "the split-volume write produced no volume");
+    }
+    ctx->VolOut->NeedDelete = false;
   }
 
   if (ctx->IsUpdate)

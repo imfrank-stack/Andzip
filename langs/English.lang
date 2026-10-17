@@ -55,6 +55,17 @@ TEXT_VOLUME_CUSTOM                      = Custom size
 TEXT_TITLE_VOLUME_SIZE                  = Volume size
 TEXT_LABEL_VOLUME_SIZE                  = Volume size (MB)
 TEXT_ERR_VOLUME_SIZE_INVALID            = Enter a valid volume size (1 - 102400 MB).
+
+; ---- Estimated size after compression ----
+; Not a lookup table: Core samples the inputs in proportion to their size and really
+; compresses that sample with the same coder and level (CompressionEstimator), then
+; extrapolates. It is an estimate, and the UI has to say so.
+TEXT_LABEL_ESTIMATE                     = Estimated size
+TEXT_ESTIMATE_WORKING                   = Sampling to estimate…
+TEXT_ESTIMATE_UNAVAILABLE               = No estimate
+TEXT_ESTIMATE_DETAIL                    = ≈ ${size} (${percent}) · about ${time}
+TEXT_ESTIMATE_VOLUMES                   = ${count} volumes
+TEXT_ESTIMATE_METHODS                   = By method: ${list}
 TEXT_LABEL_COMPRESSION_LEVEL            = Compression level
 TEXT_BTN_ADVANCED_SETTINGS              = Advanced settings »
 TEXT_BTN_ADVANCED_SETTINGS_COLLAPSE     = « Advanced settings
@@ -119,6 +130,12 @@ TEXT_ERR_COMPRESS_FAILED                = Compression failed:
 ; ---- Integrity test (FR-3.6) ----
 TEXT_STATUS_TESTING                     = Testing...
 TEXT_PROGRESS_TIME_LEFT                 = ${time} left
+; Speed and the remaining time come from the same measurement: uncompressed bytes
+; processed / elapsed time (the same definition 7-Zip's console prints). Once the job
+; is done the same number is the average, and the measured output size appears next to it.
+TEXT_PROGRESS_SPEED                     = Speed ${speed}
+TEXT_PROGRESS_AVG_SPEED                 = Avg ${speed}
+TEXT_PROGRESS_OUTPUT_SIZE               = Output ${size}
 TEXT_TITLE_TEST_PASSED                  = Test complete
 TEXT_TEST_PASSED                        = Every member verified; nothing is damaged.
 TEXT_TITLE_TEST_FAILED                  = Test failed
