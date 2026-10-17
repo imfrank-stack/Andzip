@@ -54,8 +54,9 @@
 ### 五、测试
 
 **没有新增用例**（用户要求：他手动测），条数与 4.7.0 相同。改的是被这次动作废的**期望串**：
-`ExtractionLayoutTests` 里七处（`report (2)` → `report1`、`photos (2)` 那一条先占 `photos1`
-再断 `photos2`、`my.app (2)` → `my.app1` 等）。**改写而不是删掉** —— 那七条钉的是"撞名要让路、
+`ExtractionLayoutTests` 里五个用例的七行（五条断言的期望串、一处预置进去的同名目录、一行注释）：
+`report (2)` → `report1`、`photos (2)` 那一条先占 `photos1` 再断 `photos2`、`my.app (2)` → `my.app1`。
+**改写而不是删掉** —— 那五条钉的是"撞名要让路、
 文件也算占用、目录名里的点不是扩展名、连续占用要往后走"这四条规矩，换的只是让路之后长什么样。
 `ShellTasksTests` 里 `UniqueArchivePath_AppendsAnIndex…` 与 `ExtractionTests` 里那两条
 `a (2).txt` 一个字节没动 —— 它们守的是本轮刻意没改的那两处。
