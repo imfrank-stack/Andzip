@@ -495,6 +495,100 @@ static void TestMultipleEntries()
   EndTest();
 }
 
+// Both single-entry readers drive the engine through one
+// IArchiveExtractCallback::GetStream result. That pointer is a COM [out]
+// parameter: the shim owns a reference and the handler releases it when the
+// item is done -- the Zip handler keeps it in a CMyComPtr and releases it at
+// the end of every file (Archive/Zip/ZipHandler.cpp, and again implicitly
+// through the realOutStream scope). Handing back the sink without AddRef makes
+// that release the last one, so the sink is deleted while still inside
+// az_entry_read; the reader then reads its status from freed memory and
+// releases it a second time. The heap records the damage and pays for it on a
+// later entry, in a call that has nothing to do with the archive: a sporadic
+// access violation whose position depends only on allocation order.
+//
+// One read cannot show this, and neither can a handful -- the freed block has
+// to be recycled first. So loop the way the shell does: many entries, both
+// readers, with allocations in between that pull the freed block back into use.
+static void TestSingleEntrySinkStress()
+{
+  BeginTest("single entry sink stress");
+
+  az_create_options co = AZ_CREATE_OPTIONS_INIT;
+  co.format = "zip";
+  co.method = "Deflate";
+  co.level = 5;
+
+  az_writer w = NULL;
+  CHECK_AZ(az_writer_open_memory(&co, &w));
+
+  // Sizes chosen so consecutive reads allocate and free blocks that the CRT
+  // puts back into the same pool the sink came from.
+  const std::vector<std::vector<unsigned char> > payloads =
+      { MakePayload(1024), MakePayload(24 * 1024), MakePayload(300 * 1024) };
+
+  const char *names[] = { "stress/a.bin", "stress/b.bin", "stress/c.bin" };
+  for (size_t i = 0; i < payloads.size(); i++)
+    CHECK_AZ(az_writer_add_buffer(w, payloads[i].data(), payloads[i].size(), names[i], NULL));
+
+  void *blob = NULL;
+  size_t blobSize = 0;
+  CHECK_AZ(az_writer_finish(w, &blob, &blobSize));
+  az_writer_free(w);
+
+  az_archive arc = NULL;
+  CHECK_AZ(az_archive_open_memory(blob, blobSize, "stress.zip", NULL, &arc));
+
+  struct Collector
+  {
+    std::vector<unsigned char> data;
+    static az_result Write(void *ctx, const void *d, size_t n)
+    {
+      Collector *c = static_cast<Collector *>(ctx);
+      const unsigned char *p = static_cast<const unsigned char *>(d);
+      c->data.insert(c->data.end(), p, p + n);
+      return AZ_OK;
+    }
+  };
+
+  bool ok = true;
+  for (int round = 0; ok && round < 4000; round++)
+  {
+    for (size_t i = 0; i < payloads.size() && ok; i++)
+    {
+      std::vector<unsigned char> back(payloads[i].size());
+      size_t written = 0;
+      const az_result r = az_entry_read(arc, (uint64_t)i, back.data(), back.size(), &written);
+      if (r != AZ_OK || written != payloads[i].size() || !SameBytes(back, payloads[i]))
+      {
+        std::printf("  FAIL buffered read round %d entry %u -> %d (%s)\n", round, (unsigned)i,
+                    (int)r, az_last_error_message());
+        ok = false;
+        break;
+      }
+
+      Collector c;
+      if (az_entry_read_stream(arc, (uint64_t)i, Collector::Write, &c) != AZ_OK ||
+          !SameBytes(c.data, payloads[i]))
+      {
+        std::printf("  FAIL streamed read round %d entry %u\n", round, (unsigned)i);
+        ok = false;
+        break;
+      }
+
+      // Recycle the block the readers freed, at a size they would have used.
+      std::vector<unsigned char> churn((size_t)round % 96 + 8, (unsigned char)round);
+      if (churn.size() < 8)
+        ok = false;
+    }
+  }
+  CHECK(ok);
+
+  az_archive_close(arc);
+  az_free(blob);
+  EndTest();
+}
+
 static void TestDirectoryRoundTrip()
 {
   BeginTest("directory round trip");
@@ -1348,6 +1442,7 @@ int main()
   TestCodecTable();
   TestMemoryRoundTrips();
   TestMultipleEntries();
+  TestSingleEntrySinkStress();
   TestDirectoryRoundTrip();
   TestPasswords();
   TestPasswordCallback();

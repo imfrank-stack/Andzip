@@ -37,7 +37,7 @@ native/
 │   ├── build-windows.ps1       MSVC + Ninja（已验证）
 │   ├── build-unix.sh           gcc/clang + Ninja 或 Makefiles
 │   ├── provision-toolchain.ps1 下载便携版 Zig / CMake / Ninja（无需安装）
-│   └── check-exports.ps1       校验产物只导出头文件里声明的 41 个 az_*
+│   └── check-exports.ps1       校验产物只导出头文件里声明的 43 个 az_*
 ├── third_party/
 │   ├── 7zip/                   原样 vendor 的 7-Zip：C/、CPP/、DOC/
 │   ├── codecs/                 vendor 的 zstd、lz4、brotli、lizard、lz5 等
@@ -59,7 +59,7 @@ C# 外壳（`Andzip.Native`）与它的自检程序**不在本目录**，而在 
   C# (Andzip.Native) ──P/Invoke──┐
   azcore (CLI) / azgui (GUI) ────┤
                                  ▼
-                    include/andzip/andzip.h   ← 对外只有 41 个 az_* 函数
+                    include/andzip/andzip.h   ← 对外只有 43 个 az_* 函数
                                  ▼
                          src/api/（门面）
                                  ▼
@@ -170,7 +170,8 @@ native/scripts/build-unix.sh -T
 
 这台机器上没有 WSL 也没有 Docker，所以 Linux 产物只能静态核对：`DT_NEEDED` 只有
 `libc.so.6 / ld-linux / libpthread / libdl`（C++ 运行时由 Zig 静态链入），导出表恰好是头文件
-里的 41 个 `az_*`。POSIX 分支这次是第一次被真正编译，修掉的问题列在
+里的 41 个 `az_*`（**按当时的头文件**；`andzip.h` 现在是 43 个，这一侧还没按新头文件重跑一遍
+核对 —— 数目由脚本从 `andzip.h` 现读，所以重跑时不一致会当场报出来）。POSIX 分支这次是第一次被真正编译，修掉的问题列在
 [已知限制](#已知限制) 里。**Linux 上的运行时行为仍未验证**，需要在一台真机上跑
 `andzip_core_tests`。
 
@@ -335,8 +336,16 @@ Linux 作业时发现的（见 `../README.md` 第七节第 13 条）。
   `CObjectVector<T>::AddNew()` 用的是 `new T`（默认初始化，POD 成员**不清零**），所以带
   `PROPVARIANT` 成员的结构必须自己写默认构造把它 Init 掉。这条踩过一次很贵的坑，详见
   [`../README.md` 第七节第 10 条](../README.md)。
-- **只导出 41 个符号，别的一个没有。** `native/scripts/check-exports.ps1` 对 `.dll` 走
-  dumpbin、对 `.so` 自己解析 `.dynsym`，两侧都核对过；期望值直接从 `andzip.h` 读取，所以
+- **交进引擎的 COM 接口指针必须自带一份引用。** 7-Zip 那些回调参数是 COM 的 `[out]` 语义：
+  被调的一方交出一个**已经 AddRef 过**的指针，取的一方（引擎）负责放掉那一份。
+  它的 `CMyUnknownImp` 起点是 **0**（`Common/MyCom.h`），所以少加那一次不会当场报错 ——
+  引擎那一次 `Release()` 就成了最后一次，对象在调用里被 `delete`，而门面接着读它的状态、
+  再释放一次，往刚被堆回收的块里写。于是症状落在**后面某一格**的读取上，看着与这次调用无关。
+  `az_entry_read` / `az_entry_read_stream` 走过这条路，代价是一整轮用户可见的 `0xC0000005`，
+  详见 [`../README.md` 第七节第 93 条](../README.md)。
+- **只导出 `andzip.h` 里声明的那些符号（现为 43 个），别的一个没有。**
+  `native/scripts/check-exports.ps1` 对 `.dll` 走 dumpbin、对 `.so` 自己解析 `.dynsym`，
+  两侧都核对过；期望值直接从 `andzip.h` 读取，所以
   不会和代码脱节。7-Zip 的 `STDAPI` 本身不带 `dllexport`，vendor 时也刻意丢掉了 `.def`
   文件，所以 COM 符号不会泄漏。
 
@@ -415,10 +424,12 @@ PATH 上 —— 这台机器只有 Windows PowerShell 5.1，早期版本写死 `
 自己解析 ELF `.dynsym`；期望值直接从 `include/andzip/andzip.h` 读取，所以清单不会和代码脱节。
 
 当前状态（上面那条 `verify-all-targets.ps1` 一次性跑出来的结果，`PROPVARIANT` 修复之后）：
-**Windows x64 Release 下动态库与静态库各跑一遍 532 条原生断言，全部通过、0 失败、编译无警告**
-（静态库用 `/WHOLEARCHIVE` 链接，注册表全局构造不会被裁掉；`azcore` / `azgui` / 测试程序都链
+**Windows x64 Release 下动态库与静态库各跑一遍原生断言，全部通过、0 失败、编译无警告**
+（断言数随功能长：那一次是 532 条，第七节第 93 条这一轮重跑的是动态库那份，**649 条全通过**；
+静态库用 `/WHOLEARCHIVE` 链接，注册表全局构造不会被裁掉；`azcore` / `azgui` / 测试程序都链
 它）；托管侧另有 69 条断言。**Linux x86_64 / arm64 动态库重新交叉编译并核对过导出**（各 41 个，
-无 7-Zip 符号泄漏），Linux x86_64 静态库 `andzip_core.a` 30.9 MB 且被 `azcore` 成功链接，但
+按当时的头文件，见[构建](#linux已交叉编译验证)那一节关于 43 的注；无 7-Zip 符号泄漏），
+Linux x86_64 静态库 `andzip_core.a` 30.9 MB 且被 `azcore` 成功链接，但
 **未在这些平台上运行过测试**。`azgui.exe` 的压缩/解压/自检流程已用真实控件点击驱动并逐字节复核，
 见[使用说明](#2-最小-gui-验证程序azgui)。
 
@@ -434,6 +445,15 @@ PATH 上 —— 这台机器只有 Windows PowerShell 5.1，早期版本写死 `
 并逐字节比对、多条目嵌套名称与流式读取、磁盘目录树、三种口令方案加口令回调、进度与取消、
 路径穿越防护、已知 CRC32/SHA-256 值，以及各种错误路径（文件不存在、非归档、NULL 参数、
 finish 之后再用、分卷请求被拒）。
+
+其中 `single entry sink stress`（4,000 轮 × 3 格 × 两种读法，12,000 次单条目读取）是后来补的，
+补它的理由值得记下来：**它抓不住自己要守的那件事**。这一层曾经把交给解压过程的输出流
+少加一次引用，而被改坏的是堆的元数据 —— 解出来的字节一个都不错，所以逐字节比对的往返
+全部照绿；改之前跑这个循环也没崩（12,000 次 0 崩溃），因为还债的时间点取决于分配次序。
+真正的证人是一枚临时存活计数器（构造 +1、析构 −1）：改之前 24,073 次读取里有 24,073 次
+报"这个对象在这次调用里已经被销毁"，改之后 0 次。计数器不留在产品代码里，
+这条压力循环留下来了 —— 它守的是"以后同类错误会让堆替我们叫"，不是"它能复现这一次"。
+完整过程见 [`../README.md` 第七节第 93 条](../README.md)。
 
 自己造再自己读会掩盖对称性缺陷，所以有两个测试故意使用引擎没有生产出来的输入：
 `TestForeignArchive` 按格式规范手工拼了一个 USTAR 镜像，测试集还会读由独立 `tar` 写出的归档。
@@ -457,6 +477,10 @@ finish 之后再用、分卷请求被拒）。
   路径两侧都被测试覆盖。被替换掉的那个引擎调用已从头文件、ABI 和导出表中删除，而不是留在那
   里当一个潜在崩溃点。等价的原语是 `ArchiveReader.Entries`；频繁查找应当先把它做成字典一次，
   而不是每次查询都扫一遍。
+  **同类症状在 2026-10-17 有了一个查清的解释**：`az_entry_read` / `az_entry_read_stream`
+  也是"从 C++ 里复现不了、在 CLR 宿主里随机崩"，根因是把输出流交给解压过程时少加了一次引用
+  （见[C ABI 约定](#c-abi-约定)那一条）。那一处与 `az_entry_find` 是不是同一个原因**没法核对** ——
+  那个函数在首次提交之前就不在这份源码里了，所以这条限制原文保留、不改动结论。
 - **Linux 只验证到"能编译、能链接、导出正确"。** 见上面的对照表：没有可执行 Linux 二进制的
   环境，所以运行时行为仍是空白。POSIX 分支这次第一次真正被编译，修掉的问题是
   `FILETIME_To_timespec` 在全局作用域而非 `NWindows::NTime`、`PropVariantClear` 与
@@ -506,8 +530,8 @@ finish 之后再用、分卷请求被拒）。
   `NCompress::NZstd`，`Archive/Zip` 与 `ZstdHandler.cpp` 用的是它；fork 的 `NCompress::NZSTD`
   换不掉它（直接 C2039 编不过）。所以 `vendor-sources.ps1 -ExtraCodecs` 把 fork 那一对落成
   `Compress/ZstdFork{Decoder,Encoder,Register}.cpp`，文件名与命名空间都不撞，两边一起编。
-- **打开开关的代价与后果都是量出来的**：`andzip_core.dll` 1,747,968 → 3,415,552 字节，导出仍是
-  41 个（一个没多——编码器藏在 DLL 内部注册，不对外暴露符号）。7z 写入路径对五个方法一律接受，
+- **打开开关的代价与后果都是量出来的**：`andzip_core.dll` 1,747,968 → 3,415,552 字节，导出一个没多
+  （编码器藏在 DLL 内部注册，不对外暴露符号）。7z 写入路径对五个方法一律接受，
   `Andzip.Native.Tests` 按 0/5/9 三档各压一遍再读回逐字节比对；**ZIP 仍然拒绝**（`E_NOTIMPL`），
   这条是产品红线，不是一句"暂时没做"：非标准方法号写出的 zip 别的软件打不开。
 

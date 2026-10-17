@@ -71,6 +71,9 @@ public sealed class ArchiveContentSession : IDisposable
 
     public void Dispose()
     {
+        // 释放也在锁里做，而不是只立起 _disposed：已经开始的那一次读取没法取消
+        // （调用方的 CancellationToken 取消的是"等它"，不是"跑它"），
+        // 而 _reader.Dispose() 放掉的引擎句柄正被那次解压用着。
         lock (_gate)
         {
             if (_disposed)
@@ -79,9 +82,8 @@ public sealed class ArchiveContentSession : IDisposable
             }
 
             _disposed = true;
+            _reader.Dispose();
+            _single.Dispose();
         }
-
-        _reader.Dispose();
-        _single.Dispose();
     }
 }

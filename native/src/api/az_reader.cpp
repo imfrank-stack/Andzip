@@ -371,6 +371,17 @@ STDMETHODIMP CExtractCallback::GetStream(UInt32 index, ISequentialOutStream **ou
 
   if (_singleMode)
   {
+    // A COM [out] parameter: the handler takes one reference and drops it when
+    // the item is done (the Zip decoder keeps it in a CMyComPtr and calls
+    // Release() at the end of every file -- Archive/Zip/ZipHandler.cpp).
+    // Handing back the raw pointer made that release the last one, so the sink
+    // was deleted inside az_entry_read; the reader then asked a freed object
+    // for its status and released it again, writing into memory the heap had
+    // already recycled. A liveness counter measured that on every single-entry
+    // read. What reaches the user is the second half: free-list damage paid for
+    // on a later entry, as an access violation in an az_entry_read call whose
+    // own entry had nothing wrong with it.
+    _singleSink->AddRef();
     *outStream = _singleSink;
     return S_OK;
   }
