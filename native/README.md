@@ -289,7 +289,7 @@ Console.WriteLine(writer.Warnings);   // 该格式无法满足的设置项
 `CMakeLists.txt` 里的 `PREFIX ""` **只能对 Windows 生效**：非 Windows 上清掉前缀会得到
 `andzip_core.so`，而外壳按 POSIX 惯例探测 `libandzip_core.so`，结果是内核在 Linux/macOS 上
 **永远加载不到**，而 Windows 侧一切正常、交叉编译也照样"通过"。这条以前就是错的，是加 CI 的
-Linux 作业时发现的（见 `../README.md` 第七节第 13 条）。
+Linux 作业时发现的（见 `../docs/开发记录.md` 第七节第 13 条）。
 
 ## 支持的格式与编解码器
 
@@ -348,14 +348,14 @@ Linux 作业时发现的（见 `../README.md` 第七节第 13 条）。
   `Release`），对未初始化的变量调用就是对一个野指针执行释放。7-Zip 的
   `CObjectVector<T>::AddNew()` 用的是 `new T`（默认初始化，POD 成员**不清零**），所以带
   `PROPVARIANT` 成员的结构必须自己写默认构造把它 Init 掉。这条踩过一次很贵的坑，详见
-  [`../README.md` 第七节第 10 条](../README.md)。
+  [`../docs/开发记录.md` 第七节第 10 条](../docs/开发记录.md)。
 - **交进引擎的 COM 接口指针必须自带一份引用。** 7-Zip 那些回调参数是 COM 的 `[out]` 语义：
   被调的一方交出一个**已经 AddRef 过**的指针，取的一方（引擎）负责放掉那一份。
   它的 `CMyUnknownImp` 起点是 **0**（`Common/MyCom.h`），所以少加那一次不会当场报错 ——
   引擎那一次 `Release()` 就成了最后一次，对象在调用里被 `delete`，而门面接着读它的状态、
   再释放一次，往刚被堆回收的块里写。于是症状落在**后面某一格**的读取上，看着与这次调用无关。
   `az_entry_read` / `az_entry_read_stream` 走过这条路，代价是一整轮用户可见的 `0xC0000005`，
-  详见 [`../README.md` 第七节第 93 条](../README.md)。
+  详见 [`../docs/开发记录.md` 第七节第 93 条](../docs/开发记录.md)。
 - **只导出 `andzip.h` 里声明的那些符号（现为 43 个），别的一个没有。**
   `native/scripts/check-exports.ps1` 对 `.dll` 走 dumpbin、对 `.so` 自己解析 `.dynsym`，
   两侧都核对过；期望值直接从 `andzip.h` 读取，所以
@@ -451,7 +451,7 @@ Linux x86_64 静态库 `andzip_core.a` 30.9 MB 且被 `azcore` 成功链接，�
 修复后 45,000 次 0 崩溃。现在这条检查常驻在 `Andzip.Native.Tests` 里
 （`writer stress`，4000 次加密 ZIP 写入 + 读回），并且做过反向验证——把 `PropEntry` 的默认
 构造删掉重编内核后，6 次运行崩 5 次。定位思路见
-[`../README.md` 第七节第 10 条](../README.md)。
+[`../docs/开发记录.md` 第七节第 10 条](../docs/开发记录.md)。
 
 `tests/native/test_main.cpp` 刻意不做任何依赖：几个宏、一个临时目录、公开头文件，所以库能
 跑的地方它就能跑。覆盖范围：ABI/版本协商、格式与编码器注册表、15 组"格式×方法"的内存往返
@@ -466,7 +466,7 @@ finish 之后再用、分卷请求被拒）。
 真正的证人是一枚临时存活计数器（构造 +1、析构 −1）：改之前 24,073 次读取里有 24,073 次
 报"这个对象在这次调用里已经被销毁"，改之后 0 次。计数器不留在产品代码里，
 这条压力循环留下来了 —— 它守的是"以后同类错误会让堆替我们叫"，不是"它能复现这一次"。
-完整过程见 [`../README.md` 第七节第 93 条](../README.md)。
+完整过程见 [`../docs/开发记录.md` 第七节第 93 条](../docs/开发记录.md)。
 
 自己造再自己读会掩盖对称性缺陷，所以有两个测试故意使用引擎没有生产出来的输入：
 `TestForeignArchive` 按格式规范手工拼了一个 USTAR 镜像，测试集还会读由独立 `tar` 写出的归档。

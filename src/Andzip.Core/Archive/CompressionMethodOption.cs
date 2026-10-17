@@ -59,7 +59,7 @@ public sealed record CompressionMethodOption(string EngineMethod, string Display
     /// 顺带一提，原版 7-Zip 25 能<em>读</em> ZIP 里的 Zstandard 却写不出来 —— 单向兼容更容易骗人。
     /// </para>
     /// 这份表已经过 native 引擎实测：ZIP 的 BZip2/LZMA 与 7z 的 LZMA2/LZMA/PPMd/BZip2/Copy
-    /// 都能真实往返（见 README 的自检记录），7z 那五个扩展方法见 <see cref="Zstd"/> 那段。
+    /// 都能真实往返（实测记录在 docs/ 下开发记录的第九节），7z 那五个扩展方法见 <see cref="Zstd"/> 那段。
     /// </summary>
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<CompressionMethodOption>> Table =
         new Dictionary<string, IReadOnlyList<CompressionMethodOption>>(StringComparer.OrdinalIgnoreCase)
