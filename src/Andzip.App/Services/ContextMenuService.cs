@@ -94,16 +94,38 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
     /// </para>
     /// <para>返回"真改过"而不是"看过几个"，理由与 <see cref="FileAssociationService.RepairCommands"/>
     /// 完全一样：这条自愈路径每次通过关联启动都会跑，而广播一次就是<strong>屏幕上所有图标闪一下</strong>。</para>
+    /// <para><strong>机器级那一份还要把当前用户那一棵里的散动词一起校正</strong>（5.3.0）：
+    /// 两棵 Classes 在 shell 里是合并视图，<c>HKCU</c> 压过 <c>HKLM</c>，所以一个绿色版
+    /// 当年在 <c>HKCU\Software\Classes\*\shell</c> 里留下的老动词会一直盖住装好的那一份 ——
+    /// 修的不是"缺条目"，是"两棵各说一套"。只在校正机器级时多走这一趟：没装过的用户不该被塞进菜单，
+    /// 而这一趟判的还是"那个范围在<strong>那一棵</strong>里到底装没装"。</para>
     /// </summary>
     public int RepairVerbs(string executablePath, IReadOnlyList<CompressionVerb> verbs)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
 
+        var repaired = RepairVerbsInto(Root(), executablePath, verbs);
+        if (_scope == InstallScope.AllUsers)
+        {
+            using var perUser = _root(InstallScope.CurrentUser);
+            repaired += RepairVerbsInto(perUser, executablePath, verbs);
+        }
+
+        if (repaired > 0)
+        {
+            _notifyShell();
+        }
+
+        return repaired;
+    }
+
+    /// <summary>把一棵根里"已经装了"的范围补齐。返回真改过的范围数；广播由调用方按总数决定。</summary>
+    private int RepairVerbsInto(RegistryKey root, string executablePath, IReadOnlyList<CompressionVerb> verbs)
+    {
         var repaired = 0;
-        using var root = Root();
         foreach (var (target, _) in Scopes(forFiles: true, forFolders: true))
         {
-            if (!IsInstalled(target))
+            if (!IsInstalled(root, target))
             {
                 continue;
             }
@@ -113,11 +135,6 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
             {
                 repaired++;
             }
-        }
-
-        if (repaired > 0)
-        {
-            _notifyShell();
         }
 
         return repaired;
@@ -223,6 +240,16 @@ internal sealed class ContextMenuService(InstallScope scope = InstallScope.Curre
     public bool IsInstalled(string target)
     {
         using var root = Root();
+        return IsInstalled(root, target);
+    }
+
+    /// <summary>
+    /// 「这个范围在<strong>给定那一棵</strong>里装没装」。要按根问一遍，是因为两棵 Classes 在 shell 里
+    /// 是合并视图：「机器级那份装了什么」与「当前用户那棵里有没有散着的老动词」是两个问题，
+    /// 只用前者回答后者，就会把没装过的范围写进 <c>HKCU</c>（<c>RepairVerbs</c> 5.3.0 那一趟要防的）。
+    /// </summary>
+    private static bool IsInstalled(RegistryKey root, string target)
+    {
         using var shell = root.OpenSubKey(ClassesRoot + target + @"\shell");
         if (shell is null)
         {

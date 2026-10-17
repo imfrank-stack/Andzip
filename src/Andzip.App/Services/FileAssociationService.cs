@@ -455,13 +455,43 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
     /// （值一个字都没变），紧接着 shell 重写了图标缓存 <c>iconcache_idx.db</c>。
     /// 现在值相同就不写、没写就不广播。
     /// </para>
+    /// <para>
+    /// <strong>机器级那一份还要多校正一棵：当前用户那棵 <c>Software\Classes</c></strong>（5.3.0）。
+    /// 起因是这台机器上的实测：装好的那份（<c>HKLM</c>）动词表已经是 5.0.0 之后的形状（只有一行「解压」），
+    /// 而右键菜单上仍然并排出现「智能解压」与「解压」——因为很多年前某个带版本号的绿色版
+    /// 在 <c>HKCU\Software\Classes\Andzip.*</c> 里留下了一整套老动词，而 <c>HKCU</c> 与 <c>HKLM</c>
+    /// 在 shell 里是<strong>合并视图，个人的那一份压过机器的</strong>（同一族的事在
+    /// <c>UserChoice</c> 那条上早就记过一笔）。原来这条自愈只看自己作用域那一棵，
+    /// 于是散着的那一套永远不会被刷新，也不会消失。绿色版不这么做也没关系：
+    /// 它本来就写在 <c>HKCU</c>，第一趟已经把自己那棵校正干净了。
+    /// </para>
     /// </summary>
     public int RepairCommands(string executablePath, ExtractionVerbLabels labels)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
         ArgumentNullException.ThrowIfNull(labels);
 
-        using var root = Root();
+        var repaired = RepairCommandsInto(Root(), executablePath, labels);
+        if (_scope == InstallScope.AllUsers)
+        {
+            using var perUser = _root(InstallScope.CurrentUser);
+            repaired += RepairCommandsInto(perUser, executablePath, labels);
+        }
+
+        if (repaired > 0)
+        {
+            _notifyShell();
+        }
+
+        return repaired;
+    }
+
+    /// <summary>
+    /// 把一棵 Classes 根下所有 <c>Andzip.*</c> 的动词表校正到这份 exe 与这套文案。
+    /// 返回<strong>真改过几棵</strong>，广播由调用方按这个数决定（3.2.1 那条）。
+    /// </summary>
+    private static int RepairCommandsInto(RegistryKey root, string executablePath, ExtractionVerbLabels labels)
+    {
         using var classes = root.OpenSubKey(@"Software\Classes", writable: true);
         if (classes is null)
         {
@@ -487,11 +517,6 @@ internal sealed class FileAssociationService(InstallScope scope = InstallScope.C
             {
                 repaired++;
             }
-        }
-
-        if (repaired > 0)
-        {
-            _notifyShell();
         }
 
         return repaired;
