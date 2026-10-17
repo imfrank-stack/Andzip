@@ -102,7 +102,7 @@ public class ExtractionLayoutTests
         var destination = ExtractionLayout.Destination(
             archive, Shape(ArchiveTopLevel.SingleFile, "report.txt"), singleFileToFolder: true);
 
-        Assert.Equal(Path.Combine(directory, "report (2)"), destination);
+        Assert.Equal(Path.Combine(directory, "report1"), destination);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class ExtractionLayoutTests
 
         var actual = ShellTasks.UniqueFolder(taken);
 
-        Assert.Equal(Path.Combine(directory, "report (2)"), actual);
+        Assert.Equal(Path.Combine(directory, "report1"), actual);
         Assert.True(Directory.Exists(taken), "已有目录不能被拿去做候选路径");
     }
 
@@ -167,7 +167,7 @@ public class ExtractionLayoutTests
         var blocker = Path.Combine(directory, "notes");
         File.WriteAllText(blocker, "not a folder");
 
-        Assert.Equal(Path.Combine(directory, "notes (2)"), ShellTasks.UniqueFolder(blocker));
+        Assert.Equal(Path.Combine(directory, "notes1"), ShellTasks.UniqueFolder(blocker));
     }
 
     [Fact]
@@ -175,22 +175,22 @@ public class ExtractionLayoutTests
     {
         var directory = Directory.CreateTempSubdirectory("az-layout-").FullName;
         Directory.CreateDirectory(Path.Combine(directory, "photos"));
-        Directory.CreateDirectory(Path.Combine(directory, "photos (2)"));
+        Directory.CreateDirectory(Path.Combine(directory, "photos1"));
 
         Assert.Equal(
-            Path.Combine(directory, "photos (3)"),
+            Path.Combine(directory, "photos2"),
             ShellTasks.UniqueFolder(Path.Combine(directory, "photos")));
     }
 
     [Fact]
     public void MixedKeepsDotsInsideAFolderNameWhenIndexing()
     {
-        // 目录名里的点不是扩展名：my.app 撞名后要得到 "my.app (2)"，不是 "my (2).app"。
+        // 目录名里的点不是扩展名：my.app 撞名后要得到 "my.app1"，不是 "my1.app"。
         var directory = Directory.CreateTempSubdirectory("az-layout-").FullName;
         var taken = Path.Combine(directory, "my.app");
         Directory.CreateDirectory(taken);
 
-        Assert.Equal(Path.Combine(directory, "my.app (2)"), ShellTasks.UniqueFolder(taken));
+        Assert.Equal(Path.Combine(directory, "my.app1"), ShellTasks.UniqueFolder(taken));
     }
 
     [Fact]

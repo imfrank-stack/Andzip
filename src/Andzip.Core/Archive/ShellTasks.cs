@@ -135,12 +135,21 @@ public static class ShellTasks
     }
 
     /// <summary>
-    /// 同目录下一个与压缩包同名的文件夹。
-    /// 复合后缀只剥最后一段：<c>archive.tar.gz</c> 解到 <c>archive.tar</c>，
-    /// 与「选择解压路径」里的同名规则保持一致，不另起一套。
+    /// 一个以压缩包命名的文件夹（复合后缀只算最后一段：<c>archive.tar.gz</c> 解到 <c>archive.tar</c>）。
+    /// <para>不传 <paramref name="parent"/> 就落在包旁边 —— 右键解压走的正是这一个；
+    /// <paramref name="parent"/> 给了就建在给的那个目录里 —— 解压对话框里那个目录是用户自己挑的，
+    /// 往往不是包所在的位置，但"用哪个名字"这条规矩两处必须一样。与「选择解压路径」里的同名规则
+    /// 保持一致，不另起一套。</para>
+    /// <para>这里只出名字，不看它有没有被占用；避让是 <see cref="UniqueFolder"/> 的事。</para>
     /// </summary>
-    public static string SiblingFolder(string archivePath)
-        => Path.Combine(ParentFolder(archivePath), Path.GetFileNameWithoutExtension(archivePath));
+    public static string SiblingFolder(string archivePath, string? parent = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
+        var stem = Path.GetFileNameWithoutExtension(archivePath);
+        var directory = string.IsNullOrWhiteSpace(parent) ? ParentFolder(archivePath) : parent!;
+
+        return Path.Combine(directory, stem);
+    }
 
     /// <summary>
     /// 压缩输出的默认文件名：与源同名的兄弟位置，扩展名换成目标格式。
@@ -232,10 +241,14 @@ public static class ShellTasks
     }
 
     /// <summary>
-    /// 新建解压目录时的同名避让：<c>photos</c> 已被占用就依次试 <c>photos (2)</c>、<c>photos (3)</c>……
+    /// 新建解压目录时的同名避让：<c>photos</c> 已被占用就依次试 <c>photos1</c>、<c>photos2</c>……
+    /// <para>
+    /// 序号直接接在名字后面，从 1 数起（4.8.0，用户要的形状："同名文件夹" + "自增的数字"）。
+    /// 以前是资源管理器那一套 <c>photos (2)</c>，从 2 起。
+    /// </para>
     /// <para>
     /// 与 <see cref="UniqueArchivePath"/> 不同，这里<strong>不</strong>把最后一段当扩展名剥掉：
-    /// 解压目标 <c>photos.tar</c> 撞名时要得到 <c>photos.tar (2)</c>，而不是 <c>photos (2).tar</c>。
+    /// 解压目标 <c>photos.tar</c> 撞名时要得到 <c>photos.tar1</c>，而不是 <c>photos1.tar</c>。
     /// 判占用时文件也算 —— 一个与目标目录同名的<strong>文件</strong>同样会让建目录失败。
     /// </para>
     /// </summary>
@@ -252,9 +265,9 @@ public static class ShellTasks
             ?? throw new InvalidOperationException("路径没有父目录：" + preferred);
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(preferred));
 
-        for (var n = 2; n < 1000; n++)
+        for (var n = 1; n < 1000; n++)
         {
-            var candidate = Path.Combine(directory, $"{name} ({n})");
+            var candidate = Path.Combine(directory, $"{name}{n}");
             if (IsFree(candidate))
             {
                 return candidate;

@@ -1,3 +1,4 @@
+using Andzip.Core.Archive;
 using Andzip.Core.Lang;
 using Avalonia;
 using Avalonia.Controls;
@@ -243,12 +244,10 @@ public sealed class ExtractPathWindow : Window
         try
         {
             Directory.CreateDirectory(parent);
-            var name = _lang.Label("TEXT_NEW_FOLDER_DEFAULT");
-            var target = Path.Combine(parent, name);
-            for (var index = 2; Directory.Exists(target); index++)
-            {
-                target = Path.Combine(parent, $"{name} ({index})");
-            }
+            // 序号形状与解压落点那一条同一个（新建文件夹1、新建文件夹2……）：这一格建的也是
+            // 解压要用的目录，两处两套写法就只能靠人记住哪一处是哪一套。
+            var target = ShellTasks.UniqueFolder(
+                Path.Combine(parent, _lang.Label("TEXT_NEW_FOLDER_DEFAULT")));
 
             Directory.CreateDirectory(target);
             _pathCombo.Text = target;

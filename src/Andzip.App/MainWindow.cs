@@ -1965,9 +1965,14 @@ public sealed class MainWindow : Window
             return;
         }
 
-        // 复选项「解压到选定文件夹下与压缩包同名的文件夹」（默认勾选）
+        // 复选项「解压到选定文件夹下与压缩包同名的文件夹」：勾着（默认）就在那个目录下再建一层。
+        // 那一层是我们自己造的目录，所以走同一套避让 —— 名字被占用就依次试
+        // 「名字1」「名字2」。以前这里是裸 Path.Combine：用户选的那个目录里只要已经有一个同名文件夹，
+        // 这一次解压就静默并进那个文件夹里，把包里的内容和目录里原有的东西混在一处
+        // （原有的同名文件还会撞上 FR-3.7 的逐个询问）。右键那一侧从 0.9.6 起就在避让，
+        // 同一个"解压"两条路两种结局，这才是这条的成因（见开发记录第七节第 95 条）。
         var destination = choice.ExtractIntoArchiveNamedFolder
-            ? Path.Combine(choice.DestinationPath, Path.GetFileNameWithoutExtension(archivePath))
+            ? ShellTasks.UniqueFolder(ShellTasks.SiblingFolder(archivePath, choice.DestinationPath))
             : choice.DestinationPath;
 
         // 加密压缩包：解压前弹出「输入密码」（§3.2 对话框 #7）。
