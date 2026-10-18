@@ -70,7 +70,8 @@ handler 存成 `Store`**（`azcore list` 读回来的条目方法名全是 `Stor
 | `tests/Andzip.Core.Tests` | 533 | ✅ 0 失败（**改写一条**：ZIP 方法表那条现在钉"不许有 LZMA2"） |
 | `tests/Andzip.App.UI.Tests`（headless） | 226 | ✅ 0 失败（未动） |
 | `src/Andzip.Native.Tests`（外壳自检） | 192 | ✅ 0 失败（未动） |
-| 构建 | — | ✅ `dotnet build Andzip.slnx -c Release` 0 警告 0 错误 |
+| 构建 | 17 处警告 / 0 错误 | ✅ 本轮改的两个文件（`CompressionMethodOption.cs`、`ZipAdvancedSettingsTests.cs`）**自己那两遍编译 0 警告**；整树冷编译的 17 处全在没碰过的文件里（`RegistryWrite.cs` 6、`CardLanguageTests.cs` 4、`MainWindow.cs` 2、`ArchiveView.cs` 2、UI 测试另外 3） |
+| 产物 + `/selftest` | 25 项 | ✅ `build.ps1` 出两件（`dist/Andzip-v5.5.1-win-x64.exe` 与 `…-Setup-…`，各 **21 872 001** 字节，比 5.5.0 那件多 14 字节），对**打包后的产物**跑 `/selftest`：**PASS** |
 
 合计 **1644 项**，与 5.5.0 一字不差 —— 本轮**没有新增用例**（用户 2026-10-16 起的要求），
 界面上看得见的是那个下拉少了一行，交给你手动过（`docs/开发记录.md` 第九节清单第 76 条）。
