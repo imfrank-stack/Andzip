@@ -186,11 +186,26 @@ Get-ChildItem -LiteralPath $binDir -File -ErrorAction SilentlyContinue |
 # Hand the engine to the .NET side: Andzip.Native.csproj copies anything under its
 # own runtimes/** to the output, and the resolver probes there second. Without this
 # step a fresh clone builds the DLL but every managed test fails to find it.
+#
+# This copy writes INTO the source tree, so it is limited to the two roots the product
+# actually ships from. A second configuration of the same library -- the static build
+# reconfigured with -DZ7_DEFLATE_EXTRACT_ONLY for the P2-a codec-registry probe
+# (native/tests/probe/) -- overwrote the checked-in andzip_core.lib with a copy whose
+# stock Deflate encoder was compiled out, and nothing said a word. Experiment trees keep
+# their artifacts inside their own build root now.
 $staged = Join-Path $binDir 'runtimes'
 if (Test-Path -LiteralPath $staged) {
-    $shellRuntimes = Join-Path $RepoRoot 'src\Andzip.Native\runtimes'
-    Copy-Item -Path (Join-Path $staged '*') -Destination $shellRuntimes -Recurse -Force
-    Write-Host "staged engine -> $shellRuntimes"
+    $normalize = { param([string]$Path) [IO.Path]::GetFullPath($Path).TrimEnd('\',[IO.Path]::DirectorySeparatorChar) }
+    $productRoots = @((Join-Path $RepoRoot 'build\native'), (Join-Path $RepoRoot 'build\native-static')) |
+        ForEach-Object { if (Test-Path -LiteralPath $_) { & $normalize $_ } }
+    $thisRoot = if (Test-Path -LiteralPath $BuildRoot) { & $normalize $BuildRoot } else { '' }
+    if ($thisRoot -and @($productRoots | Where-Object { $_ -ieq $thisRoot }).Count -gt 0) {
+        $shellRuntimes = Join-Path $RepoRoot 'src\Andzip.Native\runtimes'
+        Copy-Item -Path (Join-Path $staged '*') -Destination $shellRuntimes -Recurse -Force
+        Write-Host "staged engine -> $shellRuntimes"
+    } else {
+        Write-Host "  $BuildRoot is not a product build root: artifacts stay in $binDir, source tree untouched"
+    }
 }
 
 if (-not $Static) {

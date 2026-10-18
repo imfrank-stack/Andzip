@@ -106,6 +106,9 @@ public class ZipAdvancedSettingsTests : IDisposable
         Assert.Contains("Copy", zip);
         Assert.Contains("BZip2", zip);
         Assert.Contains("LZMA", zip);
+        // ZIP 没有 LZMA2 这个方法（内核的 ZIP handler 只有 kLZMA，AE 字段只带 LZMA1）：
+        // 列出来就是一次"读完整个文件才告诉你 E_NOTIMPL"，2026-10-18 实测过才拿掉的。
+        Assert.DoesNotContain("LZMA2", zip, StringComparer.OrdinalIgnoreCase);
 
         // 换引擎后新解锁的格式也有真实方法表，不再是 ZIP 专属。
         Assert.Equal("LZMA2", ArchiveFormatOption.FromId("7Z").Methods[0].EngineMethod);

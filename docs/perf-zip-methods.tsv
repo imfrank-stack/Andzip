@@ -1,0 +1,15 @@
+input	input_bytes	method	level	exit	archive_bytes	entry_written_as	entry_packed_bytes	note
+rand	262144	Deflate	3	0	262294	Store	262144	
+rand	262144	Copy	3	0	262294	Store	262144	
+rand	262144	BZip2	3	0	262294	Store	262144	
+rand	262144	LZMA	3	0	262294	Store:v1	262144	
+rand	262144	Deflate64	3	0	262294	Store	262144	
+rand	262144	PPMd	3	0	262294	Store	262144	
+rand	262144	LZMA2	3	1	0		0	azcore: az_writer_finish failed (6): writing the archive failed (HRESULT 0x80004001)
+text	262144	Deflate	3	0	713	Deflate	563	
+text	262144	Copy	3	0	262294	Store	262144	
+text	262144	BZip2	3	0	343	BZip2	193	
+text	262144	LZMA	3	0	410	LZMA:eos	260	
+text	262144	Deflate64	3	0	1329	Deflate64	1179	
+text	262144	PPMd	3	0	418	PPMd	268	
+text	262144	LZMA2	3	1	0		0	azcore: az_writer_finish failed (6): writing the archive failed (HRESULT 0x80004001)

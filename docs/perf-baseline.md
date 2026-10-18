@@ -308,7 +308,8 @@ build\native\bin\azcore.exe create out.zip -f zip -m Deflate -x 9          <corp
 - **`a=0` 在 level 1 / 3 / 5 上的表现**：只测了 level 9（那里差距最大）。
   level 3 的 `a=0` 顺手测过：573.2 MB/s 对基准 585.5 —— **无感**，
   因为 level 3 的默认本来就是算法 0。这条恰好说明 `a` 只在高档位有意义。
-- **解压速度、内存占用、`d`（字典）与 `pb`**：都没测。
+- **解压速度、内存占用与 `pb`**：都没测。`d`（字典）当时也没测，但 P5 那一轮扫过了
+  （`docs/perf-pareto.tsv` 里 `dict` 那些行，读法见 `docs/perf-p4-p5.md` 第 3 节）。
 - **重复次数**：参数扫每格只跑一次（`-Repeat 1`）。第 2 节那个 20 格两次跑的
   一致性说的是基线，不是这一节；不过 `zip-l3-mt1/4/16` 这三格因为两次调用都跑了
   控制块，恰好各有了两份独立测量：584.4 / 583.4、585.1 / 583.4、584.9 / 584.6 ——
@@ -321,6 +322,46 @@ build\native\bin\azcore.exe create out.zip -f zip -m Deflate -x 9          <corp
 ```powershell
 powershell -ExecutionPolicy Bypass -File tests/perf/props.ps1 -Levels 3        # 7-A / 7-B / 7-C
 powershell -ExecutionPolicy Bypass -File tests/perf/props.ps1 -Levels 9 -SkipZstd -Append -Tsv docs/perf-props.tsv
+```
+
+### 7-F 补记：同一条通道，`d` 这个键要的是"带单位的字符串"，不是数字
+
+P5 反推每档默认字典的时候（`docs/perf-p4-p5.md` 第 3.1 节），需要比 1 MiB 更小的字典，
+而 `azcore -d` 只吃 MiB。走 `-e` 这条直通通道时撞到两种写法两种结果：
+
+| 写法 | 结果 |
+|---|---|
+| `-e d=1048576` | `0x80070057 / Win32 87`，`az_writer_finish` 失败，产物 0 字节 |
+| `-e d=256k` | 成功，产物与不带 `-d` 的 level 1 逐字节相同 |
+
+原因查到底了，在 `native/third_party/7zip/CPP/7zip/Common/MethodProps.cpp` 里，三层：
+
+1. `IsLogSizeProp`（`:557-571`）把 `kDictionarySize` / `kUsedMemorySize` / `kBlockSize` / `kBlockSize2`
+   归为"**对数尺寸**"属性；
+2. 这类属性**不走 `ConvertProperty`**，走 `ParseParamsFromPROPVARIANT` 里的一个分支（`:671-677`）；
+3. 那个分支 `PROPVARIANT_to_DictSize`（`:257-267`）**两种类型都收，但两种读法不同**：
+   `VT_BSTR` 按 `StringToDictSize`（`:218-243`）读"数字 + b/k/m/g 后缀" = 字节数；
+   `VT_UI4` 按 `SetLogSizeProp` 读，而这个函数把数当**2 的幂次**（`if (number >= 64) return E_INVALIDARG;`
+   然后 `1 << number`）。所以 `d=1048576` 被拒是"**它把这个数当指数了**"（`1 << 1048576` 溢出范围），
+   而 `d=20` 才是 1 MiB 的数字写法。
+
+对照 7-A 那次：`fb` 不是对数尺寸属性，走的是 `ConvertProperty`，那张名字表
+（`:403-437`，`{ VT_UI4, "fb" }`）说 `VT_UI4` 就得给 `VT_UI4`。
+门面的规矩是"全是数字就发 `VT_UI4`，否则发字符串"（`native/src/api/az_writer.cpp:737-751`），
+它**只看字符**，不看属性是哪一类 —— 于是同一族的两个键被同一句规矩以**相反**的方向挡住。
+`-d` 那个正经选项不受影响，因为它发的是带后缀的字符串：`az_writer.cpp:624-630` 是
+`dict_size_mib` 拼上 `m` 再交给 `d`，所以 `-d 32` = 32 MiB ✓（本轮所有字典读数用的都是它）。
+
+读数：这条通道不是"一个名字一个值"，而是要先问"**这个属性是不是对数尺寸**"——
+是，就只能给带单位的字符串（或者给幂次）；不是，才照名字表的 VARTYPE 来。
+以后要往 `extra_properties` 上加键，先按这两类分，别照 7-A 的经验猜。
+
+复现：
+
+```powershell
+$az = 'build\native\bin\azcore.exe'
+& $az create x.7z -f 7z -m LZMA2 -x 1 -e d=1048576 <输入>   # Win32 87
+& $az create y.7z -f 7z -m LZMA2 -x 1 -e d=256k <输入>      # 成功，与 -x 1 不带 -d 的产物相同
 ```
 
 ## 8. 这一阶段之后

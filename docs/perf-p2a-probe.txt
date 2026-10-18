@@ -1,0 +1,71 @@
+P2-a codec registry probe: raw output.
+Stage P2-a of the compression speed-up plan (docs/压缩提速-执行流程.md section 6.1).
+Source:  native/tests/probe/codec_registry_probe.cpp
+Runner:  native/tests/probe/build-and-run.ps1   (and the same with -ExtractOnly)
+Run on 2026-10-18. The prose reading of these numbers is docs/perf-p2a-registry.md.
+
+Nothing in here is a product artifact: the probe links the static engine library with
+/WHOLEARCHIVE (the same way the native test suite does) and carries its own main(), so
+the vendor tree stays untouched and the product build is not involved.
+
+######## 1) plain static build, no define -- the shape of plan B ########
+== compile ==
+  cl.exe /nologo /EHsc /std:c++17 /O2 /MD /GR- /D_UNICODE /DUNICODE /D_WIN64 /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /Fo:D:\Users\frank\Documents\Code\Andzip_1\Andzip\build\verify-codecs\probe-obj\ D:\Users\frank\Documents\Code\Andzip_1\Andzip\native\tests\probe\codec_registry_probe.cpp /link /OUT:D:\Users\frank\Documents\Code\Andzip_1\Andzip\build\verify-codecs\codec_registry_probe.exe /WHOLEARCHIVE:D:\Users\frank\Documents\Code\Andzip_1\Andzip\build\native-static\lib\andzip_core.lib oleaut32.lib ole32.lib user32.lib advapi32.lib shell32.lib gdi32.lib version.lib mpr.lib
+  lib:   D:\Users\frank\Documents\Code\Andzip_1\Andzip\build\native-static\lib\andzip_core.lib
+codec_registry_probe.cpp
+== run ==
+== codec registry probe (method 0x40108 = ZIP's Deflate) ==
+  before: g_NumCodecs = 30 (cap 64)
+      index 15  name=Deflate        enc=yes dec=yes
+  FindMethod(0x40108) -> Deflate
+  encode encode=1 -> someone else's (NumStreams=1 isFilter=0)
+  decode encode=0 -> someone else's (NumStreams=1 isFilter=0)
+  after: g_NumCodecs = 31 (cap 64)
+      index 15  name=Deflate        enc=yes dec=yes
+      index 30  name=DeflateProbe   enc=yes dec=no
+  -- after registering an encoder-only entry with the same Id --
+  encode encode=1 -> someone else's (NumStreams=1 isFilter=0)
+  decode encode=0 -> someone else's (NumStreams=1 isFilter=0)
+  FindMethod(0x40108) -> Deflate
+  -- after replacing the vendor entry in place (keeping its decoder) --
+  encode encode=1 -> OUR probe coder (NumStreams=1 isFilter=0)
+  decode encode=0 -> someone else's (NumStreams=1 isFilter=0)
+  decode  -> vendor's decoder (kept, as intended)
+  FindMethod(0x40108) -> Deflate
+== verdict ==
+  in-place replacement gives us the encoder direction: YES
+  (P2-a's first build expects "no" above: first registered match wins, and our
+   TUs are linked after the engine's. With -DZ7_DEFLATE_EXTRACT_ONLY the vendor
+   entry has enc=no, so the encoder-only registration wins without any ordering.)
+  exit=0
+
+######## 2) static build configured with -DZ7_DEFLATE_EXTRACT_ONLY -- the shape of plan A ########
+== compile ==
+  cl.exe /nologo /EHsc /std:c++17 /O2 /MD /GR- /D_UNICODE /DUNICODE /D_WIN64 /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /Fo:build\verify-codecs-extract\probe-obj\ D:\Users\frank\Documents\Code\Andzip_1\Andzip\native\tests\probe\codec_registry_probe.cpp /link /OUT:build\verify-codecs-extract\codec_registry_probe.exe /WHOLEARCHIVE:D:\Users\frank\Documents\Code\Andzip_1\Andzip\build\native-static-extractonly\lib\andzip_core.lib oleaut32.lib ole32.lib user32.lib advapi32.lib shell32.lib gdi32.lib version.lib mpr.lib
+  lib:   D:\Users\frank\Documents\Code\Andzip_1\Andzip\build\native-static-extractonly\lib\andzip_core.lib
+codec_registry_probe.cpp
+== run ==
+== codec registry probe (method 0x40108 = ZIP's Deflate) ==
+  before: g_NumCodecs = 30 (cap 64)
+      index 15  name=Deflate        enc=no dec=yes
+  FindMethod(0x40108) -> Deflate
+  encode encode=1 -> someone else's (NumStreams=32759 isFilter=1)
+  decode encode=0 -> someone else's (NumStreams=1 isFilter=0)
+  after: g_NumCodecs = 31 (cap 64)
+      index 15  name=Deflate        enc=no dec=yes
+      index 30  name=DeflateProbe   enc=yes dec=no
+  -- after registering an encoder-only entry with the same Id --
+  encode encode=1 -> OUR probe coder (NumStreams=1 isFilter=0)
+  decode encode=0 -> someone else's (NumStreams=1 isFilter=0)
+  FindMethod(0x40108) -> Deflate
+  -- after replacing the vendor entry in place (keeping its decoder) --
+  encode encode=1 -> OUR probe coder (NumStreams=1 isFilter=0)
+  decode encode=0 -> someone else's (NumStreams=1 isFilter=0)
+  decode  -> vendor's decoder (kept, as intended)
+  FindMethod(0x40108) -> Deflate
+== verdict ==
+  in-place replacement gives us the encoder direction: YES
+  (P2-a's first build expects "no" above: first registered match wins, and our
+   TUs are linked after the engine's. With -DZ7_DEFLATE_EXTRACT_ONLY the vendor
+   entry has enc=no, so the encoder-only registration wins without any ordering.)
+  exit=0

@@ -60,11 +60,20 @@ public sealed record CompressionMethodOption(string EngineMethod, string Display
     /// </para>
     /// 这份表已经过 native 引擎实测：ZIP 的 BZip2/LZMA 与 7z 的 LZMA2/LZMA/PPMd/BZip2/Copy
     /// 都能真实往返（实测记录在 docs/ 下开发记录的第九节），7z 那五个扩展方法见 <see cref="Zstd"/> 那段。
+    /// 2026-10-18 把 ZIP 那七项逐个跑了一遍：留下的六个全部写成功，
+    /// 唯一被内核拒的是 LZMA2（E_NOTIMPL），所以它从表里拿掉了 —— 判据是"点下去要能压出来"，
+    /// 同 0.11.0 处理只读格式那五项用的是同一条。
+    /// 这一轮的证据是 <c>tests/perf/zip-methods.ps1</c> 写、<c>docs/perf-zip-methods.tsv</c> 存的那张表：
+    /// 光看产物大小分不出方法与"存下来"（压不动的输入下六个方法一律被 handler 存成 Store），
+    /// 所以表里还带了一列从包里读回来的方法名。
     /// </summary>
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<CompressionMethodOption>> Table =
         new Dictionary<string, IReadOnlyList<CompressionMethodOption>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["ZIP"] = [Deflate, Store, BZip2, Lzma, Lzma2, Deflate64, Ppmd],
+            // ZIP 一侧刻意没有 LZMA2：上游的方法常量里只有 kLZMA，没有 kLZMA2
+            // （ZIP 的 AE 扩展字段只带 LZMA 版本 1），所以选了它要把整个文件读完才撞到
+            // E_NOTIMPL。2026-10-18 实测：-f zip -m LZMA2 回 0x80004001，产物 0 字节。
+            ["ZIP"] = [Deflate, Store, BZip2, Lzma, Deflate64, Ppmd],
             ["7Z"] = [Lzma2, Lzma, Ppmd, BZip2, Deflate, Zstd, Lz4, Lz5, Lizard, Brotli, Store],
             // 无可选方法：GZ / TGZ / BZ2 / XZ / TAR / WIM
         };
