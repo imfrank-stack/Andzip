@@ -267,23 +267,54 @@ az_result MakeDirTree(const UString &fullPath)
 // Progress
 // ---------------------------------------------------------------------------
 
+void ProgressSink::SetTotal(UInt64 total)
+{
+  NWindows::NSynchronization::CCriticalSectionLock lock(_cs);
+  _total = total;
+}
+
+void ProgressSink::SetCompleted(UInt64 done)
+{
+  NWindows::NSynchronization::CCriticalSectionLock lock(_cs);
+  _done = done;
+}
+
+void ProgressSink::SetEntry(const UString &name)
+{
+  NWindows::NSynchronization::CCriticalSectionLock lock(_cs);
+  _entry = name;
+}
+
 az_result ProgressSink::Report(az_op op, UInt64 index, UInt64 count)
 {
   if (!HasCallback())
     return AZ_OK;
 
+  // Read the three fields under the same lock that writes them, and convert the
+  // entry to UTF-8 inside it too: UString::operator= frees the buffer it replaced,
+  // so a conversion racing a SetEntry hands the caller a pointer into freed memory.
+  // The callback itself runs after the lock is released -- no engine code is called
+  // while we hold it.
+  UInt64 total, done;
+  AString entry;
+  {
+    NWindows::NSynchronization::CCriticalSectionLock lock(_cs);
+    total = _total;
+    done = _done;
+    entry = UToUtf8A(_entry);
+  }
+
   az_progress p;
   memset(&p, 0, sizeof(p));
   p.op = op;
-  const AString entry = UToUtf8A(_entry);
   p.current_entry = entry.IsEmpty() ? NULL : entry.Ptr();
   p.entry_index = index;
   p.entry_count = count;
   // SetTotal/SetCompleted on IProgress carry one direction only; which one
   // depends on the operation (packed bytes when extracting, source bytes when
   // compressing). We report it as the "in" pair and leave "out" unset.
-  p.bytes_in = _done;
-  p.total_in = _total;
+  p.bytes_in = done;
+  p.total_in = total;
   return _cb->progress(_cb->ctx, &p);
 }
 

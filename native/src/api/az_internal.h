@@ -218,18 +218,22 @@ public:
 // Progress + password plumbing
 // ---------------------------------------------------------------------------
 
+// Thread-safe: 7-Zip's MT coders (LZMA2, BZip2) report from their block threads
+// while the update callback reassigns the current entry from the thread that
+// pulls the next input stream. Both touch the fields below.
 class ProgressSink
 {
   const az_callbacks *_cb;
   UInt64 _total;
   UInt64 _done;
   UString _entry;
+  NWindows::NSynchronization::CCriticalSection _cs;
 public:
   ProgressSink() : _cb(NULL), _total(0), _done(0) {}
   void Init(const az_callbacks *cb) { _cb = cb; }
-  void SetTotal(UInt64 total) { _total = total; }
-  void SetCompleted(UInt64 done) { _done = done; }
-  void SetEntry(const UString &name) { _entry = name; }
+  void SetTotal(UInt64 total);
+  void SetCompleted(UInt64 done);
+  void SetEntry(const UString &name);
   bool HasCallback() const { return _cb && _cb->progress; }
 
   // Returns AZ_OK to continue, or the code the caller asked to abort with.

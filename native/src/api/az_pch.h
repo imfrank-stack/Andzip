@@ -35,6 +35,7 @@
 #include "CPP/Windows/FileFind.h"
 #include "CPP/Windows/FileIO.h"
 #include "CPP/Windows/FileName.h"
+#include "CPP/Windows/Synchronization.h"
 #include "CPP/Windows/TimeUtils.h"
 #include "CPP/Windows/System.h"
 
