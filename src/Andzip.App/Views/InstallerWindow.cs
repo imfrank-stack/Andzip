@@ -50,6 +50,12 @@ public sealed class InstallerWindow : Window
     private readonly LangCatalog _lang;
     private readonly InstallationService _service;
 
+    /// <summary>
+    /// 测试传进来的"作用域 → 注册表根"。提权判断要和服务用<strong>同一个根</strong>：
+    /// 探针根换成 <c>HKCU</c> 时，再按真的 <c>HKLM</c> 去判断就会把测试挡在 UAC 那一页上。
+    /// </summary>
+    private readonly Func<InstallScope, RegistryKey>? _registryRoot;
+
     /// <summary>测试传进来的落点（临时目录 + 探针注册表键）。为 null 时按这台机器算。</summary>
     private readonly InstallPlan? _given;
 
@@ -184,6 +190,7 @@ public sealed class InstallerWindow : Window
     {
         _lang = lang;
         _service = registryRoot is null ? new InstallationService(lang) : new InstallationService(lang, registryRoot);
+        _registryRoot = registryRoot;
         _given = plan;
         _uninstaller = startsAsUninstaller;
         _replaceOtherRequested = replaceOther;
@@ -557,7 +564,8 @@ public sealed class InstallerWindow : Window
         // 要看<strong>两件事加起来</strong>，不能只问这一次要装到哪。
         var removing = _otherCopy is { } copy ? PlanForScope(copy.Scope, copy.Directory) : null;
 
-        if (Elevation.Needed(chosen) || (removing is { } other && Elevation.Needed(other)))
+        if (Elevation.Needed(chosen, _registryRoot)
+            || (removing is { } other && Elevation.Needed(other, _registryRoot)))
         {
             _replaceOtherRequested = removing is not null;
 
@@ -743,7 +751,7 @@ public sealed class InstallerWindow : Window
     /// </summary>
     private void Uninstall()
     {
-        if (!Elevation.Needed(_plan))
+        if (!Elevation.Needed(_plan, _registryRoot))
         {
             Run(installing: false);
             return;

@@ -2,6 +2,67 @@
 
 > 格式遵循需求文档 §11.2：每条包含版本号、日期、分类（新增 / 修改 / 修复 / 变更）、关联需求编号、测试结果。最新版本置顶。
 
+## [5.8.3] - 2026-10-18（修复：机器级的卸载绕过提权，删 HKLM 卸载表时才失败）
+
+> 版本号 5.8.2 → **5.8.3**。BuildNo 98 → **99**。改提权判据与一条被它作废的老断言；界面文案没动。
+
+用户报：卸载失败，并问「是不是软件打包的方式不对，为什么没有生成 uninstall.exe 和相应的资源文件」。
+第二问不是缺陷（见第三节）；第一问定位到了根因。
+
+### 一、根因：提权判断只问了安装目录，没问 HKLM
+
+`Elevation.Needed` 原来的判据是「机器级 + 安装目录写不进去才提权」。这台机器实测（普通账户）：
+
+- 往 `D:\Program Files\Andzip` 建一个探针文件 → **成功**（`D:\Program Files` 对 Authenticated Users 是 M）；
+- 写 `HKLM\Software\Classes` → **拒绝访问**；
+- 以写权限打开 `HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall` →
+  `UnauthorizedAccessException`（「不允许所请求的注册表访问权」，Windows 错误 5）。
+
+于是 `Needed(machinePlan)` 返回 **false**，卸载不问提权就直接跑：快捷方式、程序文件、关联都收得掉，
+走到 `DeleteSubKeyTree(HKLM\…\Uninstall\Andzip)` 才抛异常 —— 界面上就是「卸载失败」。
+两个事实同时成立：`InstallTarget.IsWritable(D:\Program Files\Andzip) == true`，
+而这次卸载根本收不掉 `HKLM`。
+
+### 二、修法：两处都要问，并且跟着注入的注册表根走
+
+- `Elevation.Needed` 现在同时问**目录**与**卸载表父层**：任一开不出写权限就提权。
+  注册表这一侧只开不写（`OpenSubKey(…, writable: true)` 本身就是权限探测），不留探针键。
+- 探测路径由 `plan.UninstallKey` 的父层算出，不写死字符串：测试与 `/selftest` 把作用域换成
+  `HKCU` 探针根时，提权判断用同一个根 —— 否则「临时目录 + 探针根」的整条机器级往返会被真的
+  `HKLM` 权限挡下来。
+- `InstallerWindow` 把注入的根同时交给服务和提权判据；生产路径拿到的仍是 `HKLM`。
+
+### 三、「为什么没有 uninstall.exe」不是打包错了
+
+这是既定设计（README §4）：安装器与应用是**同一个** ~21 MB 的 exe，卸载逻辑在
+`Andzip.exe /uninstall` 里。安装目录里留 360 字节的 `uninstall.bat`，开始菜单里有「卸载 Andzip」，
+卸载表里是 `"<安装目录>\Andzip.exe" /uninstall` —— 三个入口指向同一个二进制。
+独立 `uninstall.exe` 要么是那 20 MB 的第二份拷贝，要么是一个只会转调的壳，而壳用批处理就够了。
+也没有外置资源文件：语言包、图标、内核 DLL 都在单文件里。
+
+### 四、BZip2 复测（5.8.2 的修复在真界面上有效）
+
+用户同时报 7z + BZip2 仍然失败。用同一份 `D:\Users\frank\Music\Andzip`（1.8 GiB / 9617 文件）
+在 5.8.2 上重测：
+
+| 路径 | 设置 | 结果 |
+|---|---|---|
+| 内核 `azcore` | BZip2 标准档 | 24.8 s / 894 598 101 字节 |
+| 已安装 5.8.2 真界面 | BZip2 / 自动核心 / 进度回调 | 25.1 s / 894 597 761 字节 |
+| 内核 `azcore` | BZip2 极限档 | 2 min 26 s / 873 518 138 字节 |
+| `ArchiveCreator` | BZip2 + 压缩后测试 | 42.0 s，测试通过 |
+
+四组都跑到底，产物再经 `azcore test` 逐成员解压校验通过。若用户那边仍失败，
+需要屏幕上的原话 —— 5.8.1 起失败会带上原因，不再是笼统的「压缩失败」。
+
+### 五、门禁
+
+- 改写一条老断言（没有新增用例）：`InstallScopeTests` 原来假定「机器级 + 临时目录可写 = 不提权」，
+  现在按本进程实际能否写 `HKLM` 算期望，并补一条「注入 `HKCU` 探针根时不提权」。
+- 1669 项全绿；`build.ps1` 出包并对产物跑 `/selftest`：**PASS（25 项）**。
+- 产物：`dist/Andzip-v5.8.3-win-x64.exe` 与 `…-Setup-…` 各 **21 949 649** 字节
+  （20.93 MB，比 5.8.2 重 164 字节）。
+
 ## [5.8.2] - 2026-10-18（修复：7z 的 LZMA2 / BZip2 压到一半整个程序没了）
 
 > 版本号 5.8.1 → **5.8.2**。BuildNo 97 → **98**。只改内核里那份进度汇的线程安全，界面与 Core 一行没动。

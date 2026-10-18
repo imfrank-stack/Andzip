@@ -40,6 +40,10 @@ public class InstallScopeTests : IDisposable
             Path.Combine(_root, "Program Files"),
             Path.Combine(_root, "ProgramData", "Start Menu", "Programs"),
             Path.Combine(_root, "Public", "Desktop")) with { UninstallKey = ProbeKey };
+
+        // 提权判断会去开卸载键的父层（与真的 HKLM 同形）；HKCU 这一侧的父层先建出来，
+        // 否则它和"没有管理员权限"一样返回 null，测试就会被送去一次假的 UAC。
+        Registry.CurrentUser.CreateSubKey(@"Software\Andzip.Tests")?.Dispose();
     }
 
     private const string ProbeKey = @"Software\Andzip.Tests\ScopeProbe";
@@ -84,18 +88,25 @@ public class InstallScopeTests : IDisposable
     }
 
     /// <summary>
-    /// 要不要提权，问的是"这个位置现在写不写得进去"，不是"这个账户是不是管理员"。
-    /// <para>前者与安装真正会失败的条件是同一件事；后者还要引 <c>WindowsIdentity</c>
-    /// （非 Windows 目标上没有），而且两者迟早给出不同答案。</para>
+    /// 要不要提权，问的是"这两处现在写不写得进去"，不是"这个账户是不是管理员"。
+    /// <para>机器级要落<strong>两个</strong>地方：安装目录与 <c>HKLM</c>。只问目录会在
+    /// "Program Files 恰好对普通用户可写"的机器上给出错误答案 —— 那台机器的卸载会绕过提权，
+    /// 然后在删卸载表时失败（5.8.3 的真机根因）。</para>
+    /// <para>这里按<strong>本进程实际能不能写 HKLM</strong> 来算期望：普通权限跑测试时它永远
+    /// 探测失败，提了权跑时它成功 —— 两边的期望都不用写死成某一个布尔。</para>
     /// </summary>
     [Fact]
     [SupportedOSPlatform("windows")]
-    public void OnlyAMachineScopeThatCannotBeWrittenNeedsElevation()
+    public void MachineScopeNeedsElevationWhenEitherTheFolderOrHklmIsNotWritable()
     {
         Assert.False(Elevation.Needed(_user));
 
-        // 机器级但那个位置写得动（测试里是临时目录）：不用打扰用户
-        Assert.False(Elevation.Needed(_machine));
+        // 临时目录写得动，但 HKLM 不一定写得动：机器级的两处都要问过才算数。
+        Assert.Equal(!MachineRegistryWritable(), Elevation.Needed(_machine));
+
+        // 换成"两个作用域都指 HKCU"的探针根（整条机器级往返用的就是这个）：两处都写得动，
+        // 于是不该打扰用户 —— 提权判断必须跟着注入的根走，不能自己去问真的 HKLM。
+        Assert.False(Elevation.Needed(_machine, BothUsers));
 
         var elsewhere = _machine with
         {
@@ -112,6 +123,23 @@ public class InstallScopeTests : IDisposable
             ExecutablePath = @"X:\Programs\Andzip\Andzip.exe",
         };
         Assert.False(Elevation.Needed(blockedUserFolder), "「仅为我自己」这一份什么时候都不该要管理员权限。");
+    }
+
+    /// <summary>本进程能不能写机器级卸载表所在的那一处（探测方式与 <see cref="Elevation.Needed"/> 同形）。</summary>
+    private static bool MachineRegistryWritable()
+    {
+        try
+        {
+            using var root = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = root.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+                writable: true);
+            return key is not null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return false;
+        }
     }
 
     // --------------------------------------------------------- 界面上的那一页
