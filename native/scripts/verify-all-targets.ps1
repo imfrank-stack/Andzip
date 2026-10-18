@@ -10,6 +10,11 @@
     verified against andzip.h, plus an x86_64 static library linked into azcore
     (it is only *linked*, not run: this machine has no emulator).
 
+    -DeflateZlibNg turns stage P2-c's switch on for every target instead of only
+    the one that ships. Forwarded rather than left to the default because the
+    question it answers is a build question, not a runtime one: whether zlib-ng's
+    own CMake configures and cross-compiles here at all.
+
     Nothing is deleted; each target keeps its own build directory. The child
     scripts are invoked in-process, so this runs under both Windows PowerShell
     5.1 and pwsh without needing either on PATH.
@@ -17,11 +22,13 @@
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File native/scripts/verify-all-targets.ps1
     powershell -ExecutionPolicy Bypass -File native/scripts/verify-all-targets.ps1 -SkipWindows
+    powershell -ExecutionPolicy Bypass -File native/scripts/verify-all-targets.ps1 -DeflateZlibNg
 #>
 [CmdletBinding()]
 param(
     [switch]$SkipWindows,
-    [switch]$SkipLinux
+    [switch]$SkipLinux,
+    [switch]$DeflateZlibNg
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,7 +75,8 @@ function Build-LinuxTarget {
     param(
         [Parameter(Mandatory = $true)][string]$Dir,
         [Parameter(Mandatory = $true)][string]$Triple,
-        [switch]$Static
+        [switch]$Static,
+        [switch]$Deflate
     )
 
     $cmakeArgs = @(
@@ -77,6 +85,7 @@ function Build-LinuxTarget {
         "-DCMAKE_TOOLCHAIN_FILE=$RepoRoot/native/cmake/toolchain-zig-linux.cmake",
         "-DAZ_ZIG_TARGET=$Triple"
     )
+    if ($Deflate) { $cmakeArgs += '-DANDZIP_DEFLATE_ZLIBNG=ON' }
     if ($Static) {
         # Static: build the CLI tool so the archive is actually linked into an
         # executable -- that is what proves the global coder registry survived.
@@ -106,10 +115,10 @@ function Build-LinuxTarget {
 
 if (-not $SkipWindows) {
     Invoke-NativeStep 'Windows x64 shared library + native tests' {
-        & (Join-Path $PSScriptRoot 'build-windows.ps1') -RunTests
+        & (Join-Path $PSScriptRoot 'build-windows.ps1') -RunTests -DeflateZlibNg:$DeflateZlibNg
     }
     Invoke-NativeStep 'Windows x64 static library (azcore + azgui + tests)' {
-        & (Join-Path $PSScriptRoot 'build-windows.ps1') -Static -BuildRoot (Join-Path $RepoRoot 'build/native-static') -RunTests
+        & (Join-Path $PSScriptRoot 'build-windows.ps1') -Static -BuildRoot (Join-Path $RepoRoot 'build/native-static') -RunTests -DeflateZlibNg:$DeflateZlibNg
     }
 }
 
@@ -123,9 +132,9 @@ if (-not $SkipLinux) {
     $env:AZ_ZIG_EXE = $zig
     Add-ToolchainToPath
 
-    Invoke-NativeStep 'Linux x86_64 shared library'    { Build-LinuxTarget -Dir 'build/linux-x64'  -Triple 'x86_64-linux-gnu' }
-    Invoke-NativeStep 'Linux aarch64 shared library'   { Build-LinuxTarget -Dir 'build/linux-arm64' -Triple 'aarch64-linux-gnu' }
-    Invoke-NativeStep 'Linux x86_64 static library'    { Build-LinuxTarget -Dir 'build/linux-x64-static' -Triple 'x86_64-linux-gnu' -Static }
+    Invoke-NativeStep 'Linux x86_64 shared library'    { Build-LinuxTarget -Dir 'build/linux-x64'  -Triple 'x86_64-linux-gnu' -Deflate:$DeflateZlibNg }
+    Invoke-NativeStep 'Linux aarch64 shared library'   { Build-LinuxTarget -Dir 'build/linux-arm64' -Triple 'aarch64-linux-gnu' -Deflate:$DeflateZlibNg }
+    Invoke-NativeStep 'Linux x86_64 static library'    { Build-LinuxTarget -Dir 'build/linux-x64-static' -Triple 'x86_64-linux-gnu' -Static -Deflate:$DeflateZlibNg }
 }
 
 Write-Host "`nAll requested native targets built."

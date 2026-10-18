@@ -1,0 +1,16 @@
+archive	format	method	mib	size	decoder	result
+zip-ultrafast	zip	Deflate	8	2527511	7-Zip	identical bytes
+zip-ultrafast	zip	Deflate	8	2527511	Python	identical bytes
+zip-ultrafast	zip	Deflate	8	2527511	Explorer	identical bytes
+zip-normal	zip	Deflate	8	2486854	7-Zip	identical bytes
+zip-normal	zip	Deflate	8	2486854	Python	identical bytes
+zip-normal	zip	Deflate	8	2486854	Explorer	identical bytes
+zip-max	zip	Deflate	8	2485874	7-Zip	identical bytes
+zip-max	zip	Deflate	8	2485874	Python	identical bytes
+zip-max	zip	Deflate	8	2485874	Explorer	identical bytes
+7z-normal	7z	Deflate	8	2486824	7-Zip	identical bytes
+7z-normal	7z	Deflate	8	2486824	Python	no reader for 7z in this decoder
+7z-normal	7z	Deflate	8	2486824	Explorer	no reader for 7z in this decoder
+7z-max	7z	Deflate	8	2485844	7-Zip	identical bytes
+7z-max	7z	Deflate	8	2485844	Python	no reader for 7z in this decoder
+7z-max	7z	Deflate	8	2485844	Explorer	no reader for 7z in this decoder

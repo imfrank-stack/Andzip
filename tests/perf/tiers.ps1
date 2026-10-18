@@ -22,6 +22,10 @@
     D  a fixed dictionary against the user's global memory limit (memuse) -- the shipped
        path is "explicit dict + possible limit", so the pair is measured, not assumed.
 
+    E  the Deflate ladder in both containers after the P2-c encoder swap (zlib-ng). The swap
+       is one table slot for two formats, so this is what re-decides which level each tier
+       sends -- sweeps A and B above record the *old* coder's ladder and stay as they are.
+
   peak_mib is what makes C usable: PeakWorkingSet64 of the engine process is sampled
   while it runs, so "a 128 MiB dictionary is a memory question, not a speed question"
   is backed by a measured number instead of an inference.
@@ -43,11 +47,14 @@ param(
   [long]$MiB = 128,
   [int[]]$Dicts = @(32, 64, 128),
   [int]$MemLimitMib = 256,
+  [string[]]$LadderCorpora = @('mixed', 'text', 'rand'),
+  [int[]]$LadderLevels = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
   [switch]$Append,
   [switch]$SkipAccept,
   [switch]$SkipZip,
   [switch]$Skip7z,
-  [switch]$SkipMem
+  [switch]$SkipMem,
+  [switch]$SkipLadder
 )
 
 $ErrorActionPreference = 'Stop'
@@ -251,6 +258,33 @@ if (-not $SkipMem) {
     Invoke-Cell -Sweep 'mem' -Corpus $corpus -SizeMiB $AcceptMiB -Format 7z -Method LZMA2 -Level 9 -DictMiB 64
     Invoke-Cell -Sweep 'mem' -Corpus $corpus -SizeMiB $AcceptMiB -Format 7z -Method LZMA2 -Level 9 -DictMiB 64 `
       -Props @("memuse=$MemLimitMib" + 'm')
+  }
+}
+
+if (-not $SkipLadder) {
+  Write-Output "== sweep E: the Deflate ladder after the zlib-ng swap ($MiB MiB, ZIP and 7z) =="
+  # Stage P2-c replaces the Deflate *encoder* for both containers at once: the id a ZIP
+  # entry asks for (ZipAddCommon: kMethodId_ZipBase + 8) is the same number 7zHeader.h
+  # spells k_Deflate, so one table slot serves both, and both ladders have to be measured
+  # rather than inferred from the library-only table in docs/perf-zlib-ng.tsv. The
+  # container adds its own headers, and the ZIP handler keeps Store when deflate does not
+  # pay -- both move the bytes.
+  #
+  # Every level 0..9 rather than the four the tiers use, because this row set is what
+  # *decides* the tier mapping. Picking from the four alone would decide it twice.
+  foreach ($level in $LadderLevels) {
+    if ($level -lt 0 -or $level -gt 9) {
+      # The engine clamps an out-of-range level silently, so a typo here would print as
+      # a measurement instead of an error.
+      throw "level $level is outside 0..9 and the engine would clamp it without saying so"
+    }
+  }
+  foreach ($corpus in $LadderCorpora) {
+    foreach ($fmt in @('zip', '7z')) {
+      foreach ($level in $LadderLevels) {
+        Invoke-Cell -Sweep 'defladder' -Corpus $corpus -SizeMiB $MiB -Format $fmt -Method Deflate -Level $level
+      }
+    }
   }
 }
 

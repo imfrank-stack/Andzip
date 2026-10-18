@@ -51,6 +51,45 @@ namespace {
 // The tier table in Core is what a user sees, and "standard" has meant 5 here.
 const UInt32 kDefaultLevel = 5;
 
+// What the engine's level (the number Core's tier table sends as "x") means to zlib-ng.
+// The tiers are not "one zlib level each": the measured curve is flat in places and
+// turns back on itself at the top, so the tiers are pinned to the points that keep the
+// promise the UI makes -- "a later tier is never a bigger package" -- on the corpus the
+// tier table is measured on. The rows below are the product's own bytes: a 128 MiB
+// "mixed" member and a "text" one, ZIP container, min of two runs (docs/perf-tiers.tsv,
+// sweep defladder; each 7z twin is a couple of bytes smaller -- 30 on "mixed", 28 on
+// "text" -- the same stream under a different header, which is itself worth reading
+// in docs/perf-p2c-deflate-swap.md):
+//
+//   sent  zlib-ng   mixed bytes    text bytes   MB/s   the tier
+//   1     2         40 421 017       212 918     356   UltraFast
+//   3     2         40 421 017       212 918     366   Fast -- the same package as
+//                                                       UltraFast, exactly as before,
+//                                                       so section 6 item 27 stays true
+//   5     6         39 783 086       201 782     233   Normal
+//   9     8         39 768 264       212 908     121   Max: the smallest of all ten
+//                                                       levels on "mixed"
+//
+// All four are smaller *and* faster than what 5.6.0 ships at the same tier: UltraFast
+// 40 972 439 / 259 346 at 162 MB/s, Normal 40 710 824 / 263 318 at 25.3, Max with a=0
+// 39 983 091 / 259 346 at 18.4.
+//
+// Two things this table does not do. It does not hide that level 8 is worse than level 6
+// on "text" (212 908 against 201 782): that inversion is on the record, and 5.6.0's Max
+// tier is inverted on the same corpus too (259 346 against Normal's 263 318). And it does
+// not invent numbers for levels no UI sends -- 2/4/6/7 pass through to zlib-ng unchanged,
+// and 0 is store.
+UInt32 MapTierLevelToZlib(UInt32 level)
+{
+  switch (level)
+  {
+    case 1: case 2: case 3: return 2;
+    case 5:                 return 6;
+    case 9:                 return 8;
+    default:                return level;
+  }
+}
+
 // -15 is not a tuning choice: it means "raw deflate, 32 KiB window", which is what
 // both a ZIP entry and a 7z Deflate member hold. memLevel 9 is the pairing the
 // ladder in docs/perf-zlib-ng.tsv was measured with.
@@ -143,7 +182,7 @@ Z7_COM7F_IMF(CEncoder::Code(ISequentialInStream *inStream, ISequentialOutStream 
     return E_OUTOFMEMORY;
 
   CZStream zc;
-  if (!zc.Init(_level))
+  if (!zc.Init(MapTierLevelToZlib(_level)))
     return E_OUTOFMEMORY;
   z_stream &s = zc();
 
@@ -154,16 +193,29 @@ Z7_COM7F_IMF(CEncoder::Code(ISequentialInStream *inStream, ISequentialOutStream 
   {
     if (s.avail_in == 0 && !eof)
     {
-      UInt32 processed = 0;
-      RINOK(inStream->Read(inBuf.Ptr(), (UInt32)kInBufferSize, &processed))
-      if (processed == 0)
-        eof = true;                   // a short read is not allowed to end a deflate
-                                      // stream early; the next pass feeds what we have
-      else
+      // Fill the buffer before handing anything to deflate(): one Read() call is
+      // allowed to return less than asked, and how much it returns depends on what
+      // is above us -- the ZIP path hands over a file stream, the 7z path a
+      // solid-block stream, and they do not slice the same file the same way.
+      // deflate() must not be able to tell the difference: "same level, same bytes"
+      // is the property the tier table and tests/perf/tier-check.cs both rely on.
+      size_t filled = 0;
+      while (filled < kInBufferSize)
+      {
+        UInt32 processed = 0;
+        RINOK(inStream->Read(inBuf.Ptr() + filled, (UInt32)(kInBufferSize - filled), &processed))
+        if (processed == 0)
+        {
+          eof = true;      // a short read is not an end of stream; only a zero one is
+          break;
+        }
+        filled += processed;
+      }
+      if (filled)
       {
         s.next_in = (Bytef *)inBuf.Ptr();
-        s.avail_in = processed;
-        inTotal += processed;
+        s.avail_in = (uInt)filled;
+        inTotal += filled;
         if (progress)
         {
           const UInt64 outTotal = s.total_out;
@@ -182,7 +234,27 @@ Z7_COM7F_IMF(CEncoder::Code(ISequentialInStream *inStream, ISequentialOutStream 
       res = deflate(&s, flush);
       const size_t wrote = kOutBufferSize - s.avail_out;
       if (wrote)
-        RINOK(outStream->Write(outBuf.Ptr(), (UInt32)wrote, NULL))
+      {
+        // Write() reports in *processedSize how much it actually took, and a stream
+        // may take less than asked; upstream's COutBuffer::FlushPart reads that
+        // number and loops (OutBuffer.cpp:69-72), which is why a coder of 1 MiB
+        // buffers never loses a byte through it. Passing NULL here was the bug: a
+        // ZIP write that took part of a chunk silently dropped the rest, and the
+        // member landed 16 472 bytes shorter than deflate had emitted -- it decoded
+        // 3.47 MiB of an 8 MiB file and died with "data error". A stream that takes
+        // nothing is a hang waiting to happen, so that is an error, not a retry.
+        const Byte *p = outBuf.Ptr();
+        size_t left = wrote;
+        while (left)
+        {
+          UInt32 processedOut = 0;
+          RINOK(outStream->Write(p, (UInt32)left, &processedOut))
+          if (processedOut == 0 || processedOut > left)
+            return E_FAIL;
+          p += processedOut;
+          left -= processedOut;
+        }
+      }
       if (res == Z_MEM_ERROR)
         return E_OUTOFMEMORY;
       // Z_STREAM_ERROR means the stream state is wrong (a bug in this loop, not in

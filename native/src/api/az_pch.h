@@ -57,6 +57,12 @@
 #include "C/CpuArch.h"
 
 #ifndef _WIN32
+// getpid() is used by az_writer.cpp for the temporary name of an archive being
+// rewritten, and no header in this chain declares it: 7-Zip's own POSIX code goes
+// through NWindows::* wrappers for every system call, so nothing pulled in here
+// needs unistd.h. Include it once, here, for the same reason as the two helpers
+// below -- src/api is written against the Windows spelling on every platform.
+#include <unistd.h>
 // 7-Zip's POSIX tree emulates the OLE PROPVARIANT helpers under its own names and
 // omits some of the COM error codes. src/api is written against the Windows
 // spelling on every platform, so supply the handful of missing pieces here rather

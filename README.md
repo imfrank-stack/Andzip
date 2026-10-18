@@ -1,7 +1,8 @@
 # Andzip
 
 Bandizip 风格的 Windows 压缩工具。**界面是 C#（.NET 10 + Avalonia，控件全部用代码构建，没有 XAML），
-压缩/解压内核是 C/C++**（原样 vendor 的 7-Zip，外面包一层只有 43 个函数的扁平 C ABI）。
+压缩/解压内核是 C/C++**（原样 vendor 的 7-Zip，外面包一层只有 43 个函数的扁平 C ABI；
+5.7.0 起 ZIP 与 7z 的 Deflate 编码器换成了同样原样 vendor 的 zlib-ng，解码那一路仍是 7-Zip 自己的）。
 
 一个二进制两种用法：免安装的 `dist/Andzip-v<版本>-win-x64.exe`，和双击就装的
 `dist/Andzip-Setup-v<版本>-win-x64.exe`。各约 21 MB。
@@ -37,10 +38,12 @@ Andzip/
 │   └── Andzip.Native.Tests/    外壳的托管断言（控制台自检程序）
 ├── tests/Andzip.Core.Tests/    xUnit
 ├── tests/perf/                 压缩性能测量脚本：读数落进 docs/perf-*.tsv，档位实际下发的东西由 tier-check.cs 逐字节核对
+├── tests/decoder-compat.ps1    换编码器那道门槛：产物交给 7-Zip / Python / 资源管理器读回，逐字节比对
 ├── native/                     压缩内核（C/C++，细节见 native/README.md）
 │   ├── include/andzip/andzip.h 唯一公开头文件：扁平 C ABI
 │   ├── src/api/                C ABI 门面
 │   ├── third_party/7zip/       原样 vendor 的 7-Zip，未修改一行
+│   ├── third_party/codecs/     同样未修改一行的第三方编码器（zstd / lz4 / brotli / zlib-ng …）
 │   ├── scripts/                vendor / 各平台构建 / 导出符号核对
 │   └── tools/ + tests/native/  命令行工具与原生测试
 ├── build/                      CMake 输出（全部可再生，不入库）
@@ -84,6 +87,11 @@ pwsh native/scripts/build-windows.ps1 -RunTests
 43 个 `az_*`，最后**把 DLL 暂存到 `src/Andzip.Native/runtimes/win-x64/native/`**。
 最后一步是界面工程能找到引擎的前提：**跳过它 `dotnet build` 照样成功**，只是程序一起来就显示
 「compression engine unavailable」。
+
+**要复现产品那一份（以及 `docs/` 里所有性能读数）得带两个开关**：
+`pwsh native/scripts/build-windows.ps1 -ExtraCodecs -DeflateZlibNg -RunTests` —— `ci.ps1` 的两条引擎
+作业显式带着它们。不带 `-ExtraCodecs` 时五个编码器根本不登记（外壳自检会失败并提示）；
+不带 `-DeflateZlibNg` 时 Deflate 走的是 7-Zip 自带的 coder，**压出来的字节与那张档位表不是同一份**。
 
 ### 2. 界面与业务层，以及测试
 
@@ -139,8 +147,9 @@ pwsh build.ps1
 ### 5. 一次跑完所有平台（可选）
 
 ```powershell
-pwsh native/scripts/verify-all-targets.ps1   # Windows 动态 + Windows 静态 + Linux 三个目标
-pwsh ci.ps1 -Static                          # 本地等价于 CI 的 Windows 作业
+pwsh native/scripts/verify-all-targets.ps1                    # Windows 动态 + 静态 + Linux 三个目标
+pwsh native/scripts/verify-all-targets.ps1 -DeflateZlibNg     # 同一个开关带着所有目标过一遍（产品那份）
+pwsh ci.ps1 -Static                                           # 本地等价于 CI 的 Windows 作业
 ```
 
 ---
@@ -157,6 +166,11 @@ pwsh ci.ps1 -Static                          # 本地等价于 CI 的 Windows �
   把产物字节核对一遍，别留"快很多"这种没有出处的形容词。
   要比**别人的编码器**（换 deflate 这类）用 `native/tests/probe/` 那两个脚本：库 clone 到 `build/` 下、
   仓库不留副本、产品构建一行不碰 —— 实验不许有一条能写进仓库的路。
+  **决定要换编码器是另一件事**，那一版走的是这条路：库进 `native/third_party/codecs/` 并在
+  `MANIFEST.json` 记来源与许可证（一行不改上游文件，开关默认 `OFF`），然后 `pwsh tests/decoder-compat.ps1`
+  把产物交给**自带的 inflate 与我们无亲无故的那几家**逐个读回来比对（表落 `docs/decoder-compat.tsv`）。
+  这条不是装饰：换编码器那一次带出一条少写 16 472 字节的 bug，而当时内部断言全绿、包还变小了 ——
+  它看起来就是一次提速（`docs/perf-p2c-deflate-swap.md` 第 5 节）。
 - GUI 目前依赖人工点击，手动清单在 [`docs/开发记录.md` 第九节](docs/开发记录.md)；欢迎把它自动化。
 
 ---
@@ -169,6 +183,7 @@ pwsh ci.ps1 -Static                          # 本地等价于 CI 的 Windows �
 |---|---|
 | 7-Zip 引擎（`C/`、`CPP/`，原样 vendor，未修改一行） | LGPL-2.1-or-later **附 unRAR 限制** |
 | zstd / lz4 / brotli / lizard 等 | BSD-3-Clause / MIT / BSD-2-Clause 等 |
+| zlib-ng（`third_party/codecs/zlib-ng`，5.7.0 起 ZIP 与 7z 的 Deflate 编码器，同样未修改一行；`ANDZIP_DEFLATE_ZLIBNG=OFF` 的构建里它根本不进产物） | zlib License（BSD-style） |
 | 上述组件的 7-Zip 封装 | MIT |
 | Zig（仅用于交叉编译，不进产物） | MIT |
 | SharpZipLib（**只有测试工程引用**，生产代码不依赖） | MIT |

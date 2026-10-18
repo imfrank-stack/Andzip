@@ -40,12 +40,12 @@ native/
 │   └── check-exports.ps1       校验产物只导出头文件里声明的 43 个 az_*
 ├── third_party/
 │   ├── 7zip/                   原样 vendor 的 7-Zip：C/、CPP/、DOC/
-│   ├── codecs/                 vendor 的 zstd、lz4、brotli、lizard、lz5 等
+│   ├── codecs/                 vendor 的 zstd、lz4、brotli、lizard、lz5，以及 zlib-ng
 │   └── MANIFEST.json           每个条目的来源压缩包与许可证
 ├── tools/
 │   ├── azcore/                 基于 ABI 的命令行工具：冒烟测试 + 用法示例
 │   └── azgui/                  最小 Win32 GUI 验证程序（手动验证压缩/解压）
-└── tests/native/               532 条断言的原生测试
+└── tests/native/               718 条断言的原生测试
 ```
 
 C# 外壳（`Andzip.Native`）与它的自检程序**不在本目录**，而在 `../src/` 下：Visual Studio 在
@@ -83,17 +83,24 @@ C# 外壳（`Andzip.Native`）与它的自检程序**不在本目录**，而在 
 
 ```powershell
 pwsh native/scripts/build-windows.ps1                    # Release x64
-pwsh native/scripts/build-windows.ps1 -RunTests          # 构建后跑 532 条原生断言
+pwsh native/scripts/build-windows.ps1 -RunTests          # 构建后跑 718 条原生断言
 pwsh native/scripts/build-windows.ps1 -Arch arm64
 pwsh native/scripts/build-windows.ps1 -Config Debug -RunTests
 pwsh native/scripts/build-windows.ps1 -ExtraCodecs       # 编入 zstd/lz4/lz5/lizard/brotli 编码器（产品构建要这一份，见下）
+pwsh native/scripts/build-windows.ps1 -DeflateZlibNg     # Deflate 编码器换成 zlib-ng（产品构建同样要这一份）
 pwsh native/scripts/build-windows.ps1 -Static -BuildRoot build/native-static -RunTests
 pwsh native/scripts/build-windows.ps1 -NoGui -NoTests    # 只要库和 CLI
 ```
 
-**产品出的是带 `-ExtraCodecs` 的那一份。** `ci.ps1` 与 `build.ps1` 都显式带上它：不带时
-五个编码器根本不登记，`src/Andzip.Native.Tests` 会失败并回一句"rebuild the engine with
--ExtraCodecs"。CMake 选项 `ANDZIP_EXTRA_CODECS` 仍默认 `OFF`，因为手动构建里"只要库和
+**产品出的是带 `-ExtraCodecs` 与 `-DeflateZlibNg` 的那一份。** 带这两个开关的是 `ci.ps1` 的两条引擎
+作业（动态与静态各一遍）；不带 `-ExtraCodecs` 时五个编码器根本不登记，
+`src/Andzip.Native.Tests` 会失败并回一句"rebuild the engine with -ExtraCodecs"，不带
+`-DeflateZlibNg` 时 Deflate 走的是 vendor 自己那份 —— 而**这一版所有的档位读数（`docs/perf-tiers.tsv`
+那 60 行阶梯）都是在带它的那一份上量出来的**，所以 `tests/perf/tiers.ps1` 与
+`tests/decoder-compat.ps1` 在一份不带的构建上跑出来的数，不能拿去对那张表。
+`build.ps1` 自己不编内核，它取的是上一场内核构建留下的 `bin/runtimes/win-x64/native/`，
+并且只核对"产物里到底有没有 `andzip_core.dll`"这一件事。
+CMake 那两个选项仍默认 `OFF`，因为手动构建里"只要库和
 CLI"这种用法不该被拖进多 1.6 MB 的编译时间 —— 但那条默认不适用于打包。
 
 脚本会把 `vcvarsall.bat` 的环境导入当前进程，所以在普通 PowerShell 或 Git Bash 里都能
@@ -112,7 +119,7 @@ pwsh native/scripts/build-windows.ps1 -Static -BuildRoot build/native-static -Ru
 ```
 
 产物是 `build/native-static/lib/andzip_core.lib`，`azcore.exe`、`azgui.exe`、
-`andzip_core_tests.exe` 都改为链接它，**532 条断言全部通过**。
+`andzip_core_tests.exe` 都改为链接它，**718 条断言全部通过**。
 
 链接静态库时有一个必须知道的坑：7-Zip 的归档 handler 与编解码器是靠
 `ArchiveExports.cpp` / `CodecExports.cpp` 里的全局构造函数注册的，没有任何符号被外部引用，
@@ -140,7 +147,7 @@ pwsh native/scripts/provision-toolchain.ps1
 $env:AZ_ZIG_EXE = "$env:LOCALAPPDATA\andzip\toolchains\zig\zig.exe"
 cmake -S native -B build/linux-x64 -G Ninja -DCMAKE_BUILD_TYPE=Release `
       -DCMAKE_TOOLCHAIN_FILE=native/cmake/toolchain-zig-linux.cmake `
-      -DAZ_ZIG_TARGET=x86_64-linux-gnu -DANDZIP_BUILD_TESTS=OFF
+      -DAZ_ZIG_TARGET=x86_64-linux-gnu -DANDZIP_BUILD_TESTS=OFF -DANDZIP_DEFLATE_ZLIBNG=ON
 cmake --build build/linux-x64 --target andzip_core
 
 # arm64 只需换三元组
@@ -150,6 +157,17 @@ cmake --build build/linux-x64 --target andzip_core
 `AZ_ZIG_TARGET` 可取 `x86_64-linux-gnu`、`aarch64-linux-gnu`、`x86_64-linux-musl`；
 静态 libc 再加 `-DAZ_ZIG_LIBC=musl`。工具链文件里 `AZ_ZIG_EXE` **优先从环境变量读**，
 因为 CMake 做编译器探测时创建的 `try_compile` 临时工程不会继承命令行上的 `-D` 缓存项。
+
+`-DANDZIP_DEFLATE_ZLIBNG=ON` 交叉编译同样过（zlib-ng 自己的 CMake 在 zig 工具链下能配置能编），
+但它带出一条只在这条路上现形的问题：**独立目标文件里的符号会进 ELF 的导出表**。
+`andzip_core` 的可见性预设只管自己的编译单元，zlib-ng 是被它的构建系统编的，默认
+default-visible，于是第一次带它交叉编译时 x86_64 的 `.so` 导出 **67 个而不是 43 个**
+（多出来的 24 个是 `deflate` / `inflate*` / `crc32*` / `zlibVersion`）。链接期的常规答案
+`-Wl,--exclude-libs,ALL` 在 zig 的驱动上是 `error: unsupported linker arg`，所以改成编译期：
+`native/cmake/codecs.cmake` 给 zlib-ng 的真目标设 `C_VISIBILITY_PRESET hidden`。
+理由不是整齐：ELF 共享对象的导出符号进的是整个进程的查找域，我们这一份 zlib 会去应答同进程里
+别人家的 `deflate` 调用。MSVC 忽略这个属性，Windows 那一份的字节因此不受影响
+（`tests/perf/tier-check.cs` 八格在改动后逐格重跑，相同）。
 
 在装有 gcc/clang 的 Linux 机器上，正常走本地工具链即可：
 
@@ -161,17 +179,19 @@ native/scripts/build-unix.sh -T
 
 | 目标 | 编译 | 链接 | 导出符号核对 | 跑测试 |
 |---|---|---|---|---|
-| Windows x64 动态库 | ✅ MSVC 14.51 | ✅ | ✅ 43/43 | ✅ 693 断言（5.5.0 重跑） |
+| Windows x64 动态库 | ✅ MSVC 14.51 | ✅ | ✅ 43/43 | ✅ 718 断言（5.7.0 重跑） |
 | Windows x64 静态库 | ✅ | ✅（azcore/azgui/tests 均链接它） | n/a | ✅ 同一套断言，链接形式不同（`/WHOLEARCHIVE`） |
-| Linux x86_64 动态库 | ✅ Zig/Clang 22 | ✅ 带 `--no-undefined` | ✅ 43/43 | ⚠️ 本机跑不了，交给 CI 的 `linux` 作业 |
-| Linux aarch64 动态库 | ✅ | ✅ | ✅ 43/43 | ❌ |
-| Linux x86_64 静态库 | ✅ | ✅（azcore 链接 `andzip_core.a`，30.9 MB） | n/a | ❌ |
+| Linux x86_64 动态库 | ✅ Zig/Clang 22 | ✅ 带 `--no-undefined` | ✅ 43/43（5.7.0 带 `-DANDZIP_DEFLATE_ZLIBNG=ON` 重跑） | ⚠️ 本机跑不了，交给 CI 的 `linux` 作业 |
+| Linux aarch64 动态库 | ✅ | ✅ | ✅ 43/43（同上） | ❌ |
+| Linux x86_64 静态库 | ✅ | ✅（azcore 链接 `andzip_core.a`，31.3 MB） | n/a | ❌ |
 | macOS | ❌ 无 Apple SDK | — | — | — |
 
 这台机器上没有 WSL 也没有 Docker，所以 Linux 产物只能静态核对：`DT_NEEDED` 只有
 `libc.so.6 / ld-linux / libpthread / libdl`（C++ 运行时由 Zig 静态链入），导出表恰好是头文件
-里的 41 个 `az_*`（**按当时的头文件**；`andzip.h` 现在是 43 个，这一侧还没按新头文件重跑一遍
-核对 —— 数目由脚本从 `andzip.h` 现读，所以重跑时不一致会当场报出来）。POSIX 分支这次是第一次被真正编译，修掉的问题列在
+里的 43 个 `az_*`。**5.7.0 把这一侧重跑了一遍**（三个目标、带 `-DANDZIP_DEFLATE_ZLIBNG=ON`）：
+之前这里写的是"41 个，按当时的头文件，还没按新的 43 个重核"，那句推迟了四版 ——
+重跑当场挖出一条真的符号泄漏（上面那段），也就是说那句"还没重跑"欠着的不是一行数字。
+POSIX 分支修掉的问题列在
 [已知限制](#已知限制) 里。**Linux 上的运行时行为仍未验证**，需要在一台真机上跑
 `andzip_core_tests`。
 
@@ -611,6 +631,7 @@ node native/scripts/gen-sources.mjs        # 重新生成源文件清单（这�
 | LZ4、BLAKE3、xxHash | `cankao/NanaZip-main.zip` | BSD-2-Clause / CC0-or-Apache-2.0 / BSD-2-Clause |
 | Brotli、Lizard、LZ5 | `cankao/NanaZip-main.zip` | MIT / BSD-2-Clause |
 | 上述组件的 7-Zip 封装 | `cankao/NanaZip-main.zip`；zstd 那一对来自 `cankao/7-Zip-zstd-master.zip` | MIT（NanaZip）、BSD-3-Clause（fork 的 zstd 封装） |
+| zlib-ng（`third_party/codecs/zlib-ng`，只有 `-DeflateZlibNg` 才编进产物） | **不是 `cankao/` 里的 zip**：`vendor-sources.ps1 -ZlibNg` 从 git clone 取，钉在 `develop @ 1727258`（`zlibVersion()` 报 `1.3.2.zlib-ng`；上游没有 v2 正式版标签，只有 RC1/RC2，所以记 commit 不记 tag） | zlib License（BSD-style，`third_party/codecs/zlib-ng/LICENSE.md`） |
 | Zig（仅用于交叉编译，不进产物） | ziglang.org | MIT |
 
 `native/src`、`native/include`、`native/tools`、`native/tests` 下的全部

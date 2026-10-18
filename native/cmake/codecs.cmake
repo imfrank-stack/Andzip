@@ -191,8 +191,9 @@ endfunction()
 
 # ------------------------------------------------------------------ zlib-ng
 #
-# Stage P2-c (docs/压缩提速-执行流程.md section 6, and the P2-b follow-up in
-# docs/perf-p2b-libdeflate.md): the Deflate *encoder* comes from zlib-ng, while
+# Stage P2-c (docs/ of the repo, the compression-speed execution plan, section 6,
+# and the P2-b follow-up in docs/perf-p2b-libdeflate.md): the Deflate *encoder* comes
+# from zlib-ng, while
 # the decoder stays with the vendor. zlib-ng is the library that has the API
 # shape the ZIP entry coder needs -- Z_SYNC_FLUSH and deflateSetDictionary are
 # public, which is what docs/perf-p1a-deflate-mt.md named as the criterion.
@@ -236,6 +237,34 @@ function(az_add_zlibng_deflate target)
 
   # The name exists in both shapes (real target when shared is off, alias when it
   # is on), which is why it is the one to link.
+  #
+  # ...and it is a separate *target*, which is what makes this line necessary: the
+  # visibility presets in CMakeLists.txt belong to andzip_core, so zlib-ng's own
+  # objects are compiled default-visible, and on ELF every one of them then joins
+  # the export table. Measured on the first cross build with this switch on: the
+  # x86_64 .so exported 67 symbols instead of 43, 24 of them zlib-ng's (deflate,
+  # inflate*, crc32*, zlibVersion), and native/scripts/check-exports.ps1 failed the
+  # gate. That is not tidiness -- an ELF shared object's symbols enter the whole
+  # process's lookup scope, so our copy of zlib would answer the deflate calls of
+  # any other library loaded beside it. Hidden at compile time is the only form of
+  # this that zig's linker driver accepts (`-Wl,--exclude-libs,ALL`, the usual
+  # answer at link time, is rejected outright: "unsupported linker arg").
+  #
+  # MSVC ignores the property, which is why the Windows numbers in
+  # docs/perf-tiers.tsv are unaffected by it -- and why the DLL never showed the
+  # leak: there, nothing is exported unless it says __declspec(dllexport).
+  #
+  # The property has to go on the real target, not the name we link: with
+  # ZLIB_COMPAT=ON, zlib-ng-static is an alias of zlib-ng's own zlibstatic, and
+  # CMake refuses to set properties through an alias.
+  get_target_property(_zng_real zlib-ng-static ALIASED_TARGET)
+  if(NOT _zng_real)
+    set(_zng_real zlib-ng-static)     # the shape where the name is the target itself
+  endif()
+  set_target_properties(${_zng_real} PROPERTIES
+    C_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+
   target_link_libraries(${target} PRIVATE zlib-ng-static)
   target_compile_definitions(${target} PRIVATE AZ_DEFLATE_ZLIBNG=1)
 

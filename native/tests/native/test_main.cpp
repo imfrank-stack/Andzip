@@ -666,6 +666,60 @@ static void TestDirectoryRoundTrip()
   EndTest();
 }
 
+// A member big enough that its compressed output needs many Write() calls, added from disk.
+//
+// This is the shape that no gate caught for a whole release cycle. The round trips above add
+// members from memory buffers -- one contiguous stream, so an out stream can take everything
+// it is handed -- and the directory test above writes 300 KiB files through LZMA2. When the
+// Deflate coder first went through the ZIP path with 64 KiB writes, the stream took part of
+// one chunk and reported the smaller number in *processedSize; a coder that passes NULL for
+// that out-parameter loses the rest without a sound. The archive came back as 3.47 MiB of an
+// 8 MiB member plus "data error", with the suite green, and only a hand-run extract found it.
+//
+// So the point is not "test Deflate again": it is that a large member read from disk is the
+// one case where a short write is observable, for both containers, and it stays observable here.
+static void TestLargeMemberFromFileRoundTrip()
+{
+  BeginTest("a large member added from disk round-trips in both containers");
+
+  const fs::path srcDir = TempSubdir("bigmember-src");
+  const std::vector<unsigned char> big = MakePayload(8 * 1024 * 1024);
+  CHECK(WriteFile(srcDir / "data.bin", big));
+
+  const char *formats[] = { "zip", "7z" };
+  for (size_t i = 0; i < sizeof(formats) / sizeof(formats[0]); i++)
+  {
+    const fs::path outDir = TempSubdir("bigmember-out");
+    std::string archiveName = std::string("a.") + formats[i];
+    const fs::path archive = outDir / archiveName;
+
+    az_create_options co = AZ_CREATE_OPTIONS_INIT;
+    co.format = formats[i];
+    co.method = "Deflate";
+    co.level = 5;
+
+    az_writer w = NULL;
+    CHECK_AZ(az_writer_open(archive.string().c_str(), &co, &w));
+    CHECK_AZ(az_writer_add_file(w, (srcDir / "data.bin").string().c_str(), NULL, NULL, 0));
+    CHECK_AZ(az_writer_finish(w, NULL, NULL));
+    az_writer_free(w);
+    CHECK(fs::exists(archive));
+
+    const fs::path extracted = TempSubdir("bigmember-extract");
+    az_archive arc = NULL;
+    CHECK_AZ(az_archive_open(archive.string().c_str(), NULL, &arc));
+    az_extract_options eo = AZ_EXTRACT_OPTIONS_INIT;
+    CHECK_AZ(az_archive_extract(arc, extracted.string().c_str(), NULL, 0, &eo));
+    az_archive_close(arc);
+
+    std::vector<unsigned char> back;
+    CHECK(ReadFile(extracted / "data.bin", back));
+    CHECK(SameBytes(back, big));
+  }
+
+  EndTest();
+}
+
 struct PasswordCase { const char *format; az_encryption enc; int headers; };
 
 static void TestPasswords()
@@ -1612,6 +1666,7 @@ int main()
   TestMultipleEntries();
   TestSingleEntrySinkStress();
   TestDirectoryRoundTrip();
+  TestLargeMemberFromFileRoundTrip();
   TestPasswords();
   TestPasswordCallback();
   TestPathSafety();
