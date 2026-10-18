@@ -66,6 +66,9 @@ Andzip/
 两个判断值得单说：**接缝放在 Core 的四个静态门面上**（`ArchiveCreator` / `ArchiveExtractor` /
 `ArchiveReader` / `ArchiveTester`），换引擎时界面一行都不用改——本项目实际上就这么做过一次；
 **错误模型是翻译而不是透传**（`NativeEngine.Translate`），P/Invoke 的错误码不会成为界面必须知道的契约。
+翻译的目标是"界面能按原因说话"：引擎那句 `cannot create '<路径>'` 到了界面上是
+「这个文件正被其他程序占用，或者它是只读的……请关掉正在打开它的窗口，或者换一个文件名再压」
+（`ArchiveFailureReason.TargetLocked`，5.8.1），而不是一个错误码。
 
 完整推导在 [`docs/开发记录.md`](docs/开发记录.md) 第三、七节。
 

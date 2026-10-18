@@ -15,6 +15,14 @@ public enum ArchiveFailureReason
     /// <summary>底层读写失败。</summary>
     Io,
 
+    /// <summary>
+    /// 目标包已经存在，而且此刻打不开来写 —— 别人（或本程序自己的压缩包视图）正占着它，
+    /// 或者它是只读的。单独给一个类别的理由：引擎在这一步只会说
+    /// <c>cannot create '&lt;路径&gt;'</c>，既不说为什么也不说该怎么办，而这一种失败
+    /// 用户是能自己解决的（关掉占用它的窗口，或换个名字）。
+    /// </summary>
+    TargetLocked,
+
     /// <summary>操作被取消（回调要求停止）。</summary>
     Cancelled,
 

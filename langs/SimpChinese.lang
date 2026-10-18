@@ -134,6 +134,9 @@ TEXT_ERR_DEST_NOT_SET                   = 请指定解压目标路径。
 TEXT_TITLE_ERROR                        = 错误
 TEXT_ERR_EXTRACT_FAILED                 = 解压失败：
 TEXT_ERR_COMPRESS_FAILED                = 压缩失败：
+; 目标包已存在且此刻打不开来写（引擎用的是 GENERIC_WRITE + FILE_SHARE_READ，所以任何人
+; 开着它都会整单失败，包括本程序自己那个正在显示这个包的窗口）。这一句要说出去路。
+TEXT_ERR_TARGET_LOCKED                  = 这个文件正被其他程序占用，或者它是只读的：${path}。请关掉正在打开它的窗口（包括本程序里显示这个包的那个窗口），或者换一个文件名再压。
 
 ; ---- 完整性测试（FR-3.6）----
 TEXT_STATUS_TESTING                     = 正在测试...

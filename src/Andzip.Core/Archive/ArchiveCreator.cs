@@ -199,6 +199,8 @@ public static class ArchiveCreator
         string outputPath,
         CancellationToken cancellationToken)
     {
+        // 先确认这个目标此刻真的能写（见 EnsureTargetWritable），再让引擎去开它。
+        EnsureTargetWritable(outputPath);
         var options = NativeEngine.BuildCreateOptions(engineFormat, settings, settings.Progress);
 
         try
@@ -227,6 +229,39 @@ public static class ArchiveCreator
             // 与参考行为一致：失败或取消时不留半成品。
             ArchiveOutputGuard.TryDelete(outputPath);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 目标已经存在时，先按<strong>引擎自己那一份访问方式</strong>试开一次。
+    /// <para>
+    /// 引擎写包走的是 <c>COutFile::Create_ALWAYS</c>：<c>GENERIC_WRITE</c> 配
+    /// <c>FILE_SHARE_READ</c>（third_party 的 <c>CPP/Windows/FileIO.cpp</c>）—— 也就是说
+    /// <strong>只要还有任何人开着这个文件</strong>（另一个程序，或者本程序自己那个正在显示
+    /// 这个包的窗口），创建就整单失败，而引擎能说的只有一句
+    /// <c>cannot create '&lt;路径&gt;'</c>。用户看到的是"换个压缩方法还是失败"，
+    /// 因为失败跟方法确实无关。这里用同样的 access + share 试开：开得动就立刻关掉交给引擎，
+    /// 开不动就抛一个说得出名字的原因。
+    /// </para>
+    /// <para>
+    /// 只查"已存在"的那一种：目标不存在时失败的原因是目录不可写或盘满，那是另一类话，
+    /// 而且这种文件本来也不归这一步管（引擎会自己报）。
+    /// </para>
+    /// </summary>
+    private static void EnsureTargetWritable(string outputPath)
+    {
+        if (!File.Exists(outputPath))
+        {
+            return;
+        }
+
+        try
+        {
+            using var probe = new FileStream(outputPath, FileMode.Open, FileAccess.Write, FileShare.Read);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new ArchiveFailureException(ArchiveFailureReason.TargetLocked, outputPath, ex);
         }
     }
 

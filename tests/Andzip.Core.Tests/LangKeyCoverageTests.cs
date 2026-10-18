@@ -176,6 +176,7 @@ public class LangKeyCoverageTests
         "TEXT_BTN_SET_DEFAULT",
         "TEXT_SETTINGS_DEFAULT_STILL",
         "TEXT_ERR_COMPRESS_FAILED",
+        "TEXT_ERR_TARGET_LOCKED",
 
         // 完整性检测与修复：都是"跑完要给一句话"的操作，漏一个键就是界面上一串键名。
         "TEXT_STATUS_TESTING",

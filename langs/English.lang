@@ -138,6 +138,10 @@ TEXT_ERR_DEST_NOT_SET                   = Specify a destination path.
 TEXT_TITLE_ERROR                        = Error
 TEXT_ERR_EXTRACT_FAILED                 = Extraction failed:
 TEXT_ERR_COMPRESS_FAILED                = Compression failed:
+; The target package exists and cannot be opened for writing right now (the engine asks for
+; GENERIC_WRITE with FILE_SHARE_READ, so anyone holding it fails the whole job -- including
+; this app's own window showing that archive). This line has to point at a way out.
+TEXT_ERR_TARGET_LOCKED                  = That file is held open by another program, or it is read-only: ${path}. Close the window that has it open (including this app's own archive window), or pick a different name.
 
 ; ---- Integrity test (FR-3.6) ----
 TEXT_STATUS_TESTING                     = Testing...

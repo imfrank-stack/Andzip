@@ -306,8 +306,25 @@ public sealed class ProgressWindow : Window
     /// </summary>
     public IProgress<ArchiveProgress> CreateSink() => new DispatcherSink(this);
 
+    /// <summary>
+    /// 取消<strong>就是在这条回调里生效的</strong>：内核的进度契约写着"返回非 <c>AZ_OK</c> 就中止本次操作"
+    /// （`include/andzip/andzip.h` 的 <c>az_progress_fn</c>），而外壳把 <see cref="OperationCanceledException"/>
+    /// 映射成 <c>AZ_ERROR_CANCELLED</c>（CallbackBridge.InvokeProgress）。
+    /// <para>
+    /// 为什么不能只靠 <c>ArchiveCreator</c> 里那些条目之间的 <c>ThrowIfCancellationRequested</c>：
+    /// 压一个大文件时中间根本没有条目边界，那几道检查要等这个文件整个压完才走到 ——
+    /// 用户按了 Esc、框也收了，CPU 却继续跑满几分钟（5.8.1 用户报的"取消不掉"）。
+    /// 实测这条回调在一个 512 MiB 的单条目上被叫到 130–3900 次（各方法不同），
+    /// 所以在这里查令牌，中止落在 0.1 秒内（探针读数在第七节第 110 条）。
+    /// </para>
+    /// </summary>
     private sealed class DispatcherSink(ProgressWindow window) : IProgress<ArchiveProgress>
     {
-        public void Report(ArchiveProgress value) => Dispatcher.UIThread.Post(() => window.Update(value));
+        public void Report(ArchiveProgress value)
+        {
+            // 抛在引擎的回调线程上，不会跑到界面上来（外壳接住它换成中止码）。
+            window._cancellation.Token.ThrowIfCancellationRequested();
+            Dispatcher.UIThread.Post(() => window.Update(value));
+        }
     }
 }

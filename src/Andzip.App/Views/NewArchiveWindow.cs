@@ -1153,6 +1153,14 @@ public sealed class NewArchiveWindow : Window
             ShowHint(ex.Message);
             return;
         }
+        catch (ArchiveFailureException ex) when (ex.Reason == ArchiveFailureReason.TargetLocked)
+        {
+            // 目标被占着（或只读）。引擎只会说 cannot create '<路径>'，既不说为什么也不说该怎么办，
+            // 而这一种失败用户自己就能解开 —— 所以这句话要给出去路，不是给一个错误码。
+            progress.Close();
+            ShowHint(_lang.Format("TEXT_ERR_TARGET_LOCKED", ("path", ex.Message)));
+            return;
+        }
         catch (Exception ex)
         {
             progress.Close();
