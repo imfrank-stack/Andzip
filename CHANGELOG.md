@@ -61,7 +61,7 @@ Deflate 编码器换掉。判据沿用流程文档第 6.2 节那两条，没有�
 ### 四、上一版发出去的 `a=0` 从 Deflate 上收回去了
 
 5.6.0 的 `a=0` 是给 vendor 编码器换一档 huffman 构建；新的 coder 只认 `x`、只忽略 `mt`，
-**其余一律 `E_INVALIDARG`**（`az_deflate_encoder.cpp:159-168`）—— 同一个键从"被换了一种用法"
+**其余一律 `E_INVALIDARG`**（`az_deflate_encoder.cpp:158-169`）—— 同一个键从"被换了一种用法"
 变成"让整次压缩失败"。所以 `TierExtras` 现在只给 **Deflate64** 发 `a=0`，Deflate 那一格什么都不带。
 原生用例两头钉住：用 Deflate64 证明 `extra_properties` 这条通道还在，用 Deflate 证明拒绝是响亮的
 **且不留下半个包**。后半顺带修了一个真的坑：属性是在输出文件建好之后才下发的，
@@ -75,7 +75,7 @@ Deflate 编码器换掉。判据沿用流程文档第 6.2 节那两条，没有�
 "少写"恰好表现为包更小、压得更快）。根因是 I/O 契约不是 deflate：
 `ISequentialOutStream::Write` 允许少消费，实际消费量必须从 `*processedSize` 读回来，
 而初版传了 `NULL`。修法与 vendor 的 `COutBuffer::FlushPart` 同一条规矩
-（`az_deflate_encoder.cpp:244-256`：循环排空，`processedOut == 0` 就 `E_FAIL`）。
+（`az_deflate_encoder.cpp:246-256`：循环排空，`processedOut == 0` 就 `E_FAIL`）。
 回归补了一条 `TestLargeMemberFromFileRoundTrip`（8 MiB 走真实文件、两种容器、压完读回逐字节比）。
 **"包更小、压得更快"不能单独当验收** —— 这句话是这一条教出来的。
 
@@ -88,7 +88,7 @@ Deflate 编码器换掉。判据沿用流程文档第 6.2 节那两条，没有�
   `deflate` / `inflate*` / `crc32*` / `zlibVersion`。不是整齐问题：ELF 的导出进的是整个进程的
   查找域，我们这一份 zlib 会去应答同进程里别人家的 `deflate` 调用。链接期的常规答案
   `-Wl,--exclude-libs,ALL` 在 zig 的驱动上是 `unsupported linker arg`，所以改成编译期给
-  zlib-ng 的真目标设 `C_VISIBILITY_PRESET hidden`（`codecs.cmake:259-266`）。
+  zlib-ng 的真目标设 `C_VISIBILITY_PRESET hidden`（`codecs.cmake:260-266`）。
   三个 Linux 目标现在都是 43/43；README 里那句"还没按新的 43 个头文件重核"欠了四版，这一轮还掉了。
 - 两条实测更新：`libandzip_core.a` 30.9 → **31.3 MB**；MSVC 忽略那个属性，所以 Windows 的字节没动
   （`tier-check.cs` 八格改动后逐格重跑，相同）。

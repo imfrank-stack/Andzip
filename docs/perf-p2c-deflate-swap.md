@@ -69,7 +69,7 @@ P2-a 撞过这个雷。三条边界：
 
 5.6.0 发出去的 `a=0` 是给 vendor 编码器换一档 huffman 构建（`docs/perf-tiers.tsv` 里那一排
 `props=a=0` 的读数就是它）。新 coder 的属性面只有两条：认 `x`（`kLevel`），忽略 `mt`
-（一条 deflate 流就是一个线程），其余一律 `E_INVALIDARG`（`native/src/codecs/az_deflate_encoder.cpp:159-168`）。
+（一条 deflate 流就是一个线程），其余一律 `E_INVALIDARG`（`native/src/codecs/az_deflate_encoder.cpp:158-169`）。
 于是同一个 `a` 从"被换了一种用法"变成"**让整次压缩失败**"。这不是保守，是把它留在表上的代价：
 一条永远点不动的按钮。所以 `NativeEngine.cs` 的 `TierExtras` 现在只给 Deflate64 发 `a=0`。
 
@@ -119,7 +119,7 @@ data error。而当时**整套原生断言全绿（那条回归就是它教出�
 成因是 I/O 契约，不是 deflate：`ISequentialOutStream::Write` 允许少消费，实际消费量必须从
 `*processedSize` 读回来，而我传了 `NULL`。vendor 的 `COutBuffer::FlushPart`（`OutBuffer.cpp:69-72`）
 守的就是这条规矩，它自己的 coder 也是按 1 MiB 的输出缓冲在排空。修法同处
-（`az_deflate_encoder.cpp:244-256`）：`while (left)` 循环写，`processedOut == 0` 或超过剩余量就
+（`az_deflate_encoder.cpp:246-256`）：`while (left)` 循环写，`processedOut == 0` 或超过剩余量就
 `E_FAIL`，绝不静默少写。诊断用的临时构建（`AZ_DEFLATE_DIAG`）已逐行删除。
 
 回归补了一条 `TestLargeMemberFromFileRoundTrip`：8 MiB 走真实文件，zip + 7z 两种容器，
@@ -172,7 +172,7 @@ Deflate64 故意不在这张表里：这一阶段没动它，而且这几家里�
    这不是整齐问题：ELF 共享对象的导出符号进的是**整个进程的查找域**，我们这一份 zlib 会去应答同
    进程里别人家的 `deflate` 调用 —— 而 `ZLIB_COMPAT=ON` 恰恰保证了名字与 ABI 看着对得上，
    出错时会非常难查。常规答案 `-Wl,--exclude-libs,ALL` 在 zig 的驱动上直接
-   `error: unsupported linker arg`，所以改成编译期做：`native/cmake/codecs.cmake:259-266` 给
+   `error: unsupported linker arg`，所以改成编译期做：`native/cmake/codecs.cmake:260-266` 给
    zlib-ng 的**真**目标设 `C_VISIBILITY_PRESET hidden`（`zlib-ng-static` 在 `ZLIB_COMPAT` 下是个
    alias，属性挂在 alias 上会被 CMake 拒绝 —— 先用 `ALIASED_TARGET` 解一层）。
    三个 Linux 目标现在都是 43/43。
