@@ -75,6 +75,23 @@
                         "origin":  "cankao/NanaZip-main.zip -\u003e NanaZip.ZS.Codecs/SevenZip/CPP/7zip/{Compress,Archive}",
                         "license":  "MIT (NanaZip, see NanaZip-License.md)",
                         "note":  "7-Zip wrappers for the codec libraries above; placed in the engine tree so their relative includes resolve"
+                    },
+                    {
+                        "path":  "third_party/codecs/zlib-ng",
+                        "origin":  "git clone (not in cankao/; pass -ZlibNg \u003cdir\u003e to native/scripts/vendor-sources.ps1)",
+                        "upstream":  "https://github.com/zlib-ng/zlib-ng",
+                        "commit":  "1727258b764262c73149014cdf6a39bd551b3bd5",
+                        "version":  "reported by zlibVersion() as 1.3.2.zlib-ng",
+                        "license":  "Zlib (see codecs/zlib-ng/LICENSE.md)",
+                        "excluded":  [
+                                         ".git",
+                                         ".github",
+                                         "test (needs GoogleTest)",
+                                         "doc",
+                                         "tools",
+                                         "*.abi"
+                                     ],
+                        "note":  "Deflate encoder for stage P2-c; pinned to a commit because the develop branch carries no release tags"
                     }
                 ]
 }

@@ -28,6 +28,7 @@ param(
     [string]$Generator = 'Ninja',
 
     [switch]$ExtraCodecs,   # ANDZIP_EXTRA_CODECS=ON  (zstd/lz4/brotli/lizard encoders)
+    [switch]$DeflateZlibNg, # ANDZIP_DEFLATE_ZLIBNG=ON (Deflate encoder from zlib-ng, stage P2-c)
     [switch]$Static,        # static library instead of a DLL
     [switch]$NoTools,
     [switch]$NoGui,         # skip the azgui manual verification UI
@@ -147,6 +148,7 @@ $cmakeArgs = @(
     "-DCMAKE_BUILD_TYPE=$Config",
     "-DAZ_RID_HINT=$rid",
     "-DANDZIP_EXTRA_CODECS=$(if ($ExtraCodecs) { 'ON' } else { 'OFF' })",
+    "-DANDZIP_DEFLATE_ZLIBNG=$(if ($DeflateZlibNg) { 'ON' } else { 'OFF' })",
     "-DANDZIP_BUILD_SHARED=$(if ($Static) { 'OFF' } else { 'ON' })",
     "-DANDZIP_BUILD_TOOLS=$(if ($NoTools) { 'OFF' } else { 'ON' })",
     "-DANDZIP_BUILD_GUI=$(if ($NoGui) { 'OFF' } else { 'ON' })",

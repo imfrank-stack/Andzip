@@ -27,7 +27,11 @@ param(
     # Overlays the third-party 7-Zip codec wrappers onto the stock engine tree.
     # Off by default: the fork's ZstdDecoder.h is ABI-incompatible with stock
     # Archive/ZstdHandler.cpp, so enabling this also replaces that handler.
-    [switch]$ExtraCodecs
+    [switch]$ExtraCodecs,
+
+    # Folder with a zlib-ng checkout at $ZlibNgSha. Not part of cankao/ (that
+    # archive set predates it), so it is passed explicitly; see AZ_ZLIBNG_SHA.
+    [string]$ZlibNg = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,6 +63,11 @@ $Cankao     = $SourceArchives
 $ThirdParty = Join-Path $RepoRoot 'native\third_party'
 $SevenZip   = Join-Path $ThirdParty '7zip'
 $Codecs     = Join-Path $ThirdParty 'codecs'
+
+# The zlib-ng commit the P2-c measurements were made against (its develop branch
+# has no release tags, so the commit *is* the version; zlibVersion() reports
+# 1.3.2.zlib-ng). Vendoring a different tree silently changes every deflate byte.
+$ZlibNgSha  = '1727258b764262c73149014cdf6a39bd551b3bd5'
 
 function Expand-Ref {
     param([string]$ZipName, [string]$SubPath)
@@ -215,7 +224,7 @@ foreach ($stale in @($SevenZip, $Codecs)) {
 New-Item -ItemType Directory -Force -Path $SevenZip, $Codecs | Out-Null
 
 # ---------------------------------------------------------------- 7-Zip engine
-Write-Host '[1/4] 7-Zip (cankao/7zip-main.zip)'
+Write-Host '[1/5] 7-Zip (cankao/7zip-main.zip)'
 $z7 = Expand-Ref '7zip-main.zip' ''
 Copy-Tree (Join-Path $z7 'C')   (Join-Path $SevenZip 'C')
 Copy-Tree (Join-Path $z7 'CPP') (Join-Path $SevenZip 'CPP')
@@ -227,7 +236,7 @@ Remove-Item -LiteralPath (Join-Path $SevenZip 'CPP\7zip\UI') -Recurse -Force -Er
 Remove-Glob $SevenZip @('*.dsp', '*.dsw', '*.vcxproj', '*.vcxproj.filters', '*.rc', '*.def')
 
 # ---------------------------------------------------------------- zstd + zstdmt
-Write-Host '[2/4] zstd / zstdmt (cankao/7-Zip-zstd-master.zip)'
+Write-Host '[2/5] zstd / zstdmt (cankao/7-Zip-zstd-master.zip)'
 $zs = Expand-Ref '7-Zip-zstd-master.zip' ''
 
 # The 7-Zip glue for these codecs includes them as "../../../C/zstd/zstd.h",
@@ -244,7 +253,7 @@ if ($ExtraCodecs) {
 }
 
 # ------------------------------------------------------------- NanaZip codecs
-Write-Host '[3/4] LZ4 / BLAKE3 / xxHash / Brotli / Lizard / LZ5 (cankao/NanaZip-main.zip)'
+Write-Host '[3/5] LZ4 / BLAKE3 / xxHash / Brotli / Lizard / LZ5 (cankao/NanaZip-main.zip)'
 $nz      = Expand-Ref 'NanaZip-main.zip' ''
 $nzCodec = Join-Path $nz 'NanaZip.Codecs'
 $nzZs    = Join-Path $nz 'NanaZip.ZS.Codecs'
@@ -278,8 +287,43 @@ if ($ExtraCodecs) {
 Copy-Item -LiteralPath (Join-Path $nz 'License.md') -Destination (Join-Path $Codecs 'NanaZip-License.md') -Force -ErrorAction SilentlyContinue
 Remove-Glob $Codecs @('*.asm')
 
+# ------------------------------------------------------------------- zlib-ng
+# The deflate encoder swap (stage P2-c) needs a streaming deflate library with
+# Z_SYNC_FLUSH; zlib-ng is the one that was measured (docs/perf-zlib-ng.tsv).
+# It is not in cankao/ -- pass a checkout of the pinned commit:
+#   git clone --depth 1 https://github.com/zlib-ng/zlib-ng.git
+#   git -C zlib-ng fetch --depth 1 origin $ZlibNgSha && git -C zlib-ng checkout FETCH_HEAD
+Write-Host '[4/5] zlib-ng (deflate encoder, pinned commit)'
+$ZlibNgDst = Join-Path $Codecs 'zlib-ng'
+if ($ZlibNg) {
+    if (-not (Test-Path -LiteralPath (Join-Path $ZlibNg 'CMakeLists.txt'))) {
+        throw "-ZlibNg is not a zlib-ng checkout: $ZlibNg"
+    }
+    $got = ''
+    if (Test-Path -LiteralPath (Join-Path $ZlibNg '.git')) {
+        $got = (& git -C $ZlibNg rev-parse HEAD) | Select-Object -First 1
+    }
+    if ($got -and $got.Trim() -ne $ZlibNgSha) {
+        Write-Host ("      NOTE: checkout is {0}, the pinned commit is {1}" -f $got.Trim(), $ZlibNgSha)
+        Write-Host '      the build was measured against the pinned one; checkout it before shipping'
+    }
+    Copy-Tree $ZlibNg $ZlibNgDst
+    # Front-end material that the library build never looks at.
+    foreach ($stale in @('.git', '.github', 'test', 'doc', 'tools')) {
+        $p = Join-Path $ZlibNgDst $stale
+        if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+    }
+    Remove-Glob $ZlibNgDst @('*.abi')
+    Write-Host "      -> $ZlibNgDst"
+} elseif (Test-Path -LiteralPath $ZlibNgDst) {
+    Write-Host '      -ZlibNg not given; the directory was wiped with the rest of codecs/'
+    Write-Host '      restore it with: git checkout -- native/third_party/codecs/zlib-ng'
+} else {
+    Write-Host '      -ZlibNg not given; zlib-ng is absent (ANDZIP_DEFLATE_ZLIBNG=ON will fail loudly)'
+}
+
 # ------------------------------------------------------------------- manifest
-Write-Host '[4/4] manifest'
+Write-Host '[5/5] manifest'
 $manifest = [ordered]@{
     generatedUtc = (Get-Date).ToUniversalTime().ToString('o')
     note         = 'Regenerate with native/scripts/vendor-sources.ps1. Do not edit vendored files by hand.'
@@ -350,6 +394,15 @@ $manifest = [ordered]@{
             origin   = 'cankao/NanaZip-main.zip -> NanaZip.ZS.Codecs/SevenZip/CPP/7zip/{Compress,Archive}'
             license  = 'MIT (NanaZip, see NanaZip-License.md)'
             note     = '7-Zip wrappers for the codec libraries above; placed in the engine tree so their relative includes resolve'
+        },
+        [ordered]@{
+            path     = 'third_party/codecs/zlib-ng'
+            origin   = 'git clone (not in cankao/; pass -ZlibNg <dir>)'
+            upstream = 'https://github.com/zlib-ng/zlib-ng'
+            commit   = $ZlibNgSha
+            license  = 'Zlib (see codecs/zlib-ng/LICENSE.md)'
+            excluded = @('.git', '.github', 'test (needs GoogleTest)', 'doc', 'tools', '*.abi')
+            note     = 'Deflate encoder for stage P2-c; vendored at a commit because the develop branch has no release tags'
         }
     )
 }

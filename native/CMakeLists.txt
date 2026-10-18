@@ -23,6 +23,7 @@ project(andzip_native
 
 set(ANDZIP_BUILD_SHARED   ON  CACHE BOOL "Build andzip_core as a shared library")
 set(ANDZIP_EXTRA_CODECS   OFF CACHE BOOL "Compile zstd/lz4/brotli/lizard encoders from third_party/codecs")
+set(ANDZIP_DEFLATE_ZLIBNG OFF CACHE BOOL "Take the Deflate encoder from third_party/codecs/zlib-ng (stage P2-c)")
 set(ANDZIP_BUILD_TOOLS    ON  CACHE BOOL "Build the azcore command line smoke tool")
 set(ANDZIP_BUILD_TESTS    ON  CACHE BOOL "Build the native test executable")
 set(ANDZIP_BUILD_GUI      ON  CACHE BOOL "Build the azgui Win32 verification UI (Windows only)")
@@ -213,6 +214,14 @@ if(ANDZIP_EXTRA_CODECS)
   az_add_extra_codecs(andzip_core)
 endif()
 
+if(ANDZIP_DEFLATE_ZLIBNG)
+  # The zlib license has no clause that conflicts with the LGPL route already
+  # documented for the engine, but it does require the licence text to ship, so
+  # the license check below has to see it.
+  include("${CMAKE_CURRENT_LIST_DIR}/cmake/codecs.cmake")
+  az_add_zlibng_deflate(andzip_core)
+endif()
+
 # -------------------------------------------------------------------- tools
 
 if(ANDZIP_BUILD_TOOLS)
@@ -281,6 +290,6 @@ if(AZ_RID_HINT)
     COMMENT "Staging $<TARGET_FILE_NAME:andzip_core> for ${AZ_RID_HINT}")
 endif()
 
-message(STATUS "andzip_core: ${PROJECT_VERSION}  shared=${ANDZIP_BUILD_SHARED}  extra_codecs=${ANDZIP_EXTRA_CODECS}")
+message(STATUS "andzip_core: ${PROJECT_VERSION}  shared=${ANDZIP_BUILD_SHARED}  extra_codecs=${ANDZIP_EXTRA_CODECS}  deflate=${ANDZIP_DEFLATE_ZLIBNG}")
 list(LENGTH AZ_7ZIP_ENGINE_SOURCES AZ_ENGINE_TU_COUNT)
 message(STATUS "andzip_core: ${AZ_ENGINE_TU_COUNT} engine translation units from ${AZ_7ZIP_ROOT}")

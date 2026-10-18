@@ -183,3 +183,57 @@ function(az_add_extra_codecs target)
 
   message(STATUS "andzip_core: extra codecs ON -- zstd(${CMAKE_SIZEOF_VOID_P}) lz4 lz5 lizard brotli")
 endfunction()
+
+# ------------------------------------------------------------------ zlib-ng
+#
+# Stage P2-c (docs/压缩提速-执行流程.md section 6, and the P2-b follow-up in
+# docs/perf-p2b-libdeflate.md): the Deflate *encoder* comes from zlib-ng, while
+# the decoder stays with the vendor. zlib-ng is the library that has the API
+# shape the ZIP entry coder needs -- Z_SYNC_FLUSH and deflateSetDictionary are
+# public, which is what docs/perf-p1a-deflate-mt.md named as the criterion.
+# libdeflate measured faster per byte but has no streaming compression at all,
+# so it was rejected without vendoring it.
+#
+# This is a vendored CMake project rather than a hand-listed set of sources,
+# on purpose: its arch selection, per-file instruction-set flags and the two
+# generated headers (zlib.h / zconf.h from *.in) are platform logic we would
+# have to re-derive for every target we build (Windows shared, Windows static,
+# Linux via Zig). Re-deriving it wrong produces a library that compiles and
+# runs slower, or not at all, on the target nobody tested.
+function(az_add_zlibng_deflate target)
+  set(ZNG "${AZ_CODEC_ROOT}/zlib-ng")
+  if(NOT EXISTS "${ZNG}/CMakeLists.txt")
+    message(FATAL_ERROR
+      "ANDZIP_DEFLATE_ZLIBNG=ON but ${ZNG} is not vendored. Re-run:\n"
+      "    pwsh native/scripts/vendor-sources.ps1 -ZlibNg <checkout of 1727258b>\n"
+      "or restore the tracked files with:\n"
+      "    git checkout -- native/third_party/codecs/zlib-ng")
+  endif()
+
+  # Their options are cache variables, so they have to be written before the
+  # subdirectory is read -- and forced, because our own -DANDZIP_* defaults would
+  # otherwise lose to whatever a stale cache holds.
+  set(ZLIB_COMPAT          ON  CACHE BOOL "" FORCE)   # zlib names/ABI, what our wrapper calls
+  set(BUILD_SHARED_LIBS    OFF CACHE BOOL "" FORCE)   # one DLL ships; no second zlib DLL
+  set(BUILD_STATIC_LIBS    ON  CACHE BOOL "" FORCE)
+  set(BUILD_TESTING        OFF CACHE BOOL "" FORCE)   # ON makes them FetchContent GoogleTest
+  set(INSTALL_UTILS        OFF CACHE BOOL "" FORCE)   # minigzip and friends are not ours to ship
+  set(WITH_MAINTAINER_WARNINGS OFF CACHE BOOL "" FORCE)
+  set(WITH_GTEST           OFF CACHE BOOL "" FORCE)
+  set(WITH_FUZZERS         OFF CACHE BOOL "" FORCE)
+  set(WITH_BENCHMARKS      OFF CACHE BOOL "" FORCE)
+
+  # EXCLUDE_FROM_ALL also keeps their utils/ targets (minigzip, makefixed,
+  # maketrees -- add_subdirectory(utils) is unconditional in their build) out of
+  # the default build, so a product build does not start emitting executables
+  # nobody asked for into the output directory.
+  add_subdirectory("${ZNG}" "${CMAKE_CURRENT_BINARY_DIR}/zlib-ng" EXCLUDE_FROM_ALL)
+
+  # The name exists in both shapes (real target when shared is off, alias when it
+  # is on), which is why it is the one to link.
+  target_link_libraries(${target} PRIVATE zlib-ng-static)
+  target_compile_definitions(${target} PRIVATE AZ_DEFLATE_ZLIBNG=1)
+
+  get_target_property(_zng_src zlib-ng-static SOURCE_DIR)
+  message(STATUS "andzip_core: deflate encoder from zlib-ng (${_zng_src})")
+endfunction()

@@ -70,7 +70,9 @@ if ($SkipEngine) {
         # -ExtraCodecs is NOT optional any more: the UI offers ZSTD/LZ4/LZ5/LIZARD/BROTLI
         # for 7z, and Andzip.Native.Tests fails the package when the staged engine lacks
         # them -- an engine built plainly would ship five menu items that all fail.
-        Invoke-ChildPowerShell -Script (Join-Path $root 'native\scripts\build-windows.ps1') -ScriptArgs @('-ExtraCodecs', '-RunTests')
+        # -DeflateZlibNg likewise: with it off the Deflate encoder is the vendor's own, so
+        # the tier bytes measured for 5.7.0 would not be the bytes a user gets.
+        Invoke-ChildPowerShell -Script (Join-Path $root 'native\scripts\build-windows.ps1') -ScriptArgs @('-ExtraCodecs', '-DeflateZlibNg', '-RunTests')
     }
     Invoke-Gate 'engine: export table matches andzip.h' {
         & (Join-Path $root 'native\scripts\check-exports.ps1') (Join-Path $root 'build\native\bin\andzip_core.dll')
@@ -81,7 +83,7 @@ if ($SkipEngine) {
         # format table. Gate it, do not assume it.
         Invoke-Gate 'engine: static library + native tests' {
             Invoke-ChildPowerShell -Script (Join-Path $root 'native\scripts\build-windows.ps1') `
-                -ScriptArgs @('-Static', '-ExtraCodecs', '-BuildRoot', (Join-Path $root 'build\native-static'), '-RunTests')
+                -ScriptArgs @('-Static', '-ExtraCodecs', '-DeflateZlibNg', '-BuildRoot', (Join-Path $root 'build\native-static'), '-RunTests')
         }
     }
 }
