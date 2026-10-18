@@ -212,16 +212,19 @@ internal static class NativeEngine
     private static (string? ExtraProperties, uint DictSizeMib) TierExtras(
         ArchiveFormatOption format, CompressionMethodOption method, CompressionLevelOption level)
     {
-        // 极限 + ZIP + Deflate/Deflate64 → a=0：huffman 用最快那一档。mixed 那一格
-        // 39 656 224 字节 / 91.42 s 变成 39 983 091 字节 / 6.96 s —— 大 0.82%、快 13.1 倍；
-        // text 那一格反而**更小**（Deflate 263 308 → 259 346，小 1.53%；Deflate64 是
-        // 574 711 → 574 684）且快 24 倍。改完仍然比标准档小（0.29790 对 0.30332），
-        // 所以“越靠后越小”这条没被打破。
+        // 极限 + ZIP + Deflate64 → a=0：huffman 用最快那一档。mixed 那一格
+        // 39 657 487 字节 / 91.71 s 变成 40 105 064 字节 / 6.95 s —— 大 1.13%、快 13.2 倍。
+        //
+        // Deflate 在 5.6.0 和 Deflate64 一起发过 a=0（那一格 39 656 224 / 91.42 s 变成
+        // 39 983 091 / 6.96 s）。5.7.0 把它从这一行里拿掉了，因为压 Deflate 的编码器
+        // 换成了 zlib-ng（native/src/codecs/，P2-c），而 a 是上游那个编码器的旋钮：
+        // 我们的 SetCoderProperties 认不得它，会按上游的规矩 E_INVALIDARG 拒掉。
+        // 拒是对的 —— 静默收下会让"a=0 让极限档更快"变成一句没人验证的谎。
         //
         // 只给这两个方法是量出来的边界，不是谨慎的口味：同一个 a 在 ZIP 的 LZMA 上把
         // text 那一格从 2 840 撑到 3 712 字节（大 30.7%），在 BZip2 上整单被拒
         // （Win32 87，一个字节都不吐），PPMd 与 Copy 收了但产物一字不变。
-        if (level.EngineLevel == 9 && format.IsZip && method.EngineMethod is "Deflate" or "Deflate64")
+        if (level.EngineLevel == 9 && format.IsZip && method.EngineMethod == "Deflate64")
         {
             return ("a=0", 0);
         }

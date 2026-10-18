@@ -24,6 +24,10 @@
 
 #include "CPP/7zip/Common/MultiOutStream.h"
 
+#ifdef AZ_DEFLATE_ZLIBNG
+#include "../codecs/az_deflate_zlibng.h"
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <ctime>
@@ -562,11 +566,22 @@ struct WriterCtx
   bool IsUpdate;
   UString TempPath;   // where finish writes before swapping it over DestPath
 
+  // Which stream the bytes actually went to, and whether the name was free before
+  // we opened it. Both feed the "a create that never finished leaves nothing" rule
+  // in the destructor.
+  UString OpenedPath;
+  bool CreatedFile;
+
+  // True only on the two success returns of az_writer_finish. Finished is not it:
+  // that flag is set at the *start* of finish (to reject a second call), so a write
+  // that fails halfway through has Finished true and Committed false.
+  bool Committed;
+
   WriterCtx() : Callback(NULL), FormatIndex(-1), VolumeSize(0), ToMemory(false),
                 Finished(false), Failed(false), HasCallbacks(false),
                 MemOut(NULL), FileOut(NULL), VolOut(NULL),
                 SourceArchive(NULL), SourceItemCount(0),
-                IsUpdate(false)
+                IsUpdate(false), CreatedFile(false), Committed(false)
   {
     memset(&Opts, 0, sizeof(Opts));
     memset(&Callbacks, 0, sizeof(Callbacks));
@@ -593,6 +608,30 @@ struct WriterCtx
       std::error_code ignored;
       std::filesystem::remove(az::UToPath(TempPath), ignored);
     }
+
+    // A create that never committed must not leave an empty file the user did not
+    // ask for. This is reachable: the handler opens the out stream first and only
+    // then hands the coder its properties, so a coder that rejects one fails *after*
+    // the name exists (5.7.0: Deflate's encoder is zlib-ng's, and fb / mc / pass
+    // belong to the coder it replaced).
+    //
+    // Only a file this call created is removed, and only while it holds nothing.
+    // Bytes on disk are a different case: a half-written archive is evidence the
+    // user can still inspect, and quietly deleting data is not what a failed write
+    // should do to somebody's folder. Overwriting an existing name was never this
+    // rule's to make either -- that truncation is Create_ALWAYS above, and it is
+    // the reason CreatedFile is recorded before the stream is opened.
+    if (!Committed && CreatedFile && !OpenedPath.IsEmpty())
+    {
+      std::error_code szEc;
+      const std::filesystem::path p = az::UToPath(OpenedPath);
+      const std::uintmax_t size = std::filesystem::file_size(p, szEc);
+      if (!szEc && size == 0)
+      {
+        std::error_code ignored;
+        std::filesystem::remove(p, ignored);
+      }
+    }
   }
 };
 
@@ -609,6 +648,24 @@ void BuildProperties(const WriterCtx *ctx, CObjectVector<PropEntry> &props, AStr
   fmtLower.MakeLower_Ascii();
   const bool is7z  = (fmtLower == L"7z");
   const bool isZip = (fmtLower == L"zip");
+
+#ifdef AZ_DEFLATE_ZLIBNG
+  // Hand the Deflate encoder slot to zlib-ng, once per process, before the handler
+  // is asked to create a coder. Here and not in a static initialiser because P2-a
+  // measured that the table's order is not stable between builds (14 in the shared
+  // one, 15 in the static one), so the only honest moment to edit it is after it is
+  // populated and before anything reads it -- which is this call.
+  //
+  // A swap that could not find the slot is reported, not hidden: the archive still
+  // compresses (with the engine's own Deflate), but the bytes are then not the ones
+  // docs/perf-tiers.tsv records, and "the tier table moved" is exactly the kind of
+  // thing a caller has to be told about.
+  if (is7z || isZip)
+  {
+    if (!AzDeflateSwapInstall())
+      problems += "zlib-ng Deflate encoder was not installed; the engine's own Deflate ran. ";
+  }
+#endif
 
   if (o.level >= 0)
     AddUInt32Prop(props, "x", (UInt32)o.level);
@@ -1332,6 +1389,13 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
     COutFileStream *fileStream = new COutFileStream();
     ctx->FileOutRef = fileStream;
     ctx->FileOut = fileStream;
+    {
+      // Record the state before Create_ALWAYS: after it, "did this file exist
+      // already?" can no longer be answered from the filesystem.
+      std::error_code ignored;
+      ctx->OpenedPath = writeTarget;
+      ctx->CreatedFile = !std::filesystem::exists(az::UToPath(writeTarget.Ptr()), ignored);
+    }
     if (!fileStream->Create_ALWAYS(us2fs(writeTarget.Ptr())))
     {
       ctx->Failed = true;
@@ -1456,6 +1520,9 @@ AZ_API az_result AZ_CALL az_writer_finish(az_writer writer, void **out_data, siz
   }
 
   // Success, but tell the caller which settings the format could not honour.
+  // Set before both success returns: the destructor's "a failed create leaves no
+  // empty file behind" rule must not fire on a finished archive.
+  ctx->Committed = true;
   if (!problems.IsEmpty())
     return az::Warn("%s", problems.Ptr());
   return az::Ok();

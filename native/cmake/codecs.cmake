@@ -24,6 +24,11 @@ if(NOT DEFINED AZ_CODEC_ROOT)
   set(AZ_CODEC_ROOT "${CMAKE_CURRENT_LIST_DIR}/../third_party/codecs")
 endif()
 
+# Same file-scope reason as AZ_CODEC_ROOT: our own sources beside the library.
+if(NOT DEFINED AZ_NATIVE_ROOT)
+  set(AZ_NATIVE_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
+endif()
+
 function(az_add_extra_codecs target)
   set(CODECS "${AZ_CODEC_ROOT}")
   set(ZSTD   "${AZ_7ZIP_ROOT}/C/zstd")
@@ -233,6 +238,15 @@ function(az_add_zlibng_deflate target)
   # is on), which is why it is the one to link.
   target_link_libraries(${target} PRIVATE zlib-ng-static)
   target_compile_definitions(${target} PRIVATE AZ_DEFLATE_ZLIBNG=1)
+
+  # Our two files, not vendored: the coder that speaks 7-Zip's ICompressCoder over
+  # deflate(), and the one place that edits the codec table. They are listed here
+  # rather than in CMakeLists.txt so an engine built without this switch cannot
+  # contain a reference to zlib.h at all.
+  target_sources(${target} PRIVATE
+    "${AZ_NATIVE_ROOT}/src/codecs/az_deflate_encoder.cpp"
+    "${AZ_NATIVE_ROOT}/src/codecs/az_deflate_swap.cpp"
+  )
 
   get_target_property(_zng_src zlib-ng-static SOURCE_DIR)
   message(STATUS "andzip_core: deflate encoder from zlib-ng (${_zng_src})")

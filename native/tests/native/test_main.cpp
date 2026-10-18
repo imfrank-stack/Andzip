@@ -1112,7 +1112,12 @@ static void TestExtraProperties()
 
   az_create_options co = AZ_CREATE_OPTIONS_INIT;
   co.format = "zip";
-  co.method = "Deflate";
+  // Deflate64, not Deflate, since 5.7.0: the Deflate *encoder* in this engine is
+  // zlib-ng's (native/src/codecs/), and fb / mc / pass are knobs of the coder it
+  // replaced. Deflate64 still runs the engine's own coder, so the channel can be
+  // proven on a coder that genuinely has these properties -- and the rejection of
+  // them on Deflate is asserted at the end of this test instead.
+  co.method = "Deflate64";
   co.level = 5;
 
   az_writer w = NULL;
@@ -1165,6 +1170,44 @@ static void TestExtraProperties()
   w = NULL;
   CHECK(badRes != AZ_OK);
   CHECK(!fs::exists(dir / "bad.zip"));
+
+  // The other half of the swap. Deflate's encoder is zlib-ng's since 5.7.0, and it
+  // answers only kLevel (plus kNumThreads, ignored): fb / mc / pass / a belong to the
+  // coder it replaced, so handing one over must fail the write rather than be quietly
+  // dropped -- a tier that says "the fast Huffman table is on" while nothing reads it
+  // is worse than no knob at all. Same rule the engine's own coder follows for
+  // properties it does not know (DeflateEncoder.cpp:241).
+  //
+  // The leftover shape differs from the "zzz" case above on purpose: an unknown *name*
+  // is refused before the out stream is opened, so nothing exists; a name the handler
+  // knows but the coder rejects is refused after it, when the file is there with
+  // whatever the handler already wrote. The facade removes an empty file it created
+  // itself (az_writer.cpp, the Committed rule) and leaves anything with bytes in it --
+  // half an archive is evidence, a phantom empty file is litter.
+  co.method = "Deflate";
+  co.extra_properties = "fb=16";
+  CHECK_AZ(az_writer_open((dir / "deflate_fb.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  az_result swappedRes = az_writer_finish(w, NULL, NULL);
+  az_writer_free(w);
+  w = NULL;
+  CHECK(swappedRes != AZ_OK);
+  {
+    std::error_code szEc;
+    const auto fbPath = dir / "deflate_fb.zip";
+    const auto fbSize = std::filesystem::file_size(fbPath, szEc);
+    CHECK(szEc || fbSize == 0);      // absent, or present and empty -- never a real archive
+  }
+
+  // And with the new coder in charge, plain Deflate compression still writes a member
+  // that opens: the rejection above must not be a side effect of a coder that cannot
+  // produce a stream at all.
+  co.extra_properties = NULL;
+  CHECK_AZ(az_writer_open((dir / "deflate_ok.zip").string().c_str(), &co, &w));
+  CHECK_AZ(az_writer_add_buffer(w, payload.data(), payload.size(), "p.bin", NULL));
+  CHECK_AZ(az_writer_finish(w, NULL, NULL));
+  az_writer_free(w);
+  CHECK(fs::exists(dir / "deflate_ok.zip"));
 
   co.extra_properties = NULL;
   EndTest();
