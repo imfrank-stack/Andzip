@@ -276,7 +276,7 @@ public sealed class NewArchiveWindow : Window
             TextWrapping = TextWrapping.Wrap,
         };
 
-        // 单个条目特别大时的一句"换 7z 会快得多"。判断在 Core（LargeEntryAdvice），
+        // 单个条目特别大时的一句"换 7z 压得更小"。判断在 Core（LargeEntryAdvice），
         // 这里只负责说出来和给一键。它是建议不是拦截：按下"开始"照样按 ZIP 压。
         var switchToSevenZip = new Button { Content = lang.Label("TEXT_HINT_SWITCH_TO_7Z"), MinWidth = 90 }.Ghost();
         _formatAdvice = new StackPanel
@@ -994,7 +994,7 @@ public sealed class NewArchiveWindow : Window
     }
 
     /// <summary>
-    /// 那句「换 7z 会快得多」该不该说。依据是刚回来的那份预估顺手量到的最大单条目
+    /// 那句「换成 7z 更小」该不该说。依据是刚回来的那份预估顺手量到的最大单条目
     /// （<see cref="LargeEntryAdvice"/>）—— 不为了这一句话把目录再走一遍。
     /// </summary>
     private void RefreshFormatAdvice()

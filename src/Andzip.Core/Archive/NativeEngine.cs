@@ -205,12 +205,15 @@ internal static class NativeEngine
     }
 
     /// <summary>
-    /// 档位除了级别号之外还捎带什么属性 —— 全项目只有这一处翻译“极限档到底下发了什么”，
-    /// 界面上不摆第二个版本，门面里也不摆。两条都量过才写死（<c>tests/perf/tiers.ps1</c>
-    /// 写的 <c>docs/perf-tiers.tsv</c>，128 MiB 单条目、这台机器）。
+    /// 档位除了级别号之外还捎带什么属性 —— 全项目只有这一处翻译“档位到底下发了什么”，
+    /// 界面上不摆第二个版本，门面里也不摆。三条都量过才写死（<c>tests/perf/tiers.ps1</c>
+    /// 与 <c>tests/perf/mt.ps1</c> 写的 <c>docs/perf-tiers.tsv</c> / <c>docs/perf-mt.tsv</c>，
+    /// 128 MiB 单条目、这台 16 逻辑核心的机器）。
     /// </summary>
     private static (string? ExtraProperties, uint DictSizeMib) TierExtras(
-        ArchiveFormatOption format, CompressionMethodOption method, CompressionLevelOption level)
+        ArchiveFormatOption format,
+        CompressionMethodOption method,
+        CompressionLevelOption level)
     {
         // 极限 + ZIP + Deflate64 → a=0：huffman 用最快那一档。mixed 那一格
         // 39 657 487 字节 / 91.71 s 变成 40 105 064 字节 / 6.95 s —— 大 1.13%、快 13.2 倍。
@@ -237,6 +240,41 @@ internal static class NativeEngine
         if (level.EngineLevel == 9 && format.IsSevenZip && method.EngineMethod == "LZMA2")
         {
             return (null, 64);
+        }
+
+        // 快速 / 标准 + 7z + LZMA2 → 块大小定在 4 MiB。这一条买的是用户那一句"CPU 没吃满"：
+        // LZMA2 在 7z 里是按**块**并行的，而自动块是 clamp(字典 << 2, 1 MiB, 256 MiB)
+        // （C/Lzma2Enc.c 的 Lzma2EncProps_Normalize，它再把并行度砍到 fileSize ÷ blockSize）。
+        // 标准档字典 32 MiB ⇒ 块 128 MiB ⇒ 一份 128 MiB 的输入正好一块 ⇒ 核心数设多少都只有
+        // 1.38 个核在跑（docs/perf-mt.tsv：阶梯里那一格 1.38，mtscale 那一排同一格 1.39 —— 两次运行）。
+        //
+        // 为什么是 4 MiB 而不是别的 —— 阶梯的拐点（mixed / 128 MiB / x5，同一次运行）：
+        //   自动     9.05 s /  1.38 核 /   382 MiB / 0.26555
+        //   c=16m    1.85 s / 10.83 核 / 1 478 MiB / 0.27332
+        //   c=8m     1.42 s / 12.19 核 /   774 MiB / 0.27400
+        //   c=4m     1.28 s / 12.52 核 /   415 MiB / 0.27354   ← 发的是这一格
+        //   c=2m     1.16 s / 12.69 核 /   231 MiB / 0.27329
+        // 往 4 以上走是纯亏（更慢、内存两到四倍、体积也没省下来）；往 2 走只多 10% 的速度，
+        // 却在压得动的料上收得更狠：同一格 text 的产物 c=2m 是 55 759 而 c=4m 是 47 543
+        // （自动 27 836）—— 块大小同时是 reduceSize，字典跟着被砍到块那么长，长程匹配就没了
+        // （C/LzmaEnc.c 的 LzmaEncProps_Normalize）。512 MiB 那一格同形（自动 13.77 s / 5.48 核
+        // 对 c=4m 5.61 s / 12.89 核，c=16m 要 7.45 s 与 1 493 MiB）—— **块不必跟着输入变大**。
+        // 文件夹也一样：16 × 32 MiB 固实，13.67 s / 5.37 核 → 5.34 s / 13.12 核。
+        // 单线程机器照发：mt=1 那一组 c=4m 从 16.90 s 走到 11.18 s、峰值工作集 374 → 50 MiB
+        // —— 快与省内存是字典被砍短的副产品而不是并行，但这两个数在单核机器上同样是要的。
+        //
+        // 为什么带上快速（x3）：那一档字典本来就是 4 MiB（1 << (3×2+16)，C/LzmaEnc.c），
+        // 块 = 字典 ⇒ 字典一点没被动过，纯赚：1.19 s / 7.07 核 → 0.84 s / 12.44 核，
+        // 产物还小一点（37 144 537 → 37 107 043）。
+        // 为什么不带上极速（x1）：字典 256 KiB ⇒ 自动块本来就是 1 MiB（128 块、13.38 核），
+        // 比这一刀更小 —— 下发 4 MiB 是把块**放大**，实测那一格 0.52 s 变成 0.59 s、
+        // 峰值 68 MiB 变成 129 MiB。
+        // 为什么不带上极限（x9）：那一档在代码里的定义就是"只管压得小"，而这一刀要收 3.0%
+        // 体积（0.26557 → 0.27355）换 7.4 倍速度（17.40 s → 2.36 s）—— 那不是极限档的承诺。
+        // 想让极限档也吃满核，改上面那一行就够，代价写在上面。
+        if (format.IsSevenZip && method.EngineMethod == "LZMA2" && level.EngineLevel is 3 or 5)
+        {
+            return ("c=4m", 0);
         }
 
         return (null, 0);

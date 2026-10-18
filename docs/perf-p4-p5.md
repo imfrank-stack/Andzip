@@ -114,7 +114,7 @@ powershell -File tests/perf/tiers.ps1                       # 第 6 节：档位
 ### 「仅存储」那一档实际发出去的是什么
 
 界面上的"仅存储"是 `CompressionLevelOption(Id 0, EngineLevel 0)`，而 `NativeEngine.InferMethod`
-（`src/Andzip.Core/Archive/NativeEngine.cs:227-238`）在 `EngineLevel == 0` 时把方法换成 `Copy`。
+（`src/Andzip.Core/Archive/NativeEngine.cs:341-352`）在 `EngineLevel == 0` 时把方法换成 `Copy`。
 所以**这一档真正发出去的是 `-m Copy`，不是 `-m Deflate -x 0`**。上面表里那行 `store` 量的就是它：
 
 | 语料 | `-m Copy -x 0` | 同语料的 ZIP 最快档（l1） |

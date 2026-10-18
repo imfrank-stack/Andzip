@@ -68,12 +68,15 @@ TEXT_ESTIMATE_VOLUMES                   = ${count} volumes
 TEXT_ESTIMATE_METHODS                   = By method: ${list}
 ; ---- Suggest 7z when one entry is very large (compression speed-up P1') ----
 ; Why this line exists: ZIP hands its threads out per entry (the engine caps the thread
-; count at the number of files to compress), so one big file runs on a single core; 7z
-; splits by block, so one big file can use them all. How many times faster is measured in
-; docs/perf-baseline.md; the threshold constant lives in Core's LargeEntryAdvice.
+; count at the number of files to compress), so one big file runs on a single core. The
+; second half used to promise "7z is much faster here"; measuring it in 5.8.0 killed that:
+; one 128 MiB entry takes 0.55 s as ZIP/Deflate and 1.28 s as 7z/LZMA2 even spread over
+; 12.52 cores (docs/perf-tiers.tsv, docs/perf-mt.tsv). What 7z wins by here is size
+; (0.29641 -> 0.27354), so that is what the line says now. The threshold constant lives in
+; Core's LargeEntryAdvice.
 ; The note never blocks and never changes the user's choice: ZIP is often a format someone
 ; else asked for, not a performance decision.
-TEXT_HINT_ZIP_LARGE_ENTRY               = One of these files is very large. ZIP splits its threads by entry, so a single file runs on one core; 7z splits by block, so it is much faster here.
+TEXT_HINT_ZIP_LARGE_ENTRY               = One of these files is very large. ZIP splits its threads by entry, so a single file runs on one core; 7z usually packs it smaller.
 TEXT_HINT_SWITCH_TO_7Z                  = Use 7z
 TEXT_LABEL_COMPRESSION_LEVEL            = Compression level
 TEXT_BTN_ADVANCED_SETTINGS              = Advanced settings »

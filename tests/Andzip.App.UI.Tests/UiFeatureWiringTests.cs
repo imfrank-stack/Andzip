@@ -626,7 +626,8 @@ public class UiFeatureWiringTests
     /// <summary>
     /// 「ZIP + 一个很大的单条目」那一句换格式建议：两头都要管住。
     /// <para>
-    /// 该说的时候没说 —— 用户会以为压不动是他的机器不行，而实际上 ZIP 只派了一个核；
+    /// 该说的时候没说 —— 用户不知道同一批内容还有一个更小的写法（ZIP 压单个大条目只派一个核，
+    /// 而压出来的东西比 7z 松，见 <c>docs/perf-mt.md</c>）；
     /// 不该说的时候常驻 —— 压一堆小文件（多条目，本来就吃满多核）被劝去换格式是误导。
     /// </para>
     /// <para>
@@ -655,7 +656,7 @@ public class UiFeatureWiringTests
             var dialog = new NewArchiveWindow(lang, seedPaths: [huge]).Shown();
             var fileName = VisualQuery.Of<TextBox>(dialog).Single(box => box.Text?.EndsWith(".zip") == true);
 
-            Assert.True(WaitsForHint(dialog, hint), "单条目超过阈值却没有说「换 7z 会快得多」。");
+            Assert.True(WaitsForHint(dialog, hint), "单条目超过阈值却没有说「换成 7z 更小」。");
 
             // 建议不许动用户已经填好的东西（名字是他能看到、可能要改的）。
             Assert.Equal(Path.Combine(directory, "movie.zip"), fileName.Text);

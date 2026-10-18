@@ -164,6 +164,9 @@ pwsh ci.ps1 -Static                                           # 本地等价于 
 - 关于压缩快慢的话只能来自重跑得出来的数：脚本在 `tests/perf/`，原始读数在 `docs/perf-*.tsv`；
   改「档位实际发出去的东西」（`NativeEngine.TierExtras`）要跑 `dotnet run tests/perf/tier-check.cs`
   把产物字节核对一遍，别留"快很多"这种没有出处的形容词。
+  说的不是"多快"而是"吃了几核"的时候，用 `tests/perf/mt.ps1`：它每格除了秒数还记
+  `cores_used = CPU 秒 ÷ 墙钟秒`（表落 `docs/perf-mt.tsv`）—— "单线程"这种话只能由这个数说，
+  不能由任务管理器看一眼说。
   要比**别人的编码器**（换 deflate 这类）用 `native/tests/probe/` 那两个脚本：库 clone 到 `build/` 下、
   仓库不留副本、产品构建一行不碰 —— 实验不许有一条能写进仓库的路。
   **决定要换编码器是另一件事**，那一版走的是这条路：库进 `native/third_party/codecs/` 并在
