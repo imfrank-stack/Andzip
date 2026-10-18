@@ -155,6 +155,8 @@ pwsh ci.ps1 -Static                          # 本地等价于 CI 的 Windows �
 - 关于压缩快慢的话只能来自重跑得出来的数：脚本在 `tests/perf/`，原始读数在 `docs/perf-*.tsv`；
   改「档位实际发出去的东西」（`NativeEngine.TierExtras`）要跑 `dotnet run tests/perf/tier-check.cs`
   把产物字节核对一遍，别留"快很多"这种没有出处的形容词。
+  要比**别人的编码器**（换 deflate 这类）用 `native/tests/probe/` 那两个脚本：库 clone 到 `build/` 下、
+  仓库不留副本、产品构建一行不碰 —— 实验不许有一条能写进仓库的路。
 - GUI 目前依赖人工点击，手动清单在 [`docs/开发记录.md` 第九节](docs/开发记录.md)；欢迎把它自动化。
 
 ---

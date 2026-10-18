@@ -1,0 +1,19 @@
+shape	corpus	level	chunk_mib	seconds	mb_per_s	out_bytes	ratio	roundtrip
+zlib-ng	finish	mixed	1	-	0.18	726.0	42699963	0.31814	0
+zlib-ng	stream	mixed	1	-	0.18	713.6	42699965	0.31814	0
+zlib-ng	finish	mixed	2	-	0.28	459.5	40420857	0.30116	0
+zlib-ng	stream	mixed	2	-	0.30	421.5	40420857	0.30116	0
+zlib-ng	finish	mixed	3	-	0.37	349.5	40540732	0.30205	0
+zlib-ng	stream	mixed	3	-	0.36	360.0	40540732	0.30205	0
+zlib-ng	finish	mixed	4	-	0.37	350.6	40636135	0.30276	0
+zlib-ng	stream	mixed	4	-	0.35	361.7	40636135	0.30276	0
+zlib-ng	finish	mixed	5	-	0.37	346.1	40636121	0.30276	0
+zlib-ng	stream	mixed	5	-	0.38	338.3	40636121	0.30276	0
+zlib-ng	finish	mixed	6	-	0.42	307.1	39782926	0.29641	1
+zlib-ng	stream	mixed	6	-	0.41	310.4	39782926	0.29641	0
+zlib-ng	finish	mixed	7	-	0.52	246.0	39782800	0.29640	0
+zlib-ng	stream	mixed	7	-	0.52	244.4	39782800	0.29640	0
+zlib-ng	finish	mixed	8	-	0.95	134.3	39768104	0.29630	0
+zlib-ng	stream	mixed	8	-	0.94	135.9	39768104	0.29630	0
+zlib-ng	finish	mixed	9	-	0.83	153.7	39776993	0.29636	0
+zlib-ng	stream	mixed	9	-	0.84	152.0	39776993	0.29636	0
