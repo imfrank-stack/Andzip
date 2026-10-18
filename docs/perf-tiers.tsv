@@ -1,0 +1,53 @@
+sweep	corpus	mib	format	method	level	props	dict_mib	exit	seconds	mb_per_s	out_bytes	ratio	peak_mib	note
+ziptier	text	128	zip	Deflate	1		0	0	0.23	556.5	259346	0.00193	7	
+ziptier	text	128	zip	Deflate	1	a=0	0	0	0.23	556.5	259346	0.00193	7	
+ziptier	text	128	zip	Deflate	5		0	0	2.59	49.4	263318	0.00196	7	
+ziptier	text	128	zip	Deflate	5	a=0	0	0	0.23	556.5	259346	0.00193	7	
+ziptier	text	128	zip	Deflate	7		0	0	4.04	31.7	263308	0.00196	7	
+ziptier	text	128	zip	Deflate	7	a=0	0	0	0.28	457.1	259346	0.00193	7	
+ziptier	text	128	zip	Deflate	9		0	0	6.84	18.7	263308	0.00196	7	
+ziptier	text	128	zip	Deflate	9	a=0	0	0	0.28	457.1	259346	0.00193	7	
+ziptier	text	128	zip	Deflate64	1		0	0	0.24	533.3	574684	0.00428	7	
+ziptier	text	128	zip	Deflate64	1	a=0	0	0	0.23	556.5	574684	0.00428	7	
+ziptier	text	128	zip	Deflate64	5		0	0	2.59	49.4	574738	0.00428	7	
+ziptier	text	128	zip	Deflate64	5	a=0	0	0	0.23	556.5	574684	0.00428	7	
+ziptier	text	128	zip	Deflate64	7		0	0	4.07	31.4	574711	0.00428	7	
+ziptier	text	128	zip	Deflate64	7	a=0	0	0	0.28	457.1	574684	0.00428	7	
+ziptier	text	128	zip	Deflate64	9		0	0	6.86	18.7	574711	0.00428	7	
+ziptier	text	128	zip	Deflate64	9	a=0	0	0	0.29	441.4	574684	0.00428	7	
+ziptier	mixed	128	zip	Deflate	1		0	0	0.79	162	40972439	0.30527	11	
+ziptier	mixed	128	zip	Deflate	1	a=0	0	0	0.8	160	40972439	0.30527	11	
+ziptier	mixed	128	zip	Deflate	5		0	0	5.05	25.3	40710824	0.30332	12	
+ziptier	mixed	128	zip	Deflate	5	a=0	0	0	0.8	160	40972439	0.30527	11	
+ziptier	mixed	128	zip	Deflate	7		0	0	13.99	9.1	40619902	0.30264	12	
+ziptier	mixed	128	zip	Deflate	7	a=0	0	0	1.73	74	40801687	0.304	12	
+ziptier	mixed	128	zip	Deflate	9		0	0	91.42	1.4	39656224	0.29546	12	
+ziptier	mixed	128	zip	Deflate	9	a=0	0	0	6.96	18.4	39983091	0.2979	12	
+ziptier	mixed	128	zip	Deflate64	1		0	0	0.85	150.6	40621246	0.30265	12	
+ziptier	mixed	128	zip	Deflate64	1	a=0	0	0	0.87	147.1	40621246	0.30265	12	
+ziptier	mixed	128	zip	Deflate64	5		0	0	5.26	24.3	40351399	0.30064	12	
+ziptier	mixed	128	zip	Deflate64	5	a=0	0	0	0.87	147.1	40621246	0.30265	12	
+ziptier	mixed	128	zip	Deflate64	7		0	0	13.85	9.2	40289480	0.30018	12	
+ziptier	mixed	128	zip	Deflate64	7	a=0	0	0	1.68	76.2	40493853	0.3017	12	
+ziptier	mixed	128	zip	Deflate64	9		0	0	91.71	1.4	39657487	0.29547	13	
+ziptier	mixed	128	zip	Deflate64	9	a=0	0	0	6.95	18.4	40105064	0.29881	12	
+7ztier	text	128	7z	LZMA2	9		0	0	0.7	182.9	27836	0.00021	1292	
+7ztier	text	128	7z	LZMA2	9		32	0	0.6	213.3	27836	0.00021	381	
+7ztier	text	128	7z	LZMA2	9		64	0	0.6	213.3	27836	0.00021	686	
+7ztier	text	128	7z	LZMA2	9		128	0	0.73	175.3	27836	0.00021	1292	
+7ztier	text	128	7z	LZMA2	5		0	0	0.49	261.2	27836	0.00021	382	
+7ztier	text	128	7z	LZMA2	6		64	0	0.49	261.2	27836	0.00021	686	
+7ztier	mixed	128	7z	LZMA2	9		0	0	17.66	7.2	35644620	0.26557	1292	
+7ztier	mixed	128	7z	LZMA2	9		32	0	16.27	7.9	35641730	0.26555	382	
+7ztier	mixed	128	7z	LZMA2	9		64	0	18.03	7.1	35636412	0.26551	686	
+7ztier	mixed	128	7z	LZMA2	9		128	0	18.18	7	35644620	0.26557	1292	
+7ztier	mixed	128	7z	LZMA2	5		0	0	7.85	16.3	35641550	0.26555	382	
+7ztier	mixed	128	7z	LZMA2	6		64	0	8.91	14.4	35630297	0.26547	686	
+mem	text	8	7z	LZMA2	9		0	0	0.07	114.3	2845	0.00034	0	
+mem	text	8	7z	LZMA2	9	memuse=256m	0	0	0.07	114.3	2845	0.00034	100	
+mem	text	8	7z	LZMA2	9		64	0	0.07	114.3	2845	0.00034	100	
+mem	text	8	7z	LZMA2	9	memuse=256m	64	0	0.07	114.3	2845	0.00034	0	
+mem	mixed	8	7z	LZMA2	9		0	0	0.88	9.1	2290877	0.27309	96	
+mem	mixed	8	7z	LZMA2	9	memuse=256m	0	0	0.86	9.3	2290877	0.27309	99	
+mem	mixed	8	7z	LZMA2	9		64	0	0.85	9.4	2290877	0.27309	99	
+mem	mixed	8	7z	LZMA2	9	memuse=256m	64	0	0.85	9.4	2290877	0.27309	97	

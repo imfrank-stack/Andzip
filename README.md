@@ -36,6 +36,7 @@ Andzip/
 │   ├── Andzip.Native/          P/Invoke 外壳（43 个 az_* 函数的 C# 映射）
 │   └── Andzip.Native.Tests/    外壳的托管断言（控制台自检程序）
 ├── tests/Andzip.Core.Tests/    xUnit
+├── tests/perf/                 压缩性能测量脚本：读数落进 docs/perf-*.tsv，档位实际下发的东西由 tier-check.cs 逐字节核对
 ├── native/                     压缩内核（C/C++，细节见 native/README.md）
 │   ├── include/andzip/andzip.h 唯一公开头文件：扁平 C ABI
 │   ├── src/api/                C ABI 门面
@@ -151,6 +152,9 @@ pwsh ci.ps1 -Static                          # 本地等价于 CI 的 Windows �
 - 改完至少跑 `pwsh ci.ps1 -Static`。新增门禁步骤请走脚本里的 `Invoke-Gate` / `Invoke-NativeStep`：
   只查 `$LASTEXITCODE` 会假绿（可执行文件找不到时抛的是终止错误而退出码不变，这事真的发生过）。
 - 动过 `native/` 的接口或构建，同时更新 `native/README.md`。
+- 关于压缩快慢的话只能来自重跑得出来的数：脚本在 `tests/perf/`，原始读数在 `docs/perf-*.tsv`；
+  改「档位实际发出去的东西」（`NativeEngine.TierExtras`）要跑 `dotnet run tests/perf/tier-check.cs`
+  把产物字节核对一遍，别留"快很多"这种没有出处的形容词。
 - GUI 目前依赖人工点击，手动清单在 [`docs/开发记录.md` 第九节](docs/开发记录.md)；欢迎把它自动化。
 
 ---

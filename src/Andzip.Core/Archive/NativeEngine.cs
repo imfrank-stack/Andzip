@@ -173,12 +173,15 @@ internal static class NativeEngine
         // 但只有格式的方法表里真的有 Copy 才能这么做 —— tar 没有压缩方法属性，给它
         // 下发 m=Copy 会被引擎拒绝。用户显式选了方法时尊重他的选择。
         var method = settings.Method ?? InferMethod(format, level);
+        var (extraProperties, dictSizeMib) = TierExtras(format, method, level);
 
         return new CreateOptions
         {
             Format = engineFormat,
             Method = string.IsNullOrEmpty(method.EngineMethod) ? null : method.EngineMethod,
             Level = level.EngineLevel,
+            ExtraProperties = extraProperties,
+            DictSizeMib = dictSizeMib,
             Password = string.IsNullOrEmpty(settings.Password) ? null : settings.Password,
             Encryption = string.IsNullOrEmpty(settings.Password)
                 ? AzEncryption.None
@@ -199,6 +202,41 @@ internal static class NativeEngine
             // out-handler 不支持设置它（见 az_writer.cpp）；Core 侧改为记一条警告。
             Comment = null,
         };
+    }
+
+    /// <summary>
+    /// 档位除了级别号之外还捎带什么属性 —— 全项目只有这一处翻译“极限档到底下发了什么”，
+    /// 界面上不摆第二个版本，门面里也不摆。两条都量过才写死（<c>tests/perf/tiers.ps1</c>
+    /// 写的 <c>docs/perf-tiers.tsv</c>，128 MiB 单条目、这台机器）。
+    /// </summary>
+    private static (string? ExtraProperties, uint DictSizeMib) TierExtras(
+        ArchiveFormatOption format, CompressionMethodOption method, CompressionLevelOption level)
+    {
+        // 极限 + ZIP + Deflate/Deflate64 → a=0：huffman 用最快那一档。mixed 那一格
+        // 39 656 224 字节 / 91.42 s 变成 39 983 091 字节 / 6.96 s —— 大 0.82%、快 13.1 倍；
+        // text 那一格反而**更小**（Deflate 263 308 → 259 346，小 1.53%；Deflate64 是
+        // 574 711 → 574 684）且快 24 倍。改完仍然比标准档小（0.29790 对 0.30332），
+        // 所以“越靠后越小”这条没被打破。
+        //
+        // 只给这两个方法是量出来的边界，不是谨慎的口味：同一个 a 在 ZIP 的 LZMA 上把
+        // text 那一格从 2 840 撑到 3 712 字节（大 30.7%），在 BZip2 上整单被拒
+        // （Win32 87，一个字节都不吐），PPMd 与 Copy 收了但产物一字不变。
+        if (level.EngineLevel == 9 && format.IsZip && method.EngineMethod is "Deflate" or "Deflate64")
+        {
+            return ("a=0", 0);
+        }
+
+        // 极限 + 7z + LZMA2 → 字典 64 MiB。引擎在这一档自己给的是 128 MiB（拿不带 -d 的
+        // 产物字节去撞带 -d 的那些格，逐字节相同撞出来的，见 docs/perf-p4-p5.md 第 3.1 节）。
+        // 压到 64 之后 mixed 那一格：35 644 620 → 35 636 412 字节（还小 0.023%），而进程的
+        // 峰值工作集从 1 292 MiB 掉到 686 MiB —— 这一档买到的不是"包更小"，是内存：
+        // 字典是每线程一份的，128 MiB 在小机器上不是慢，是可能压不完。
+        if (level.EngineLevel == 9 && format.IsSevenZip && method.EngineMethod == "LZMA2")
+        {
+            return (null, 64);
+        }
+
+        return (null, 0);
     }
 
     /// <summary>
